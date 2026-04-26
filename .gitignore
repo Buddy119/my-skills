@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+insomnia-migration/
+*.migration-report.json
+*.migration-report.md
+*.script-report.md
+*.insomnia.json

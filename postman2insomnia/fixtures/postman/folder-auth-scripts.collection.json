@@ -1,0 +1,119 @@
+{
+  "info": {
+    "_postman_id": "22222222-2222-4222-8222-222222222222",
+    "name": "Folder Auth Scripts",
+    "description": "Exercises folder inheritance, auth, body conversion, and risky script reporting.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.collectionVariables.set(\"collectionRunId\", \"123\");"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth Folder",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const env = pm.environment;",
+              "env.set(\"folderToken\", \"abc\");"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "Create Thing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{thingName}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/things?verbose=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "things"
+              ],
+              "query": [
+                {
+                  "key": "verbose",
+                  "value": "true"
+                },
+                {
+                  "key": "disabled",
+                  "value": "yes",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test(\"created\", function () {",
+                  "  pm.expect(body.id).to.exist;",
+                  "});",
+                  "pm.sendRequest(\"{{baseUrl}}/audit\", function () {});",
+                  "pm.execution.setNextRequest(null);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"id\":\"abc\"}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

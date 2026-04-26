@@ -1,0 +1,23 @@
+{
+  "name": "postman2insomnia-skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Skill helper for converting Postman v2.1 exports into Insomnia import bundles.",
+  "bin": {
+    "postman2insomnia": "./scripts/postman2insomnia.mjs"
+  },
+  "scripts": {
+    "preflight": "node scripts/preflight.mjs",
+    "convert": "node scripts/postman2insomnia.mjs",
+    "test": "node tests/run-tests.mjs"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.26.10",
+    "@babel/parser": "^7.26.10",
+    "@babel/traverse": "^7.26.10",
+    "@babel/types": "^7.26.10",
+    "ajv": "^8.17.1",
+    "ajv-draft-04": "^1.0.0"
+  }
+}

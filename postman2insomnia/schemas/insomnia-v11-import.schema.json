@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "https://schema.postman2insomnia.local/insomnia-v11-import",
+  "title": "Insomnia v11-compatible Import Bundle Baseline",
+  "$comment": "Baseline derived from Kong's documented Insomnia JSON v4/v5 resource-array import/export model. Tighten this schema with a real Insomnia v11 export when available.",
+  "type": "object",
+  "required": ["_type", "__export_format", "__export_date", "__export_source", "resources"],
+  "additionalProperties": false,
+  "properties": {
+    "_type": { "type": "string", "enum": ["export"] },
+    "__export_format": { "type": "integer", "enum": [4] },
+    "__export_date": { "type": "string" },
+    "__export_source": { "type": "string" },
+    "resources": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/workspace" },
+          { "$ref": "#/definitions/environment" },
+          { "$ref": "#/definitions/folder" },
+          { "$ref": "#/definitions/request" },
+          { "$ref": "#/definitions/response" }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "base-resource": {
+      "type": "object",
+      "required": ["_id", "_type"],
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string" }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "required": ["_id", "_type", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string", "enum": ["workspace"] },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["_id", "_type", "parentId", "name", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string", "enum": ["environment"] },
+        "parentId": { "type": "string" },
+        "name": { "type": "string" },
+        "data": { "type": "object" },
+        "color": { "type": "string" },
+        "isPrivate": { "type": "boolean" }
+      }
+    },
+    "folder": {
+      "type": "object",
+      "required": ["_id", "_type", "parentId", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string", "enum": ["folder"] },
+        "parentId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "environment": { "type": "object" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": ["_id", "_type", "parentId", "name", "method", "url", "headers", "preRequestScript", "afterResponseScript"],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string", "enum": ["request"] },
+        "parentId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "method": { "type": "string" },
+        "url": { "type": "string" },
+        "headers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/key-value" }
+        },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/key-value" }
+        },
+        "body": { "$ref": "#/definitions/body" },
+        "authentication": { "type": "object" },
+        "preRequestScript": { "type": "string" },
+        "afterResponseScript": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["_id", "_type", "parentId", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "_id": { "type": "string" },
+        "_type": { "type": "string", "enum": ["response"] },
+        "parentId": { "type": "string" },
+        "name": { "type": "string" },
+        "statusCode": { "type": "integer" },
+        "statusMessage": { "type": "string" },
+        "headers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/key-value" }
+        },
+        "body": { "type": "string" }
+      }
+    },
+    "key-value": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value": {}
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mimeType": { "type": "string" },
+        "text": { "type": "string" },
+        "params": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/body-param" }
+        },
+        "fileName": { "type": "string" }
+      }
+    },
+    "body-param": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value": {},
+        "type": { "type": "string" },
+        "fileName": { "type": "string" }
+      }
+    }
+  }
+}

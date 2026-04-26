@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "https://schema.postman2insomnia.local/postman-environment",
+  "title": "Postman Environment or Globals Export",
+  "type": "object",
+  "required": ["values"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "_postman_variable_scope": { "type": "string", "enum": ["environment", "globals"] },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key"],
+        "additionalProperties": true,
+        "properties": {
+          "key": { "type": "string" },
+          "value": {},
+          "type": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "disabled": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

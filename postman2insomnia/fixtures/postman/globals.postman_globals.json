@@ -1,0 +1,12 @@
+{
+  "id": "44444444-4444-4444-8444-444444444444",
+  "name": "Workspace Globals",
+  "_postman_variable_scope": "globals",
+  "values": [
+    {
+      "key": "globalToken",
+      "value": "token-value",
+      "enabled": true
+    }
+  ]
+}
