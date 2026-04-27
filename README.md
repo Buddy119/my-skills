@@ -1,4 +1,4 @@
-# Buddy Skills
+# Skills
 
 This folder contains self-contained open standard skill packages. Each skill lives in its own subfolder and includes its own `SKILL.md` with detailed operating rules, inputs, outputs, and workflow guidance.
 
