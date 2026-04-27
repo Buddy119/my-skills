@@ -91,4 +91,6 @@ Primary outputs:
 - Migration reports.
 - Script compatibility reports.
 
+By default, generated files are written to `<folder-path-to-postman>/insomnia-migration/`. If `--output <folder>` is provided, generated files are written to that dedicated output path instead.
+
 The converter validates source files, builds a normalized migration model, emits Insomnia resources, rewrites known-safe Postman script APIs, and reports unsupported or risky behavior for manual review.

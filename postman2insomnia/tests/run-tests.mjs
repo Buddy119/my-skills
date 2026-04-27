@@ -28,13 +28,7 @@ async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
 }
 
-async function main() {
-  run('node', ['scripts/preflight.mjs']);
-
-  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'postman2insomnia-test-'));
-  const outputDir = path.join(tmpRoot, 'out');
-  run('node', ['scripts/postman2insomnia.mjs', '--source', 'fixtures/postman', '--output', outputDir]);
-
+async function assertOutputSet(outputDir) {
   const simple = await readJson(path.join(outputDir, 'simple-request.insomnia.json'));
   const folder = await readJson(path.join(outputDir, 'folder-auth-scripts.insomnia.json'));
   const folderReport = await readJson(path.join(outputDir, 'folder-auth-scripts.migration-report.json'));
@@ -63,6 +57,28 @@ async function main() {
   assert.equal(folderReport.counts.sourceFolders, folderReport.counts.targetFolders);
   assert.ok(folderReport.warnings.some((warning) => warning.includes('pm.execution.setNextRequest')));
   assert.ok(folderReport.warnings.some((warning) => warning.includes('skipped disabled query parameter')));
+
+  for (const suffix of ['insomnia.json', 'migration-report.json', 'migration-report.md', 'script-report.md']) {
+    await fs.access(path.join(outputDir, `simple-request.${suffix}`));
+    await fs.access(path.join(outputDir, `folder-auth-scripts.${suffix}`));
+  }
+}
+
+async function main() {
+  run('node', ['scripts/preflight.mjs']);
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'postman2insomnia-test-'));
+  const defaultSource = path.join(tmpRoot, 'default-source');
+  await fs.cp(path.join(skillRoot, 'fixtures/postman'), defaultSource, { recursive: true });
+  run('node', ['scripts/postman2insomnia.mjs', '--source', defaultSource]);
+  await assertOutputSet(path.join(defaultSource, 'insomnia-migration'));
+
+  const explicitSource = path.join(tmpRoot, 'explicit-source');
+  const outputDir = path.join(tmpRoot, 'out');
+  await fs.cp(path.join(skillRoot, 'fixtures/postman'), explicitSource, { recursive: true });
+  run('node', ['scripts/postman2insomnia.mjs', '--source', explicitSource, '--output', outputDir]);
+  await assertOutputSet(outputDir);
+  await assert.rejects(fs.access(path.join(explicitSource, 'insomnia-migration')));
 
   const strictResult = spawnSync('node', ['scripts/postman2insomnia.mjs', '--source', 'fixtures/postman', '--output', path.join(tmpRoot, 'strict'), '--strict'], {
     cwd: skillRoot,

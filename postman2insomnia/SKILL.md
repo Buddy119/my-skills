@@ -2,6 +2,8 @@
 name: postman2insomnia
 description: Convert Postman Collection v2.1 JSON files and Postman environment or globals JSON files into Insomnia v11-compatible import/export resource bundles. Use when the user invokes `/postman2insomnia`, asks to migrate Postman collections to Insomnia, or needs Postman scripts, variables, folders, requests, auth, and environments converted with validation and migration reports.
 compatibility: GitHub Copilot agent skill. Converter scripts require Node.js and npm; dependencies are installed by the bundled preflight script when missing.
+
+allowed-tools: shell
 ---
 
 # Postman v2.1 to Insomnia v11 Migration
@@ -43,6 +45,8 @@ node scripts/postman2insomnia.mjs --source <folder-path-to-postman> [--output <f
 ```
 
 Default output folder is `<source>/insomnia-migration/`. Never modify source Postman files.
+
+If `--output <folder>` is provided, write every generated Insomnia JSON file and report to that folder instead of the default source-local folder. Create the destination folder if it does not already exist.
 
 ## Required Reading
 

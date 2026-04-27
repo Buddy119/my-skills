@@ -2,6 +2,8 @@
 name: qa-analyze-tool
 description: Collect Jira or Confluence requirements as Markdown, or convert a requirement document or user story into clarified requirements, a QA strategy pack, BDD-style test cases, and an Xray/Jira-oriented export table. Use when the user asks to collect requirements from Jira or Confluence, analyze a requirement, clarify requirement gaps, generate a test approach, produce BDD test cases, or prepare upload-ready QA artifacts with `/qa-analyze-tool` in `collect`, `preview`, `strategy`, `test_case`, or `final` mode.
 compatibility: GitHub Copilot agent skill. Jira and Confluence CLI tools are required only for collect mode when remote Jira or Confluence sources are requested.
+
+allowed-tools: shell
 ---
 
 # QA Analyze Tool
