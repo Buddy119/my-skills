@@ -34,8 +34,35 @@ The install target is always `~/.copilot/skills`. If the target folder does not 
 
 | Skill | Purpose | Main usage |
 | --- | --- | --- |
+| [ba-analyze-tool](ba-analyze-tool/) | Convert business requirements, reference docs, and current implementation materials into evidence-based BA gap analysis artifacts. | `/ba-analyze-tool --business <path> --current <path> ...` |
 | [qa-analyze-tool](qa-analyze-tool/) | Turn requirements, Jira issues, or Confluence pages into clarified QA artifacts and test exports. | `/qa-analyze-tool --mode <mode> ...` |
 | [postman2insomnia](postman2insomnia/) | Convert Postman collection, environment, and globals JSON exports into Insomnia import files. | `/postman2insomnia --source <folder-path-to-postman>` |
+
+## ba-analyze-tool
+
+[Skill details](ba-analyze-tool/SKILL.md)
+
+Use this skill to turn stakeholder requirements, optional reference documentation, current implementation or design materials, and optional previous BA analysis into a versioned BA analysis package. It focuses on confirmed requirements, current-state gaps, open questions, traceability, change history, and audit records.
+
+```bash
+/ba-analyze-tool --business <path> --current <path> [--reference <path>] [--previous <path>] [--version <label>] [--output <path>]
+```
+
+Key inputs:
+
+- Business requirements through `--business`.
+- Current implementation, design, or known behavior through `--current`.
+- Optional standards, API specs, vendor docs, regulatory material, or other references through `--reference`.
+- Optional previous `final-ba-analysis.md` through `--previous` for lifecycle comparison.
+
+Main modes:
+
+- Business + Reference + Current: compares business requirements, reference rules, and current implementation.
+- Business + Current: compares business requirements and current implementation without assessing external reference compliance.
+
+Primary outputs include run metadata, source inventory, extracted business requirements, reference rules, current-state summary, gap analysis, open questions, traceability matrix, change log, open-question status check, final BA analysis report, latest status, source fingerprint register, and immutable audit records.
+
+By default, generated files are written under `~/ba-analyze-tool/<project-folder>/ba-analysis-output/<version>/`. If `--output <path>` is provided, generated files are written under `<path>/ba-analysis-output/<version>/`.
 
 ## qa-analyze-tool
 
