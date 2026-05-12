@@ -332,9 +332,9 @@ This analysis does not assess standard, RFC, vendor, or regulatory compliance un
 
 ## Gap Records
 
-| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Design Implication | Evidence |
-|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|--------------------|----------|
-| GAP-001 | New / Existing / Updated / Closed / Deferred / Not Applicable | Functional / Scenario / Data / API / UX / Security / Standard Compliance / Error Handling / Non-Functional / Operational / Test Coverage / Documentation |  |  |  |  | High / Medium / Low |  |  |  |
+| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Proposal Solution | Design Implication | Evidence |
+|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|-------------------|--------------------|----------|
+| GAP-001 | New / Existing / Updated / Closed / Deferred / Not Applicable | Functional / Scenario / Data / API / UX / Security / Standard Compliance / Error Handling / Non-Functional / Operational / Test Coverage / Documentation |  |  |  |  | High / Medium / Low |  |  |  |  |
 ```
 
 ## `06-open-questions.md`

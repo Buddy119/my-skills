@@ -150,9 +150,9 @@ The analysis does not assess standard, RFC, vendor, or regulatory compliance unl
 
 ## 12. Gap Analysis
 
-| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Design Implication | Evidence |
-|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|--------------------|----------|
-| GAP-001 | New / Existing / Updated / Closed / Deferred / Not Applicable |  |  |  |  |  | High / Medium / Low |  |  |  |
+| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Proposal Solution | Design Implication | Evidence |
+|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|-------------------|--------------------|----------|
+| GAP-001 | New / Existing / Updated / Closed / Deferred / Not Applicable |  |  |  |  |  | High / Medium / Low |  |  |  |  |
 
 ## 13. Open Questions
 

@@ -543,10 +543,37 @@ Gap lifecycle statuses:
 
 Required gap columns:
 
-| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Design Implication | Evidence |
-|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|--------------------|----------|
+| Gap ID | Status | Category | Required Behavior | Current State | Gap Description | Impact | Severity | Recommendation | Proposal Solution | Design Implication | Evidence |
+|--------|--------|----------|-------------------|---------------|-----------------|--------|----------|----------------|-------------------|--------------------|----------|
 
 Evidence must cite the source ID, source path or file, and a concise quote or paraphrased location.
+
+### Proposal Solution Rules
+
+For each gap, provide a `Proposal Solution` for BA reference when enough evidence exists to suggest a practical resolution path.
+
+The proposal solution must:
+
+- Be based on confirmed business understanding, reference rules when provided, and current implementation evidence.
+- Explain what could be changed or added to close the gap.
+- Be concise and implementation-oriented enough for discussion with Product, Architecture, Engineering, QA, or Compliance.
+- Stay clearly marked as a proposal for BA review, not an approved final design.
+- Avoid inventing new requirements, business scope, or compliance obligations.
+- Identify dependency on an open question when the solution cannot be chosen without a decision.
+
+If there is not enough evidence to propose a solution, write:
+
+```text
+Pending decision: see OQ-xxx.
+```
+
+or:
+
+```text
+Insufficient evidence to propose a solution.
+```
+
+Do not use `Proposal Solution` to bypass open questions. If multiple reasonable approaches exist, summarize the main options briefly and point to the decision needed.
 
 ## Open Question Rules
 
