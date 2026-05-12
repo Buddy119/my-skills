@@ -10,11 +10,17 @@ Run:
 aws --version
 ```
 
-Confirm that the command works and that the installed AWS CLI is compatible with AWS CLI v1 command usage. The terminal is assumed to already target the intended AWS environment, so do not perform identity or configuration checks by default.
+Confirm that the command works and that the installed AWS CLI is compatible with AWS CLI v1 command usage. The terminal is assumed to already have AWS access, so do not perform identity or configuration checks by default.
 
 If AWS CLI v2-only behavior would be required, do not proceed with it. Use an AWS CLI v1-compatible alternative or ask the developer to run the needed check outside this skill.
 
-## Step 2: Normalize Time Window
+## Step 2: Confirm Region
+
+Require `--region <aws-region>` before running AWS service commands. Use that same region value on every AWS service command in the investigation.
+
+If the developer does not provide a region, ask for it. Do not guess.
+
+## Step 3: Normalize Time Window
 
 If the developer provides `--since`, convert it into a concrete start and end time.
 
@@ -30,12 +36,12 @@ For AWS CLI v1 compatibility:
 
 Use simple timestamp values accepted by AWS CLI v1 command references.
 
-## Step 3: Search X-Ray By Trace ID First
+## Step 4: Search X-Ray By Trace ID First
 
 If a trace ID is available, start with X-Ray:
 
 ```bash
-aws xray batch-get-traces --trace-ids "<xray-trace-id>"
+aws xray batch-get-traces --region <aws-region> --trace-ids "<xray-trace-id>"
 ```
 
 If the trace is found:
@@ -52,7 +58,7 @@ If the trace ID cannot be found:
 - Ask the developer which Lambda log group they want to search.
 - If the developer gives a service name rather than a log group, use the service log group conventions reference to discover candidates and ask the developer to choose when multiple candidates remain.
 
-## Step 4: Search CloudWatch Logs For The Internal Log ID
+## Step 5: Search CloudWatch Logs For The Internal Log ID
 
 In the related log group, search by available evidence in this priority order:
 
@@ -74,7 +80,7 @@ Do not dump huge raw logs into chat. Show only the most useful raw snippets and 
 
 When exact log groups are unknown, use the service log group conventions reference and `describe-log-groups` before searching. State uncertainty if multiple candidate log groups exist.
 
-## Step 5: Reconstruct The Whole Request Log
+## Step 6: Reconstruct The Whole Request Log
 
 After finding the internal log ID, search the same related log group for the whole request sequence:
 
@@ -85,7 +91,7 @@ After finding the internal log ID, search the same related log group for the who
 
 If the internal log ID appears in multiple related log groups, repeat the search in those groups and merge the timeline by timestamp.
 
-## Step 6: Detect The Useful Error
+## Step 7: Detect The Useful Error
 
 From the whole request log, identify the useful error:
 
@@ -107,7 +113,7 @@ Build a concise incident timeline containing:
 
 Identify the first meaningful error in the chain, not just the final propagated error.
 
-## Step 7: Present Findings In Chat
+## Step 8: Present Findings In Chat
 
 Do not create an output file.
 
