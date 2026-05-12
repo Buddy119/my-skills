@@ -22,13 +22,13 @@ Examples:
 When the exact log group is unknown, start with:
 
 ```bash
-aws logs describe-log-groups --region <aws-region> --log-group-name-prefix "/aws/lambda/"
+aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/"
 ```
 
 For a likely service prefix:
 
 ```bash
-aws logs describe-log-groups --region <aws-region> --log-group-name-prefix "/aws/lambda/<service-name>"
+aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<service-name>"
 ```
 
 ## Guidance

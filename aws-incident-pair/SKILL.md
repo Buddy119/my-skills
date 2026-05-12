@@ -15,9 +15,10 @@ Core principle: AWS CLI gathers facts. Copilot correlates, explains, and summari
 
 - The current terminal already has access to the dedicated AWS environment.
 - The developer must provide `--region <aws-region>` for the target AWS region.
-- After the region is provided, use the same `--region <aws-region>` value on every AWS service command in the investigation.
+- Company laptops require the AWS CLI profile `saml`; use `--profile saml` on every AWS service command.
+- After the region is provided, use the same `--profile saml --region <aws-region>` pair on every AWS service command in the investigation.
 - Do not ask the developer to configure authentication as part of this workflow.
-- Do not require or add explicit environment or profile flags to skill usage.
+- Do not require or add explicit environment flags to skill usage.
 - Do not run identity or AWS configuration checks by default.
 - Always confirm AWS CLI compatibility before investigation:
 
@@ -36,16 +37,16 @@ aws <service> <operation> help
 Examples:
 
 ```bash
-/aws-incident-pair --region ap-southeast-1 --request-id <request-id> --since 60m
-/aws-incident-pair --region ap-southeast-1 --xray-id <xray-trace-id> --since 2h
-/aws-incident-pair --region ap-southeast-1 --service payment-api --error "TimeoutError" --since 30m
+/aws-incident-pair --profile saml --region ap-southeast-1 --request-id <request-id> --since 60m
+/aws-incident-pair --profile saml --region ap-southeast-1 --xray-id <xray-trace-id> --since 2h
+/aws-incident-pair --profile saml --region ap-southeast-1 --service payment-api --error "TimeoutError" --since 30m
 ```
 
-The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, request ID, X-Ray trace ID, service name, error keyword, and time window to select read-only AWS CLI commands.
+The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, required `saml` profile, request ID, X-Ray trace ID, service name, error keyword, and time window to select read-only AWS CLI commands.
 
 If no time window is provided, default to the last 60 minutes and state that default in chat.
 
-If no region is provided, ask the developer for the AWS region before running AWS service commands. Do not guess the region.
+If no region is provided, ask the developer for the AWS region before running AWS service commands. Do not guess the region. If no profile is provided, use `--profile saml`.
 
 ## Required References
 
@@ -105,9 +106,9 @@ See the forbidden commands reference before considering any command outside the 
 ## Default Workflow
 
 1. Confirm AWS CLI version with `aws --version`.
-2. Confirm the developer provided `--region <aws-region>`. Ask for it if missing.
+2. Confirm the developer provided `--region <aws-region>`. Ask for it if missing, and use `--profile saml`.
 3. Normalize the time window from `--since` or default to the last 60 minutes.
-4. If a trace ID is available, search X-Ray first with `batch-get-traces --region <aws-region>`.
+4. If a trace ID is available, search X-Ray first with `batch-get-traces --profile saml --region <aws-region>`.
 5. If the trace is found, identify the error group and likely failing log groups from the X-Ray output. Prefer the deepest downstream failing component first.
 6. If X-Ray does not show an obvious failing log group, search candidate log groups one by one, deepest downstream component first.
 7. If the trace ID cannot be found in X-Ray, ask the developer which Lambda log group they want to inspect before continuing log search.
@@ -137,7 +138,8 @@ Respond directly in chat using this structure:
 
 ### Investigation Context
 - AWS CLI version:
-- AWS region context:
+- AWS profile:
+- AWS region:
 - Time window:
 - Main evidence used:
 - Affected service:

@@ -14,11 +14,11 @@ Confirm that the command works and that the installed AWS CLI is compatible with
 
 If AWS CLI v2-only behavior would be required, do not proceed with it. Use an AWS CLI v1-compatible alternative or ask the developer to run the needed check outside this skill.
 
-## Step 2: Confirm Region
+## Step 2: Confirm Region And Profile
 
-Require `--region <aws-region>` before running AWS service commands. Use that same region value on every AWS service command in the investigation.
+Require `--region <aws-region>` before running AWS service commands. Use `--profile saml` and the same region value on every AWS service command in the investigation.
 
-If the developer does not provide a region, ask for it. Do not guess.
+If the developer does not provide a region, ask for it. Do not guess. If no profile is provided, use `--profile saml`.
 
 ## Step 3: Normalize Time Window
 
@@ -41,7 +41,7 @@ Use simple timestamp values accepted by AWS CLI v1 command references.
 If a trace ID is available, start with X-Ray:
 
 ```bash
-aws xray batch-get-traces --region <aws-region> --trace-ids "<xray-trace-id>"
+aws xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
 ```
 
 If the trace is found:
