@@ -14,11 +14,11 @@ Confirm that the command works and that the installed AWS CLI is compatible with
 
 If AWS CLI v2-only behavior would be required, do not proceed with it. Use an AWS CLI v1-compatible alternative or ask the developer to run the needed check outside this skill.
 
-## Step 2: Confirm Region And Profile
+## Step 2: Confirm Region
 
-Require `--region <aws-region>` before running AWS service commands. Use `--profile saml` and the same region value on every AWS service command in the investigation.
+Require `--region <aws-region>` before running AWS service commands. Use `--profile saml` internally and the same region value on every AWS service command in the investigation.
 
-If the developer does not provide a region, ask for it. Do not guess. If no profile is provided, use `--profile saml`.
+If the developer does not provide a region, ask for it. Do not guess. Do not ask for a profile; always use `--profile saml`.
 
 ## Step 3: Normalize Time Window
 
@@ -65,10 +65,8 @@ In the related log group, search by available evidence in this priority order:
 1. X-Ray trace ID
 2. request ID
 3. correlation ID
-4. error keyword
-5. exception class
-6. service name
-7. API path
+4. internal log ID if already visible in earlier evidence
+5. API path if it appears in the trace or request evidence
 
 Use `filter-log-events` for a focused search in a known log group.
 
@@ -87,6 +85,8 @@ After finding the internal log ID, search the same related log group for the who
 - Query or filter by the internal log ID.
 - Sort events by timestamp ascending.
 - Include enough context to show request start, key downstream calls, retries, warnings, errors, and final response or failure.
+- If the useful error is from a downstream HTTP call, preserve the related HTTP request and response log snippets in chat when available.
+- For downstream HTTP snippets, keep method, URL/path, status code, latency, sanitized headers, sanitized request body fields, sanitized response body fields, and downstream error code/message when useful.
 - Keep raw snippets short and redact sensitive values.
 
 If the internal log ID appears in multiple related log groups, repeat the search in those groups and merge the timeline by timestamp.
@@ -97,6 +97,7 @@ From the whole request log, identify the useful error:
 
 - Prefer the first meaningful internal error over later propagated or wrapper errors.
 - Prefer errors closest to the deepest failing dependency.
+- For downstream HTTP failures, preserve the request/response evidence that proves the downstream behavior.
 - Distinguish business validation failures from infrastructure/runtime failures.
 - Treat generic timeout, 500, or gateway errors as symptoms unless the underlying failing call cannot be found.
 

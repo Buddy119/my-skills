@@ -2,7 +2,7 @@
 
 These commands are approved for this skill when used in a read-only incident investigation. They must be compatible with AWS CLI v1 and must rely on the terminal's existing AWS access.
 
-Do not add explicit environment flags in the MVP workflow. The developer must provide `--region <aws-region>`. Company laptops require the AWS CLI profile `saml`, and every AWS service command in the investigation must use the same `--profile saml --region <aws-region>` pair. Do not require jq, Python, shell scripts, or extra local dependencies.
+Do not add explicit environment flags in the MVP workflow. The developer must provide `--region <aws-region>`. Company laptops require the AWS CLI profile `saml`, so every AWS service command in the investigation must use the same `--profile saml --region <aws-region>` pair. Do not expose profile as a skill-level input. Do not require jq, Python, shell scripts, or extra local dependencies.
 
 Before any investigation command, run:
 
@@ -16,7 +16,7 @@ If command compatibility is uncertain, inspect local AWS CLI help first:
 aws <service> <operation> help
 ```
 
-If no region is provided, ask the developer for the AWS region before running AWS service commands. Do not guess the region. If no profile is provided, use `--profile saml`.
+If no region is provided, ask the developer for the AWS region before running AWS service commands. Do not guess the region. Do not ask the developer for a profile; always use `--profile saml`.
 
 ## AWS CLI Version
 
@@ -71,16 +71,10 @@ Search a known log group by internal log ID:
 aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<internal-log-id>\"" --limit 100
 ```
 
-Search a known log group by error keyword:
-
-```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<error-keyword>\"" --limit 50
-```
-
 Run a focused CloudWatch Logs Insights query to find a request or trace:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-error-keyword>/ | sort @timestamp asc | limit 50"
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id>/ | sort @timestamp asc | limit 50"
 ```
 
 Run a focused CloudWatch Logs Insights query to reconstruct the whole request by internal log ID:
