@@ -1,6 +1,6 @@
 # Approved AWS CLI Commands
 
-These commands are approved for this skill when used in a read-only incident investigation. They must be compatible with AWS CLI v1 and must rely on the terminal's existing AWS access.
+These commands are approved for this skill when used in a read-only incident investigation. They use broadly supported AWS CLI operations and must be run with the detected installed AWS CLI version. They must rely on the terminal's existing AWS access.
 
 Do not add explicit environment flags in the MVP workflow. The developer must provide `--region <aws-region>`. Company laptops require the AWS CLI profile `saml`, so every AWS service command in the investigation must use the same `--profile saml --region <aws-region>` pair. Do not expose profile as a skill-level input. Do not require jq, Python, shell scripts, or extra local dependencies.
 
@@ -9,6 +9,13 @@ Before any investigation command, run:
 ```bash
 aws --version
 ```
+
+Interpret the output:
+
+- `aws-cli/1.x`: use command behavior supported by AWS CLI v1.
+- `aws-cli/2.x`: use AWS CLI v2 command behavior, while staying within the approved read-only command categories.
+
+Do not require a different AWS CLI version for the MVP. Use the installed `aws` command unless the developer explicitly says otherwise.
 
 If command compatibility is uncertain, inspect local AWS CLI help first:
 
@@ -193,7 +200,7 @@ Get Lambda throttle statistics:
 aws cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Throttles --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Sum
 ```
 
-Run a metric data query when supported by the local AWS CLI v1 version:
+Run a metric data query when supported by the detected AWS CLI version:
 
 ```bash
 aws cloudwatch get-metric-data --profile saml --region <aws-region> --metric-data-queries '<metric-data-queries-json>' --start-time "<iso-start-time>" --end-time "<iso-end-time>"

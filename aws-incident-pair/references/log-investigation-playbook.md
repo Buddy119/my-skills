@@ -10,9 +10,9 @@ Run:
 aws --version
 ```
 
-Confirm that the command works and that the installed AWS CLI is compatible with AWS CLI v1 command usage. The terminal is assumed to already have AWS access, so do not perform identity or configuration checks by default.
+Confirm that the command works and identify whether the active `aws` command is AWS CLI v1 or v2. Use the detected installed version for the investigation. The terminal is assumed to already have AWS access, so do not perform identity or configuration checks by default.
 
-If AWS CLI v2-only behavior would be required, do not proceed with it. Use an AWS CLI v1-compatible alternative or ask the developer to run the needed check outside this skill.
+If a command or option may differ between AWS CLI v1 and v2, run `aws <service> <operation> help` and use the form supported by the detected version.
 
 ## Step 2: Confirm Region
 
@@ -28,13 +28,13 @@ If no time window is provided, default to the last 60 minutes.
 
 Always state the time window in the final chat response.
 
-For AWS CLI v1 compatibility:
+For AWS CLI compatibility:
 
 - CloudWatch Logs `filter-log-events` uses epoch milliseconds.
 - CloudWatch Logs Insights `start-query` uses epoch seconds.
 - X-Ray and CloudWatch metrics accept ISO-style times.
 
-Use simple timestamp values accepted by AWS CLI v1 command references.
+Use simple timestamp values accepted by the detected AWS CLI version.
 
 ## Step 4: Search X-Ray By Trace ID First
 

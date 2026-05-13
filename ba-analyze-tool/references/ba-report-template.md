@@ -23,6 +23,8 @@ Use this template for `final-ba-analysis.md`.
 | Last Run Status |  |
 | Rerun Path | Fresh run / Completion resume / Requirement changed / Prior question answered / User-requested rerun |
 | Rerun Reason |  |
+| Jira Output Requested | Yes / No |
+| Jira Output Status | Not requested / Pending confirmation / Generated / Blocked |
 | Business Understanding Confirmation Status | Confirmed / Pending |
 | Business Understanding Confirmed By |  |
 | Business Understanding Confirmed Role |  |

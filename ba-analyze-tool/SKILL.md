@@ -1,6 +1,6 @@
 ---
 name: ba-analyze-tool
-description: Convert business requirements, optional reference documentation, current implementation or design materials, and optional previous BA analysis into an evidence-based BA gap analysis, open-question list, traceability matrix, change log, and versioned audit record. Use when the user invokes `/ba-analyze-tool`, asks for BA analysis, business/current/reference comparison, GAP analysis, open questions, traceability, or versioned BA lifecycle artifacts.
+description: Convert business requirements, optional reference documentation, current implementation or design materials, and optional previous BA analysis into an evidence-based BA gap analysis, open-question list, traceability matrix, change log, versioned audit record, and optional Jira-ready acceptance criteria or BDD-style user stories via `--jira_output`. Use when the user invokes `/ba-analyze-tool`, asks for BA analysis, business/current/reference comparison, GAP analysis, open questions, traceability, versioned BA lifecycle artifacts, or Jira output from a BA analysis report.
 compatibility: GitHub Copilot agent skill.
 allowed-tools: shell
 ---
@@ -14,7 +14,7 @@ The core principle is: do not guess the final design. Identify what is confirmed
 ## Usage
 
 ```bash
-/ba-analyze-tool --business <path> --current <path> [--reference <path>] [--previous <path>] [--version <label>] [--output <path>]
+/ba-analyze-tool --business <path> --current <path> [--reference <path>] [--previous <path>] [--version <label>] [--output <path>] [--jira_output]
 ```
 
 Arguments:
@@ -25,6 +25,7 @@ Arguments:
 - `--previous <path>`: Optional. Previous `final-ba-analysis.md` used for version comparison.
 - `--version <label>`: Optional. Version label for this analysis run.
 - `--output <path>`: Optional. Explicit project root for generated analysis artifacts and lifecycle registers.
+- `--jira_output`: Optional flag. Convert an existing generated `final-ba-analysis.md` for the target version into Jira-ready acceptance criteria and BDD-style user stories after popup confirmation.
 
 Examples:
 
@@ -34,6 +35,7 @@ Examples:
 /ba-analyze-tool --business ./business --reference ./reference --current ./current --version v1.1
 /ba-analyze-tool --business ./business --reference ./reference --current ./current --previous ./previous/final-ba-analysis.md --version v1.1
 /ba-analyze-tool --business ./business --reference ./reference --current ./current --output ./analysis
+/ba-analyze-tool --business ./business --reference ./reference --current ./current --version v1.1 --jira_output
 ```
 
 ## Analysis Modes
@@ -80,6 +82,23 @@ Reference-based standard compliance gaps are not assessed in this run.
 ```
 
 Do not infer external standard, RFC, vendor, or regulatory compliance gaps unless such requirements are explicitly present in the business or current implementation sources.
+
+### Jira Output Mode
+
+Triggered when `--jira_output` is provided.
+
+This is a post-analysis generation mode. It converts the target version's `final-ba-analysis.md` into Jira-ready acceptance criteria and BDD-style user stories. It does not upload to Jira and does not replace the BA analysis report.
+
+Before generating Jira output:
+
+1. Confirm that `final-ba-analysis.md` exists for the target version.
+2. If it does not exist, stop and tell the user the BA analysis must be completed first.
+3. If it exists, read the final report and summarize the gaps, accepted proposal solutions, open questions, and assumptions that affect Jira story generation.
+4. Ask the user by popup window to confirm whether everything is clear to proceed with acceptance criteria and BDD-style user story generation.
+5. If the user does not confirm through popup, stop with status `blocked-interaction`.
+6. If the user confirms, generate Jira output artifacts.
+
+Jira output must be based on confirmed requirements, confirmed business understanding, resolved or explicitly accepted open-question answers, and gap proposal solutions that are clear enough for Jira story drafting. Do not convert unresolved open questions into acceptance criteria as if they were confirmed scope.
 
 ## Output Layout
 
@@ -151,6 +170,8 @@ Each version folder must contain:
 07-traceability-matrix.md
 08-change-log.md
 09-open-question-status-check.md
+10-jira-acceptance-criteria.md
+11-jira-bdd-user-stories.md
 final-ba-analysis.md
 ```
 
@@ -167,7 +188,7 @@ Use [references/artifact-templates.md](references/artifact-templates.md) for per
 1. Validate arguments:
    - Require `--business`.
    - Require `--current`.
-   - Allow `--reference`, `--previous`, `--version`, and `--output` to be omitted.
+   - Allow `--reference`, `--previous`, `--version`, `--output`, and `--jira_output` to be omitted.
    - Stop with a clear error if any provided path does not exist or cannot be read.
 2. Determine analysis mode:
    - Full Mode when `--reference` is present.
@@ -260,7 +281,8 @@ Use [references/artifact-templates.md](references/artifact-templates.md) for per
 22. Generate the change log using explicit `--previous` input or the latest project version from the rerun preflight.
 23. Update project-level `latest-status.md` and `source-fingerprint-register.md`.
 24. Produce the final BA analysis report.
-25. Finalize the audit file with run status, artifacts generated, decisions made, rerun reason, blockers, and next action.
+25. If `--jira_output` is provided, run the Jira Output workflow.
+26. Finalize the audit file with run status, artifacts generated, decisions made, rerun reason, Jira output decision, blockers, and next action.
 
 ## Business Understanding Alignment Gate
 
@@ -336,6 +358,7 @@ Popup is mandatory for:
 - Prior open-question answered/not-answered check.
 - Details for answered prior open questions.
 - Rerun reason when last run completed and no requirement change or answered open question is detected.
+- Jira output confirmation that the final BA analysis is clear enough to proceed.
 - Any other clarification that blocks analysis or changes output status.
 
 Rules:
@@ -345,6 +368,55 @@ Rules:
 - If a popup window cannot be shown, stop the run with status `blocked-interaction`.
 - Record the missed popup interaction and blocked reason in the audit file.
 - Only continue after the popup answer is captured and recorded.
+
+## Jira Output Workflow
+
+Run this workflow only when `--jira_output` is provided.
+
+1. Locate the target version folder.
+2. Check whether `final-ba-analysis.md` exists in that version folder.
+3. If `final-ba-analysis.md` is missing:
+   - Stop Jira output generation.
+   - Record the stop reason in the audit file.
+   - Do not generate `10-jira-acceptance-criteria.md` or `11-jira-bdd-user-stories.md`.
+4. If `final-ba-analysis.md` exists:
+   - Read it before generating Jira output.
+   - Identify confirmed requirements, accepted or clear proposal solutions, open questions, assumptions, and gaps that still block delivery definition.
+   - Present a concise readiness summary to the user by popup window.
+   - Ask by popup whether everything is clear to proceed with Jira acceptance criteria and BDD-style user story generation.
+5. If the user does not confirm readiness through popup, stop with status `blocked-interaction` and record the reason in the audit file.
+6. If the user confirms readiness, generate:
+   - `10-jira-acceptance-criteria.md`
+   - `11-jira-bdd-user-stories.md`
+7. Record Jira output generation in `00-run-metadata.md`, `08-change-log.md`, `final-ba-analysis.md`, and the audit file.
+
+Jira output rules:
+
+- Base Jira output only on confirmed requirements and clear final-report content.
+- Include traceability back to `BR-*`, `GAP-*`, `OQ-*`, and evidence where useful.
+- Do not turn unresolved open questions into acceptance criteria.
+- If an unresolved open question blocks story writing, include it as a blocker in the Jira output artifact instead of inventing scope.
+- Convert accepted proposal solutions into implementation-facing story language only when they are not blocked by unresolved decisions.
+- Use concise Jira-friendly wording.
+
+`10-jira-acceptance-criteria.md` must contain acceptance criteria grouped by story or requirement using Checklist / Rule-Oriented style. Do not use BDD `Given / When / Then` format in the acceptance criteria artifact.
+
+Acceptance criteria should be written as concise, testable rules, for example:
+
+- The system must ...
+- The user can ...
+- The API returns ...
+- The field is required when ...
+- The error message is shown when ...
+
+`11-jira-bdd-user-stories.md` must contain BDD-style user stories with:
+
+- Story title
+- User story statement: `As a <role>, I want <capability>, so that <business value>`
+- Preconditions
+- BDD scenarios using `Given / When / Then`
+- Related requirements, gaps, proposal solutions, and open questions
+- Blockers when a scenario cannot be finalized.
 
 ## Audit Mechanism
 
@@ -379,6 +451,7 @@ Each audit file must record:
 - Last run status and rerun path selected.
 - Rerun reason when captured from the user.
 - Popup interactions shown, answers captured, and any popup interaction failure.
+- Jira output requested status, final-report existence check, popup confirmation result, generated Jira output files, and blockers.
 - Business understanding alignment status.
 - Human confirmer name and role, if confirmed.
 - Files generated, updated, skipped, or not generated.
@@ -690,3 +763,5 @@ Use this skill when the user asks to:
 - generate a traceability matrix
 - create a versioned BA analysis report
 - compare a new BA analysis with a previous BA analysis
+- use `--jira_output`
+- convert `final-ba-analysis.md` into Jira acceptance criteria or BDD-style user stories

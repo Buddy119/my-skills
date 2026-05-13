@@ -1,6 +1,6 @@
 ---
 name: aws-incident-pair
-description: Investigate AWS incidents using read-only AWS CLI v1-compatible commands.
+description: Investigate AWS incidents using read-only commands with the installed AWS CLI version.
 compatibility: GitHub Copilot agent skill. Requires an already authenticated terminal that can run AWS CLI commands against the intended AWS environment.
 allowed-tools: shell
 ---
@@ -20,13 +20,13 @@ Core principle: AWS CLI gathers facts. Copilot correlates, explains, and summari
 - Do not ask the developer to configure authentication as part of this workflow.
 - Do not require or add explicit environment flags to skill usage.
 - Do not run identity or AWS configuration checks by default.
-- Always confirm AWS CLI compatibility before investigation:
+- Always detect the installed AWS CLI version before investigation:
 
 ```bash
 aws --version
 ```
 
-The company laptop environment uses AWS CLI v1. Do not assume AWS CLI v2 behavior. If unsure whether a command or option is supported by the installed AWS CLI v1 version, run the relevant help command first:
+Company laptops may have AWS CLI v1 or v2 installed. Run `aws --version`, identify whether the active `aws` command is v1 or v2, and use the installed version for the investigation. The approved command templates use broadly supported read-only operations. If unsure whether a command or option is supported by the detected AWS CLI version, run the relevant help command first:
 
 ```bash
 aws <service> <operation> help
@@ -53,7 +53,7 @@ If no region is provided, ask the developer for the AWS region before running AW
 
 Load these references as needed:
 
-- [references/approved-aws-cli-commands.md](references/approved-aws-cli-commands.md): allowed AWS CLI v1-compatible command categories and templates.
+- [references/approved-aws-cli-commands.md](references/approved-aws-cli-commands.md): allowed AWS CLI command categories and templates for the detected installed version.
 - [references/forbidden-aws-cli-commands.md](references/forbidden-aws-cli-commands.md): commands and command categories that must not be run.
 - [references/log-investigation-playbook.md](references/log-investigation-playbook.md): default investigation workflow.
 - [references/service-log-group-conventions.md](references/service-log-group-conventions.md): log group naming patterns and discovery guidance.
@@ -133,7 +133,7 @@ See the forbidden commands reference before considering any command outside the 
 - Do not invoke business functions.
 - Do not perform remediation actions.
 - Do not require shell scripts, jq, Python scripts, or additional local dependencies.
-- Use AWS CLI v1-compatible commands and options only.
+- Use commands and options supported by the detected installed AWS CLI version.
 
 ## Chat Response Format
 

@@ -66,7 +66,7 @@ aws logs delete-*
 aws logs put-*
 ```
 
-## AWS CLI v2 Setup Commands
+## AWS CLI Authentication Or Setup Commands
 
 Forbidden:
 
@@ -75,4 +75,4 @@ aws configure sso
 aws sso login
 ```
 
-The company laptop environment uses AWS CLI v1 for this skill. Do not rely on AWS CLI v2 authentication setup commands.
+Authentication and setup commands are outside the investigation workflow. If AWS CLI access is unavailable, read the login guide and explain the relevant manual login steps to the developer instead of running setup or login commands automatically.

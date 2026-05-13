@@ -34,7 +34,7 @@ The install target is always `~/.copilot/skills`. If the target folder does not 
 
 | Skill | Purpose | Main usage |
 | --- | --- | --- |
-| [aws-incident-pair](aws-incident-pair/) | Investigate AWS backend incidents in chat using read-only AWS CLI v1-compatible commands, X-Ray traces, and CloudWatch logs. | `/aws-incident-pair --region <aws-region> --xray-id <trace-id> ...` |
+| [aws-incident-pair](aws-incident-pair/) | Investigate AWS backend incidents in chat using read-only commands with the installed AWS CLI version, X-Ray traces, and CloudWatch logs. | `/aws-incident-pair --region <aws-region> --xray-id <trace-id> ...` |
 | [ba-analyze-tool](ba-analyze-tool/) | Convert business requirements, reference docs, and current implementation materials into evidence-based BA gap analysis artifacts. | `/ba-analyze-tool --business <path> --current <path> ...` |
 | [qa-analyze-tool](qa-analyze-tool/) | Turn requirements, Jira issues, or Confluence pages into clarified QA artifacts and test exports. | `/qa-analyze-tool --mode <mode> ...` |
 | [postman2insomnia](postman2insomnia/) | Convert Postman collection, environment, and globals JSON exports into Insomnia import files. | `/postman2insomnia --source <folder-path-to-postman>` |
@@ -43,7 +43,7 @@ The install target is always `~/.copilot/skills`. If the target folder does not 
 
 [Skill details](aws-incident-pair/SKILL.md)
 
-Use this skill as an AWS incident investigation pair. It uses read-only AWS CLI v1-compatible commands to inspect X-Ray traces and CloudWatch logs, then summarizes evidence directly in chat. It does not remediate, invoke business functions, write report files, or generate investigation output files.
+Use this skill as an AWS incident investigation pair. It detects the installed AWS CLI version, uses read-only AWS CLI commands to inspect X-Ray traces and CloudWatch logs, then summarizes evidence directly in chat. It does not remediate, invoke business functions, write report files, or generate investigation output files.
 
 ```bash
 /aws-incident-pair --region <aws-region> --request-id <request-id> --since 60m
@@ -61,7 +61,7 @@ Operating assumptions:
 
 - The terminal already has AWS CLI access to the target environment.
 - The company laptop profile is `saml`; the skill uses `--profile saml` internally on AWS CLI commands.
-- The skill starts with `aws --version` and avoids AWS CLI v2-only options.
+- The skill starts with `aws --version`, detects AWS CLI v1 or v2, and uses the installed version.
 - If AWS CLI access is unavailable, the skill refers to `references/login-guide.md` when it has been filled in.
 
 Primary investigation flow:

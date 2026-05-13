@@ -37,6 +37,7 @@ audit/
 | Prior Open Question Review | Completed / Skipped / Pending |
 | Rerun Path | Fresh run / Completion resume / Requirement changed / Prior question answered / User-requested rerun |
 | Latest Rerun Reason |  |
+| Jira Output Status | Not requested / Pending confirmation / Generated / Blocked |
 | Open Questions Total |  |
 | Open Questions Open |  |
 | Open Questions Answered This Run |  |
@@ -77,6 +78,8 @@ Create one audit file for every invocation. Do not overwrite previous audit file
 | Last Run Status |  |
 | Rerun Path | Fresh run / Completion resume / Requirement changed / Prior question answered / User-requested rerun |
 | Rerun Reason |  |
+| Jira Output Requested | Yes / No |
+| Jira Output Status | Not requested / Pending confirmation / Generated / Blocked |
 | Previous Baseline |  |
 | Previous Baseline Selection | Provided by `--previous` / Automatic latest version / None |
 
@@ -116,6 +119,18 @@ Create one audit file for every invocation. Do not overwrite previous audit file
 | Interaction ID | Purpose | Popup Shown? | Completed? | Response Summary | Failure / Blocker |
 |----------------|---------|--------------|------------|------------------|-------------------|
 | POP-001 | Business alignment / Prior open question review / Rerun reason / Other | Yes / No | Yes / No |  |  |
+
+## Jira Output
+
+| Field | Value |
+|-------|-------|
+| Jira Output Requested | Yes / No |
+| Final BA Analysis Found | Yes / No |
+| Popup Confirmation Completed | Yes / No |
+| Jira Output Status | Not requested / Pending confirmation / Generated / Blocked |
+| Acceptance Criteria File |  |
+| BDD User Stories File |  |
+| Blocker |  |
 
 ## Business Understanding Alignment
 
@@ -174,6 +189,8 @@ Create one audit file for every invocation. Do not overwrite previous audit file
 | Last Run Status |  |
 | Rerun Path | Fresh run / Completion resume / Requirement changed / Prior question answered / User-requested rerun |
 | Rerun Reason |  |
+| Jira Output Requested | Yes / No |
+| Jira Output Status | Not requested / Pending confirmation / Generated / Blocked |
 | Business Understanding Confirmation Status | Confirmed / Pending |
 | Business Understanding Confirmed By |  |
 | Business Understanding Confirmed Role |  |
@@ -189,6 +206,7 @@ Create one audit file for every invocation. Do not overwrite previous audit file
 - Previous analysis handling:
 - Reference handling:
 - Business understanding alignment:
+- Jira output:
 - Files generated:
 ```
 
@@ -436,6 +454,71 @@ No previous analysis was provided. Change log is not applicable for this run.
 ## Register Updates Applied
 
 No separate open-question register is maintained. Prior-question status is carried forward from the previous final report into the current final report.
+```
+
+## `10-jira-acceptance-criteria.md`
+
+```md
+# Jira Acceptance Criteria
+
+## Generation Metadata
+
+| Field | Value |
+|-------|-------|
+| Based On | final-ba-analysis.md |
+| Jira Output Confirmation | Confirmed / Blocked |
+| Generated Date |  |
+
+## Readiness Notes
+
+- Confirmed requirements used:
+- Proposal solutions used:
+- Excluded unresolved open questions:
+- Blockers:
+
+## Acceptance Criteria
+
+Use Checklist / Rule-Oriented style only. Do not use BDD `Given / When / Then` format in this artifact.
+
+| Story / Requirement ID | Title | Checklist / Rule-Oriented Acceptance Criteria | Source Traceability | Notes |
+|------------------------|-------|-----------------------------------------------|---------------------|-------|
+| BR-001 |  | - The system must ... | BR-001 / GAP-001 / OQ-001 |  |
+```
+
+## `11-jira-bdd-user-stories.md`
+
+```md
+# Jira BDD User Stories
+
+## Generation Metadata
+
+| Field | Value |
+|-------|-------|
+| Based On | final-ba-analysis.md |
+| Jira Output Confirmation | Confirmed / Blocked |
+| Generated Date |  |
+
+## User Stories
+
+### Story: 
+
+- Related requirement:
+- Related gap:
+- Proposal solution used:
+- Open question dependency:
+
+Feature:
+
+  Scenario:
+    Given
+    When
+    Then
+
+## Blocked Or Deferred Story Candidates
+
+| Candidate | Blocking Open Question | Reason Not Finalized |
+|-----------|------------------------|----------------------|
+|  | OQ-001 |  |
 ```
 
 ## `final-ba-analysis.md`
