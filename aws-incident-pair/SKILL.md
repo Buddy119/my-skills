@@ -113,12 +113,13 @@ See the forbidden commands reference before considering any command outside the 
 4. Search X-Ray first with `batch-get-traces --profile saml --region <aws-region>` using the provided X-Ray trace ID.
 5. If the trace is found, identify the error group and likely failing log groups from the X-Ray output. Prefer the deepest downstream failing component first.
 6. If X-Ray does not show an obvious failing log group, search candidate log groups one by one, deepest downstream component first.
-7. If the trace ID cannot be found in X-Ray, ask the developer for the API Gateway request ID from the `x-amz-apigw-id` response header.
-8. Use `x-amz-apigw-id` or the original X-Ray ID to identify which Lambda generated the error. Search candidate API Gateway and Lambda log groups by that ID, starting from the most likely entrypoint and then downstream candidates.
-9. After identifying the error Lambda, search the related Lambda CloudWatch log group for the trace ID, `x-amz-apigw-id`, request ID, or correlation ID to find the internal log ID for the request.
-10. Use the internal log ID to find the whole log sequence for that request.
-11. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
-12. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
+7. If the trace ID cannot be found in X-Ray, pivot through API Gateway evidence using the required request ID.
+8. Search API Gateway access logs for the request ID to identify API ID, stage, resource path, HTTP method, and status.
+9. Use `aws apigateway get-rest-apis`, `aws apigateway get-resources --embed methods`, and `aws apigateway get-stages` to map the API ID, stage, method, and resource path to the Lambda integration URI, then extract the Lambda function name.
+10. After identifying the Lambda, search the related Lambda CloudWatch log group for the trace ID, request ID, or correlation ID to find the internal log ID for the request.
+11. Use the internal log ID to find the whole log sequence for that request.
+12. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
+13. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
 
 ## Evidence Rules
 
@@ -150,7 +151,10 @@ Respond directly in chat using this structure:
 - Main evidence used:
 - Affected service:
 - X-Ray trace status:
-- API Gateway request ID:
+- API Gateway API ID:
+- API Gateway stage:
+- API Gateway resource path:
+- API Gateway status:
 - Error group:
 - Error Lambda:
 - Internal log ID:

@@ -72,12 +72,6 @@ Search a known log group by X-Ray trace ID:
 aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<xray-trace-id>\"" --limit 500
 ```
 
-Search a known log group by API Gateway request ID:
-
-```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<x-amz-apigw-id>\"" --limit 500
-```
-
 Search a known log group by internal log ID:
 
 ```bash
@@ -87,7 +81,7 @@ aws logs filter-log-events --profile saml --region <aws-region> --log-group-name
 Run a focused CloudWatch Logs Insights query to find a request or trace:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id-or-x-amz-apigw-id>/ | sort @timestamp asc | limit 500"
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id>/ | sort @timestamp asc | limit 500"
 ```
 
 Run a focused CloudWatch Logs Insights query to reconstruct the whole request by internal log ID:
@@ -231,7 +225,7 @@ aws apigateway get-rest-apis --profile saml --region <aws-region>
 List resources for an API:
 
 ```bash
-aws apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
+aws apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>" --embed methods
 ```
 
 List stages for an API:
@@ -241,3 +235,17 @@ aws apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<r
 ```
 
 Use API Gateway metadata only to map an incoming API path or stage to backend components. Do not update deployment, stage, method, integration, authorizer, or gateway configuration.
+
+Search a known API Gateway access log group by request ID:
+
+```bash
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
+```
+
+Run a Logs Insights query against API Gateway access logs by request ID:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500"
+```
+
+Use API Gateway access logs to identify API ID, stage, resource path, HTTP method, status, integration status, and latency when these fields are present. Access log formats vary by team, so inspect the raw event fields before deciding which API Gateway metadata command to run next.

@@ -54,29 +54,30 @@ If the trace is found:
 
 If the trace ID cannot be found:
 
-- Do not guess blindly across many log groups.
-- Ask the developer for the API Gateway request ID from the `x-amz-apigw-id` response header.
-- Use the `x-amz-apigw-id` or the original X-Ray trace ID to identify which Lambda generated the error.
-- Search candidate API Gateway and Lambda log groups by that ID, starting with the likely API entrypoint and then likely downstream Lambda candidates.
-- If several Lambda log groups contain the same ID, identify the error Lambda by the log group that contains the first meaningful error, fault, timeout, exception, or failing downstream response.
-- If the IDs still do not identify the Lambda, then ask the developer which Lambda log group they want to search.
+- Pivot through API Gateway evidence using the required request ID.
+- Search API Gateway access logs for the request ID.
+- From the API Gateway access log event, identify API ID, stage, resource path, HTTP method, status, and any integration status or latency fields present.
+- Use `aws apigateway get-rest-apis` to confirm the API ID or API name.
+- Use `aws apigateway get-resources --embed methods` to map the resource path and HTTP method to the integration URI.
+- Use `aws apigateway get-stages` to confirm the stage and access log configuration if needed.
+- Extract the Lambda function name from the integration URI. Lambda proxy integration URIs usually contain `function:<lambda-name>` before `/invocations`.
+- Continue the investigation in the related Lambda CloudWatch log group.
 
 ## Step 5: Search CloudWatch Logs For The Internal Log ID
 
 In the related log group, search by available evidence in this priority order:
 
 1. X-Ray trace ID
-2. `x-amz-apigw-id`
-3. request ID
-4. correlation ID
-5. internal log ID if already visible in earlier evidence
-6. API path if it appears in the trace or request evidence
+2. request ID
+3. correlation ID
+4. internal log ID if already visible in earlier evidence
+5. API path if it appears in the trace or API Gateway evidence
 
 Use `filter-log-events` for a focused search in a known log group.
 
 Use `start-query` and `get-query-results` for Logs Insights when the query is more efficient for sorting, filtering, or correlating events in a log group.
 
-The goal of this step is to identify the error Lambda and find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the exact Lambda log group and field name found.
+The goal of this step is to use API Gateway evidence to identify the Lambda function, then find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the API ID, stage, resource path, integration URI, Lambda function name, Lambda log group, and field name found.
 
 This skill is used in a testing environment. Provide as much relevant raw log detail as possible. Do not truncate logs just to be brief; only omit clearly unrelated noise.
 

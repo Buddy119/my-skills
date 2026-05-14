@@ -67,7 +67,8 @@ Primary investigation flow:
 
 - Search X-Ray by trace ID first when available.
 - Identify the error group and likely failing log group from X-Ray.
-- If X-Ray cannot find the trace, ask for `x-amz-apigw-id` and use it with the original trace ID to identify the Lambda that generated the error.
+- If X-Ray cannot find the trace, search API Gateway access logs by request ID to identify API ID, stage, resource path, method, and status.
+- Map API Gateway API/path/method to the Lambda integration URI with `get-rest-apis`, `get-resources --embed methods`, and `get-stages`.
 - Search CloudWatch logs to find the internal log ID.
 - Use the internal log ID to reconstruct the request log sequence.
 - Provide as much relevant testing-environment log detail as possible, including downstream HTTP request/response logs when they explain the failure.
