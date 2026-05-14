@@ -34,7 +34,7 @@ The install target is always `~/.copilot/skills`. If the target folder does not 
 
 | Skill | Purpose | Main usage |
 | --- | --- | --- |
-| [aws-incident-pair](aws-incident-pair/) | Investigate AWS backend incidents in chat using read-only commands with the installed AWS CLI version, X-Ray traces, and CloudWatch logs. | `/aws-incident-pair --region <aws-region> --xray-id <trace-id> ...` |
+| [aws-incident-pair](aws-incident-pair/) | Investigate AWS backend incidents in chat using read-only commands with the installed AWS CLI version, X-Ray traces, and CloudWatch logs. | `/aws-incident-pair --region <aws-region> --request-id <request-id> --xray-id <trace-id> ...` |
 | [ba-analyze-tool](ba-analyze-tool/) | Convert business requirements, reference docs, and current implementation materials into evidence-based BA gap analysis artifacts. | `/ba-analyze-tool --business <path> --current <path> ...` |
 | [qa-analyze-tool](qa-analyze-tool/) | Turn requirements, Jira issues, or Confluence pages into clarified QA artifacts and test exports. | `/qa-analyze-tool --mode <mode> ...` |
 | [postman2insomnia](postman2insomnia/) | Convert Postman collection, environment, and globals JSON exports into Insomnia import files. | `/postman2insomnia --source <folder-path-to-postman>` |
@@ -46,15 +46,14 @@ The install target is always `~/.copilot/skills`. If the target folder does not 
 Use this skill as an AWS incident investigation pair. It detects the installed AWS CLI version, uses read-only AWS CLI commands to inspect X-Ray traces and CloudWatch logs, then summarizes evidence directly in chat. It does not remediate, invoke business functions, write report files, or generate investigation output files.
 
 ```bash
-/aws-incident-pair --region <aws-region> --request-id <request-id> --since 60m
-/aws-incident-pair --region <aws-region> --xray-id <xray-trace-id> --since 2h
+/aws-incident-pair --region <aws-region> --request-id <request-id> --xray-id <xray-trace-id> --since 60m
 ```
 
 Key inputs:
 
 - AWS region through `--region`.
-- Request ID through `--request-id`.
-- X-Ray trace ID through `--xray-id`.
+- Request ID through `--request-id` is required.
+- X-Ray trace ID through `--xray-id` is required.
 - Optional time window through `--since`; defaults to the last 60 minutes.
 
 Operating assumptions:
@@ -68,9 +67,10 @@ Primary investigation flow:
 
 - Search X-Ray by trace ID first when available.
 - Identify the error group and likely failing log group from X-Ray.
+- If X-Ray cannot find the trace, ask for `x-amz-apigw-id` and use it with the original trace ID to identify the Lambda that generated the error.
 - Search CloudWatch logs to find the internal log ID.
 - Use the internal log ID to reconstruct the request log sequence.
-- Preserve useful downstream HTTP request/response snippets when they explain the failure, with sensitive fields redacted.
+- Provide as much relevant testing-environment log detail as possible, including downstream HTTP request/response logs when they explain the failure.
 
 ## ba-analyze-tool
 

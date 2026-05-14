@@ -14,11 +14,11 @@ Confirm that the command works and identify whether the active `aws` command is 
 
 If a command or option may differ between AWS CLI v1 and v2, run `aws <service> <operation> help` and use the form supported by the detected version.
 
-## Step 2: Confirm Region
+## Step 2: Confirm Required Inputs
 
 Require `--region <aws-region>` before running AWS service commands. Use `--profile saml` internally and the same region value on every AWS service command in the investigation.
 
-If the developer does not provide a region, ask for it. Do not guess. Do not ask for a profile; always use `--profile saml`.
+Require both `--request-id <request-id>` and `--xray-id <xray-trace-id>`. If region, request ID, or X-Ray trace ID is missing, ask for the missing value before starting AWS investigation. Do not guess. Do not ask for a profile; always use `--profile saml`.
 
 ## Step 3: Normalize Time Window
 
@@ -38,7 +38,7 @@ Use simple timestamp values accepted by the detected AWS CLI version.
 
 ## Step 4: Search X-Ray By Trace ID First
 
-If a trace ID is available, start with X-Ray:
+Start with X-Ray using the required trace ID:
 
 ```bash
 aws xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
@@ -55,26 +55,30 @@ If the trace is found:
 If the trace ID cannot be found:
 
 - Do not guess blindly across many log groups.
-- Ask the developer which Lambda log group they want to search.
-- If the developer gives a service name rather than a log group, use the service log group conventions reference to discover candidates and ask the developer to choose when multiple candidates remain.
+- Ask the developer for the API Gateway request ID from the `x-amz-apigw-id` response header.
+- Use the `x-amz-apigw-id` or the original X-Ray trace ID to identify which Lambda generated the error.
+- Search candidate API Gateway and Lambda log groups by that ID, starting with the likely API entrypoint and then likely downstream Lambda candidates.
+- If several Lambda log groups contain the same ID, identify the error Lambda by the log group that contains the first meaningful error, fault, timeout, exception, or failing downstream response.
+- If the IDs still do not identify the Lambda, then ask the developer which Lambda log group they want to search.
 
 ## Step 5: Search CloudWatch Logs For The Internal Log ID
 
 In the related log group, search by available evidence in this priority order:
 
 1. X-Ray trace ID
-2. request ID
-3. correlation ID
-4. internal log ID if already visible in earlier evidence
-5. API path if it appears in the trace or request evidence
+2. `x-amz-apigw-id`
+3. request ID
+4. correlation ID
+5. internal log ID if already visible in earlier evidence
+6. API path if it appears in the trace or request evidence
 
 Use `filter-log-events` for a focused search in a known log group.
 
 Use `start-query` and `get-query-results` for Logs Insights when the query is more efficient for sorting, filtering, or correlating events in a log group.
 
-The goal of this step is to find the internal log ID used by the application for the request. This may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the exact field name found.
+The goal of this step is to identify the error Lambda and find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the exact Lambda log group and field name found.
 
-Do not dump huge raw logs into chat. Show only the most useful raw snippets and summarize the rest into timeline events.
+This skill is used in a testing environment. Provide as much relevant raw log detail as possible. Do not truncate logs just to be brief; only omit clearly unrelated noise.
 
 When exact log groups are unknown, use the service log group conventions reference and `describe-log-groups` before searching. State uncertainty if multiple candidate log groups exist.
 
@@ -84,10 +88,10 @@ After finding the internal log ID, search the same related log group for the who
 
 - Query or filter by the internal log ID.
 - Sort events by timestamp ascending.
-- Include enough context to show request start, key downstream calls, retries, warnings, errors, and final response or failure.
-- If the useful error is from a downstream HTTP call, preserve the related HTTP request and response log snippets in chat when available.
-- For downstream HTTP snippets, keep method, URL/path, status code, latency, sanitized headers, sanitized request body fields, sanitized response body fields, and downstream error code/message when useful.
-- Keep raw snippets short and redact sensitive values.
+- Include the full relevant request sequence whenever practical: request start, key downstream calls, retries, warnings, errors, and final response or failure.
+- If the useful error is from a downstream HTTP call, preserve the related HTTP request and response logs in chat when available.
+- For downstream HTTP logs, keep method, URL/path, status code, latency, headers, request body fields, response body fields, and downstream error code/message when useful.
+- Do not redact testing-environment logs by default. Avoid repeating raw AWS credentials, private keys, passwords, or production secrets if they appear in logs; mention their presence instead.
 
 If the internal log ID appears in multiple related log groups, repeat the search in those groups and merge the timeline by timestamp.
 
@@ -97,7 +101,7 @@ From the whole request log, identify the useful error:
 
 - Prefer the first meaningful internal error over later propagated or wrapper errors.
 - Prefer errors closest to the deepest failing dependency.
-- For downstream HTTP failures, preserve the request/response evidence that proves the downstream behavior.
+- For downstream HTTP failures, preserve the request/response evidence that proves the downstream behavior, including raw log lines when available.
 - Distinguish business validation failures from infrastructure/runtime failures.
 - Treat generic timeout, 500, or gateway errors as symptoms unless the underlying failing call cannot be found.
 
@@ -121,7 +125,7 @@ Do not create an output file.
 Present findings directly in the Copilot chat window with:
 
 1. investigation context
-2. useful raw log snippets
+2. relevant raw logs
 3. evidence timeline
 4. first meaningful error
 5. suspected root cause

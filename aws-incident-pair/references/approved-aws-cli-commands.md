@@ -63,31 +63,37 @@ aws logs describe-log-streams --profile saml --region <aws-region> --log-group-n
 Search a known log group by request ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 50
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
 ```
 
 Search a known log group by X-Ray trace ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<xray-trace-id>\"" --limit 50
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<xray-trace-id>\"" --limit 500
+```
+
+Search a known log group by API Gateway request ID:
+
+```bash
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<x-amz-apigw-id>\"" --limit 500
 ```
 
 Search a known log group by internal log ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<internal-log-id>\"" --limit 100
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<internal-log-id>\"" --limit 1000
 ```
 
 Run a focused CloudWatch Logs Insights query to find a request or trace:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id>/ | sort @timestamp asc | limit 50"
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id-or-x-amz-apigw-id>/ | sort @timestamp asc | limit 500"
 ```
 
 Run a focused CloudWatch Logs Insights query to reconstruct the whole request by internal log ID:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<internal-log-id>/ | sort @timestamp asc | limit 100"
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<internal-log-id>/ | sort @timestamp asc | limit 1000"
 ```
 
 Retrieve CloudWatch Logs Insights results:
