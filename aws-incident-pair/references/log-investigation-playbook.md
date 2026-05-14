@@ -50,12 +50,13 @@ If the trace is found:
 - Extract service nodes, errors, faults, downstream calls, status codes, latency, and trace annotations if present.
 - Identify the likely related CloudWatch log groups from Lambda names, service names, or node names in the trace.
 - If multiple components are involved, start investigation from the deepest downstream failing component first, then move outward toward callers.
-- If all obvious log groups appear clean, search the candidate log groups one by one, still starting from the deepest downstream component.
+- If all obvious log groups appear clean, search only log groups connected to the trace evidence, still starting from the deepest downstream component.
 
 If the trace ID cannot be found:
 
 - Pivot through API Gateway evidence using the required request ID.
 - Search API Gateway access logs for the request ID.
+- If no API Gateway access log event exactly matches the request ID in the time window, state that no exact match was found and stop this fallback path. Do not use nearby API Gateway events.
 - From the API Gateway access log event, identify API ID, stage, resource path, HTTP method, status, and any integration status or latency fields present.
 - Use `aws apigateway get-rest-apis` to confirm the API ID or API name.
 - Use `aws apigateway get-resources --embed methods` to map the resource path and HTTP method to the integration URI.
@@ -76,6 +77,8 @@ In the related log group, search by available evidence in this priority order:
 Use `filter-log-events` for a focused search in a known log group.
 
 Use `start-query` and `get-query-results` for Logs Insights when the query is more efficient for sorting, filtering, or correlating events in a log group.
+
+Only exact ID matches count as evidence. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches. If a search by the provided request ID, X-Ray trace ID, or internal log ID returns no matching events, state that no matching logs were found for that exact ID and do not continue with unrelated logs.
 
 The goal of this step is to use API Gateway evidence to identify the Lambda function, then find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the API ID, stage, resource path, integration URI, Lambda function name, Lambda log group, and field name found.
 

@@ -71,6 +71,7 @@ Primary investigation flow:
 - Map API Gateway API/path/method to the Lambda integration URI with `get-rest-apis`, `get-resources --embed methods`, and `get-stages`.
 - Search CloudWatch logs to find the internal log ID.
 - Use the internal log ID to reconstruct the request log sequence.
+- Use only exact matches for the provided request ID, X-Ray trace ID, or internal log ID. If no exact match is found, state that directly instead of using nearby logs.
 - Provide as much relevant testing-environment log detail as possible, including downstream HTTP request/response logs when they explain the failure.
 
 ## ba-analyze-tool
