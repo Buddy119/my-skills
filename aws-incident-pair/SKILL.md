@@ -114,12 +114,14 @@ See the forbidden commands reference before considering any command outside the 
 5. If the trace is found, identify the error group and likely failing log groups from the X-Ray output. Prefer the deepest downstream failing component first.
 6. If X-Ray does not show an obvious failing log group, search only log groups connected to the trace evidence, deepest downstream component first.
 7. If the trace ID cannot be found in X-Ray, pivot through API Gateway evidence using the required request ID.
-8. Search API Gateway access logs for the request ID to identify API ID, stage, resource path, HTTP method, and status.
-9. Use `aws apigateway get-rest-apis`, `aws apigateway get-resources --embed methods`, and `aws apigateway get-stages` to map the API ID, stage, method, and resource path to the Lambda integration URI, then extract the Lambda function name.
-10. After identifying the Lambda, search the related Lambda CloudWatch log group for the trace ID, request ID, or correlation ID to find the internal log ID for the request.
-11. Use the internal log ID to find the whole log sequence for that request.
-12. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
-13. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
+8. Search exact API Gateway execution or access log events for the request ID to identify API ID, stage, resource path, HTTP method, status, integration request ID, and any X-Ray root value.
+9. If API Gateway execution logs contain `Root=<xray-trace-id>`, record X-Ray status as partial evidence and continue API Gateway to Lambda correlation. Only declare no exact X-Ray evidence when neither X-Ray nor API Gateway execution logs contain the supplied trace ID.
+10. Use `aws apigateway get-rest-apis`, `aws apigateway get-resources --embed methods`, and `aws apigateway get-stages` to map the API ID, stage, method, and resource path to the Lambda integration URI, then extract the Lambda function name.
+11. Discover the actual Lambda CloudWatch log group with `aws logs describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
+12. After identifying the Lambda log group, search Lambda logs by API Gateway integration request ID first, then by X-Ray trace ID, request ID, or correlation ID to find the internal log ID for the request.
+13. Use the internal log ID to find the whole log sequence for that request.
+14. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
+15. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
 
 ## Evidence Rules
 
@@ -134,6 +136,7 @@ See the forbidden commands reference before considering any command outside the 
 - Always distinguish confirmed evidence from hypothesis.
 - Match only the exact provided `--request-id`, `--xray-id`, or exact internal log ID. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches as evidence.
 - If no trace, API Gateway access log, Lambda log, or internal request log is found for the exact provided IDs, say that directly and list the exact IDs, log groups, and time window searched.
+- Treat errors logged after response generation as secondary symptoms unless the same error clearly appears before response generation.
 - Do not redact testing-environment logs by default. If a value is clearly an AWS credential, private key, password, or production secret, call out that it was present and avoid repeating the raw secret value.
 - Do not change AWS resources.
 - Do not invoke business functions.
@@ -157,6 +160,7 @@ Respond directly in chat using this structure:
 - API Gateway stage:
 - API Gateway resource path:
 - API Gateway status:
+- API Gateway integration request ID:
 - Error group:
 - Error Lambda:
 - Internal log ID:

@@ -67,11 +67,15 @@ Primary investigation flow:
 
 - Search X-Ray by trace ID first when available.
 - Identify the error group and likely failing log group from X-Ray.
-- If X-Ray cannot find the trace, search API Gateway access logs by request ID to identify API ID, stage, resource path, method, and status.
+- If X-Ray cannot find the trace, search exact API Gateway execution/access logs by request ID to identify API ID, stage, resource path, method, status, integration request ID, and any X-Ray root value.
+- Treat `Root=<xray-trace-id>` in API Gateway execution logs as partial X-Ray evidence when `batch-get-traces` cannot retrieve the trace.
 - Map API Gateway API/path/method to the Lambda integration URI with `get-rest-apis`, `get-resources --embed methods`, and `get-stages`.
+- Discover the actual Lambda log group with `describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
+- Search Lambda logs by API Gateway integration request ID before other IDs when it is present in API Gateway logs.
 - Search CloudWatch logs to find the internal log ID.
 - Use the internal log ID to reconstruct the request log sequence.
 - Use only exact matches for the provided request ID, X-Ray trace ID, or internal log ID. If no exact match is found, state that directly instead of using nearby logs.
+- Treat post-response errors as secondary symptoms unless they appear before response generation.
 - Provide as much relevant testing-environment log detail as possible, including downstream HTTP request/response logs when they explain the failure.
 
 ## ba-analyze-tool

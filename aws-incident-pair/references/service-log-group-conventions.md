@@ -44,7 +44,8 @@ Team API Gateway access log groups may use custom names. If multiple API Gateway
 
 - Do not guess log groups blindly.
 - Use `describe-log-groups` first if the service-to-log-group mapping is unknown.
-- For X-Ray misses, prefer API Gateway access log evidence over guessing Lambda log groups.
+- Always discover actual Lambda log groups with `describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
+- For X-Ray misses, prefer exact API Gateway execution/access log evidence over guessing Lambda log groups.
 - Prefer environment-specific names when the naming convention makes the target clear.
 - State uncertainty if multiple candidate log groups exist.
 - If there are several candidates, search plausible candidates by exact request ID. Do not use nearest or adjacent logs as substitutes for an exact ID match.

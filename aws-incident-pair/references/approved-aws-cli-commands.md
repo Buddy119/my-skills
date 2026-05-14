@@ -54,6 +54,14 @@ Discover service-specific log groups:
 aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<service-name>"
 ```
 
+Discover the actual Lambda log group for a function name:
+
+```bash
+aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<function-name>"
+```
+
+Use the returned log group name. Do not assume `/aws/lambda/<function-name>` exists unless it appears in the `describe-log-groups` result.
+
 List recent streams for a known log group:
 
 ```bash
@@ -76,6 +84,12 @@ Search a known log group by internal log ID:
 
 ```bash
 aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<internal-log-id>\"" --limit 1000
+```
+
+Search a Lambda log group by API Gateway integration request ID:
+
+```bash
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<lambda-log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<integration-request-id>\"" --limit 1000
 ```
 
 Run a focused CloudWatch Logs Insights query to find a request or trace:
@@ -242,10 +256,16 @@ Search a known API Gateway access log group by request ID:
 aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
 ```
 
-Run a Logs Insights query against API Gateway access logs by request ID:
+Search a known API Gateway execution log group by request ID:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500"
+aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-execution-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
 ```
 
-Use API Gateway access logs to identify API ID, stage, resource path, HTTP method, status, integration status, and latency when these fields are present. Access log formats vary by team, so inspect the raw event fields before deciding which API Gateway metadata command to run next.
+Run a Logs Insights query against API Gateway access or execution logs by request ID:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500"
+```
+
+Use API Gateway access or execution logs to identify API ID, stage, resource path, HTTP method, status, integration request ID, integration status, latency, and X-Ray root values such as `Root=<xray-trace-id>` when these fields are present. Access and execution log formats vary by team, so inspect the raw event fields before deciding which API Gateway metadata command to run next.

@@ -55,24 +55,28 @@ If the trace is found:
 If the trace ID cannot be found:
 
 - Pivot through API Gateway evidence using the required request ID.
-- Search API Gateway access logs for the request ID.
-- If no API Gateway access log event exactly matches the request ID in the time window, state that no exact match was found and stop this fallback path. Do not use nearby API Gateway events.
-- From the API Gateway access log event, identify API ID, stage, resource path, HTTP method, status, and any integration status or latency fields present.
+- Search exact API Gateway execution or access log events for the request ID.
+- If no API Gateway execution or access log event exactly matches the request ID in the time window, state that no exact match was found and stop this fallback path. Do not use nearby API Gateway events.
+- From the API Gateway log event, identify API ID, stage, resource path, HTTP method, status, integration request ID, and any integration status or latency fields present.
+- If the execution log contains an X-Ray tracing value such as `Root=<xray-trace-id>`, record the X-Ray status as partial evidence even though `batch-get-traces` did not return the trace.
+- Only declare no exact X-Ray evidence when neither `batch-get-traces` nor exact API Gateway execution log events contain the supplied trace ID.
 - Use `aws apigateway get-rest-apis` to confirm the API ID or API name.
 - Use `aws apigateway get-resources --embed methods` to map the resource path and HTTP method to the integration URI.
 - Use `aws apigateway get-stages` to confirm the stage and access log configuration if needed.
 - Extract the Lambda function name from the integration URI. Lambda proxy integration URIs usually contain `function:<lambda-name>` before `/invocations`.
-- Continue the investigation in the related Lambda CloudWatch log group.
+- Discover the actual Lambda CloudWatch log group with `aws logs describe-log-groups`. Do not assume `/aws/lambda/<function-name>` exists.
+- Continue the investigation in the discovered Lambda CloudWatch log group.
 
 ## Step 5: Search CloudWatch Logs For The Internal Log ID
 
 In the related log group, search by available evidence in this priority order:
 
-1. X-Ray trace ID
-2. request ID
-3. correlation ID
-4. internal log ID if already visible in earlier evidence
-5. API path if it appears in the trace or API Gateway evidence
+1. API Gateway integration request ID when it was found in execution/access logs
+2. X-Ray trace ID
+3. request ID
+4. correlation ID
+5. internal log ID if already visible in earlier evidence
+6. API path if it appears in the trace or API Gateway evidence
 
 Use `filter-log-events` for a focused search in a known log group.
 
@@ -80,7 +84,7 @@ Use `start-query` and `get-query-results` for Logs Insights when the query is mo
 
 Only exact ID matches count as evidence. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches. If a search by the provided request ID, X-Ray trace ID, or internal log ID returns no matching events, state that no matching logs were found for that exact ID and do not continue with unrelated logs.
 
-The goal of this step is to use API Gateway evidence to identify the Lambda function, then find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the API ID, stage, resource path, integration URI, Lambda function name, Lambda log group, and field name found.
+The goal of this step is to use API Gateway evidence to identify the Lambda function, discover the actual Lambda log group, then find the internal log ID used by the application for the request. The internal log ID may be named `logId`, `log_id`, `internalLogId`, `requestLogId`, `correlationId`, or another team-specific field. State the API ID, stage, resource path, integration request ID, integration URI, Lambda function name, Lambda log group, and field name found.
 
 This skill is used in a testing environment. Provide as much relevant raw log detail as possible. Do not truncate logs just to be brief; only omit clearly unrelated noise.
 
@@ -106,6 +110,7 @@ From the whole request log, identify the useful error:
 - Prefer the first meaningful internal error over later propagated or wrapper errors.
 - Prefer errors closest to the deepest failing dependency.
 - For downstream HTTP failures, preserve the request/response evidence that proves the downstream behavior, including raw log lines when available.
+- Downgrade post-response errors to secondary symptoms unless they appear before response generation or are proven to have caused the response status/body.
 - Distinguish business validation failures from infrastructure/runtime failures.
 - Treat generic timeout, 500, or gateway errors as symptoms unless the underlying failing call cannot be found.
 
