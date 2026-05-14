@@ -18,7 +18,7 @@ say() {
 prompt_yes_no() {
   prompt="$1"
   printf '%s [y/N] ' "$prompt"
-  read answer
+  IFS= read -r answer || answer=""
   case "$answer" in
     y|Y|yes|YES|Yes) return 0 ;;
     *) return 1 ;;
@@ -150,15 +150,19 @@ install_skill() {
   say "Installed \"$name\" to $dest"
 }
 
-collect_skills() {
+install_all_skills() {
   found=0
   for candidate in "$SCRIPT_DIR"/*; do
     if skill_has_manifest "$candidate"; then
       found=1
-      basename -- "$candidate"
+      install_skill "$(basename -- "$candidate")"
     fi
   done
-  return "$found"
+
+  if [ "$found" -eq 0 ]; then
+    say "Error: no skill folders containing SKILL.md were found."
+    exit 1
+  fi
 }
 
 check_latest_version
@@ -167,12 +171,5 @@ mkdir -p "$TARGET_DIR"
 if [ -n "$SKILL_NAME" ]; then
   install_skill "$SKILL_NAME"
 else
-  skills=$(collect_skills || true)
-  if [ -z "$skills" ]; then
-    say "Error: no skill folders containing SKILL.md were found."
-    exit 1
-  fi
-  printf '%s\n' "$skills" | while IFS= read -r name; do
-    [ -n "$name" ] && install_skill "$name"
-  done
+  install_all_skills
 fi
