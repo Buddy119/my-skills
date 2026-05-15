@@ -37,12 +37,14 @@ aws <service> <operation> help
 Examples:
 
 ```bash
-/aws-incident-pair --region ap-southeast-1 --request-id <request-id> --xray-id <xray-trace-id> --since 60m
+/aws-incident-pair --region ap-southeast-1 --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success]
 ```
 
 The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, required `saml` profile, request ID, X-Ray trace ID, and time window to select read-only AWS CLI commands.
 
 `--request-id` and `--xray-id` are mandatory. If either one is missing, ask the developer to provide the missing ID before starting AWS log or trace investigation.
+
+`--compare-last-success` is optional. When enabled, compare the error request with the latest prior successful request for the same API Gateway API ID, stage, resource path, and HTTP method. Success means HTTP `2xx` or `3xx`.
 
 Do not define service name or error keyword as standard skill-level options. If the developer wants a specific service, server, Lambda, log group, or error pattern investigated, they can ask for it in follow-up chat, and Copilot should treat it as extra context for that turn.
 
@@ -120,8 +122,10 @@ See the forbidden commands reference before considering any command outside the 
 11. Discover the actual Lambda CloudWatch log group with `aws logs describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
 12. After identifying the Lambda log group, search Lambda logs by API Gateway integration request ID first, then by X-Ray trace ID, request ID, or correlation ID to find the internal log ID for the request.
 13. Use the internal log ID to find the whole log sequence for that request.
-14. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
-15. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
+14. If `--compare-last-success` is enabled, find the latest prior `2xx` or `3xx` API Gateway request for the same API ID, stage, resource path, and HTTP method. Reconstruct its Lambda logs using integration request ID first, then request ID or internal log ID.
+15. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
+16. If comparison is enabled, compare error and success flows across API Gateway fields, Lambda log sequence, downstream calls, status, latency, request/response payloads, and first meaningful divergence.
+17. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
 
 ## Evidence Rules
 
@@ -136,6 +140,7 @@ See the forbidden commands reference before considering any command outside the 
 - Always distinguish confirmed evidence from hypothesis.
 - Match only the exact provided `--request-id`, `--xray-id`, or exact internal log ID. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches as evidence.
 - If no trace, API Gateway access log, Lambda log, or internal request log is found for the exact provided IDs, say that directly and list the exact IDs, log groups, and time window searched.
+- For `--compare-last-success`, match the successful request exactly by API ID, stage, resource path, and HTTP method. Do not compare against nearest or guessed success logs.
 - Treat errors logged after response generation as secondary symptoms unless the same error clearly appears before response generation.
 - Do not redact testing-environment logs by default. If a value is clearly an AWS credential, private key, password, or production secret, call out that it was present and avoid repeating the raw secret value.
 - Do not change AWS resources.
@@ -182,6 +187,18 @@ Do not redact testing-environment logs by default. Avoid repeating raw AWS crede
 
 ### First Meaningful Error
 Explain the first real error found in the chain, not only the final propagated error.
+
+### Last Successful Request Comparison
+Include this section only when `--compare-last-success` is enabled.
+
+- Success request ID:
+- Success integration request ID:
+- Success timestamp:
+- Success status:
+- Comparison basis:
+- First meaningful divergence:
+
+Compare the error request and last successful request across API Gateway fields, Lambda log sequence, downstream HTTP calls, status, latency, request/response payloads, and post-response behavior. If no exact prior `2xx` or `3xx` success is found for the same API ID, stage, resource path, and HTTP method, say that directly and skip the comparison.
 
 ### Suspected Root Cause
 Confirmed:

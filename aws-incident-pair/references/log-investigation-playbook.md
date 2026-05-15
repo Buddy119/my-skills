@@ -103,7 +103,20 @@ After finding the internal log ID, search the same related log group for the who
 
 If the internal log ID appears in multiple related log groups, repeat the search in those groups and merge the timeline by timestamp.
 
-## Step 7: Detect The Useful Error
+## Step 7: Compare Last Success When Requested
+
+Run this step only when `--compare-last-success` is enabled.
+
+- Use the failing request's API Gateway evidence as the comparison key: API ID, stage, resource path, and HTTP method.
+- Find the latest prior successful API Gateway request in the same time window before the failing request timestamp.
+- Success means HTTP `2xx` or `3xx`.
+- The successful request must exactly match the same API ID, stage, resource path, and HTTP method. Do not use nearest routes, adjacent paths, similar methods, or guessed successful requests.
+- If no exact prior success is found, state that directly and skip the comparison.
+- Reconstruct the successful request's Lambda logs by API Gateway integration request ID first, then by success request ID or success internal log ID.
+- Compare failing and successful flows across API Gateway fields, Lambda log sequence, downstream HTTP calls, status, latency, request/response payloads, and post-response behavior.
+- Report the first meaningful divergence and separate confirmed differences from hypotheses.
+
+## Step 8: Detect The Useful Error
 
 From the whole request log, identify the useful error:
 
@@ -127,7 +140,7 @@ Build a concise incident timeline containing:
 
 Identify the first meaningful error in the chain, not just the final propagated error.
 
-## Step 8: Present Findings In Chat
+## Step 9: Present Findings In Chat
 
 Do not create an output file.
 
@@ -137,10 +150,11 @@ Present findings directly in the Copilot chat window with:
 2. relevant raw logs
 3. evidence timeline
 4. first meaningful error
-5. suspected root cause
-6. impact
-7. recommended next safe checks
-8. commands used
-9. missing evidence
+5. last successful request comparison when `--compare-last-success` is enabled
+6. suspected root cause
+7. impact
+8. recommended next safe checks
+9. commands used
+10. missing evidence
 
 Separate confirmed facts from hypotheses. Never claim root cause is confirmed unless logs or traces prove it.
