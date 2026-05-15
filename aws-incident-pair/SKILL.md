@@ -37,14 +37,18 @@ aws <service> <operation> help
 Examples:
 
 ```bash
-/aws-incident-pair --region ap-southeast-1 --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success]
+/aws-incident-pair --region ap-southeast-1 --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success] [--compare-first-success]
 ```
 
 The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, required `saml` profile, request ID, X-Ray trace ID, and time window to select read-only AWS CLI commands.
 
 `--request-id` and `--xray-id` are mandatory. If either one is missing, ask the developer to provide the missing ID before starting AWS log or trace investigation.
 
-`--compare-last-success` is optional. When enabled, compare the error request with the latest prior successful request for the same API Gateway API ID, stage, resource path, and HTTP method. Success means HTTP `2xx` or `3xx`.
+`--compare-last-success` is optional. When enabled, compare the error request with the latest prior successful request before the failing request timestamp for the same API Gateway API ID, stage, resource path, and HTTP method. Success means HTTP `2xx` or `3xx`.
+
+`--compare-first-success` is optional. When enabled, compare the error request with the first later successful request after the failing request timestamp for the same API Gateway API ID, stage, resource path, and HTTP method. Success means HTTP `2xx` or `3xx`.
+
+If both comparison flags are provided, run both comparisons and report both. The error investigation window remains based on `--since` or the default 60 minutes. Comparison lookups use separate bounded windows: start inside the error window, then expand to 6 hours and 24 hours in the requested direction if no exact success is found. Last-success lookup searches only before the failing request timestamp. First-success lookup searches only after the failing request timestamp and never beyond the current time.
 
 Do not define service name or error keyword as standard skill-level options. If the developer wants a specific service, server, Lambda, log group, or error pattern investigated, they can ask for it in follow-up chat, and Copilot should treat it as extra context for that turn.
 
@@ -122,9 +126,9 @@ See the forbidden commands reference before considering any command outside the 
 11. Discover the actual Lambda CloudWatch log group with `aws logs describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
 12. After identifying the Lambda log group, search Lambda logs by API Gateway integration request ID first, then by X-Ray trace ID, request ID, or correlation ID to find the internal log ID for the request.
 13. Use the internal log ID to find the whole log sequence for that request.
-14. If `--compare-last-success` is enabled, find the latest prior `2xx` or `3xx` API Gateway request for the same API ID, stage, resource path, and HTTP method. Reconstruct its Lambda logs using integration request ID first, then request ID or internal log ID.
+14. If `--compare-last-success` or `--compare-first-success` is enabled, find the requested exact successful API Gateway request for the same API ID, stage, resource path, and HTTP method. For `--compare-last-success`, search only before the failing request timestamp and choose the latest prior `2xx` or `3xx`. For `--compare-first-success`, search only after the failing request timestamp and choose the first later `2xx` or `3xx`. Start inside the error investigation window, then expand the comparison lookup to 6 hours and 24 hours in the requested direction if no exact success is found.
 15. Detect the useful error from the whole request log. If the error comes from a downstream HTTP call, include the relevant HTTP request and response logs in chat.
-16. If comparison is enabled, compare error and success flows across API Gateway fields, Lambda log sequence, downstream calls, status, latency, request/response payloads, and first meaningful divergence.
+16. If comparison is enabled and an exact success is found, reconstruct each success request's Lambda logs using integration request ID first, then request ID or internal log ID. Compare error and success flows across API Gateway fields, Lambda log sequence, downstream calls, status, latency, request/response payloads, and first meaningful divergence.
 17. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
 
 ## Evidence Rules
@@ -140,7 +144,8 @@ See the forbidden commands reference before considering any command outside the 
 - Always distinguish confirmed evidence from hypothesis.
 - Match only the exact provided `--request-id`, `--xray-id`, or exact internal log ID. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches as evidence.
 - If no trace, API Gateway access log, Lambda log, or internal request log is found for the exact provided IDs, say that directly and list the exact IDs, log groups, and time window searched.
-- For `--compare-last-success`, match the successful request exactly by API ID, stage, resource path, and HTTP method. Do not compare against nearest or guessed success logs.
+- For `--compare-last-success` and `--compare-first-success`, match successful requests exactly by API ID, stage, resource path, and HTTP method. Do not compare against nearest, adjacent, similar, or guessed success logs.
+- `--compare-last-success` may only use successful requests before the failing request timestamp. `--compare-first-success` may only use successful requests after the failing request timestamp and never beyond the current time.
 - Treat errors logged after response generation as secondary symptoms unless the same error clearly appears before response generation.
 - Do not redact testing-environment logs by default. If a value is clearly an AWS credential, private key, password, or production secret, call out that it was present and avoid repeating the raw secret value.
 - Do not change AWS resources.
@@ -151,7 +156,66 @@ See the forbidden commands reference before considering any command outside the 
 
 ## Chat Response Format
 
-Respond directly in chat using this structure:
+Respond directly in chat using this structure. Put the summary, likely cause, and important decision-making evidence first. Put raw logs, command inventory, and missing evidence after the main conclusion.
+
+### Executive Summary
+- Status:
+- Most likely failing component:
+- First meaningful error:
+- Suspected root cause:
+- User-facing impact:
+- Confidence:
+- Immediate safe next check:
+
+Keep this section short and useful. Lead with what the developer most needs to know.
+
+### Suspected Root Cause
+Confirmed:
+- ...
+
+Hypothesis:
+- ...
+
+### First Meaningful Error
+Explain the first real error found in the chain, not only the final propagated error.
+
+### Last Successful Request Comparison
+Include this section only when `--compare-last-success` is enabled.
+
+- Success request ID:
+- Success integration request ID:
+- Success timestamp:
+- Success status:
+- Comparison basis:
+- Success search window:
+- Window expanded:
+- First meaningful divergence:
+
+Compare the error request and last successful request across API Gateway fields, Lambda log sequence, downstream HTTP calls, status, latency, request/response payloads, and post-response behavior. Search only before the failing request timestamp. If no exact prior `2xx` or `3xx` success is found for the same API ID, stage, resource path, and HTTP method after the bounded 24-hour backward expansion, say that directly and skip this comparison.
+
+### First Successful Request Comparison
+Include this section only when `--compare-first-success` is enabled.
+
+- Success request ID:
+- Success integration request ID:
+- Success timestamp:
+- Success status:
+- Comparison basis:
+- Success search window:
+- Window expanded:
+- First meaningful divergence:
+
+Compare the error request and first successful request across API Gateway fields, Lambda log sequence, downstream HTTP calls, status, latency, request/response payloads, and post-response behavior. Search only after the failing request timestamp and never beyond the current time. If no exact later `2xx` or `3xx` success is found for the same API ID, stage, resource path, and HTTP method after the bounded 24-hour forward expansion, say that directly and skip this comparison.
+
+### Impact
+State what appears to be affected and what is still unknown.
+
+### Recommended Next Safe Checks
+List read-only diagnostic steps first. Do not recommend production changes unless evidence strongly supports them.
+
+### Evidence Timeline
+| Time | Source | Event | Evidence |
+|---|---|---|---|
 
 ### Investigation Context
 - AWS CLI version:
@@ -180,38 +244,6 @@ When an internal log ID is found, show the full related log sequence in timestam
 If the useful error is from a downstream HTTP call, include the related request and response logs when available, such as method, URL/path, status code, latency, headers, request body fields, response body fields, and downstream error code/message.
 
 Do not redact testing-environment logs by default. Avoid repeating raw AWS credentials, private keys, passwords, or production secrets if they appear in logs; mention their presence instead.
-
-### Evidence Timeline
-| Time | Source | Event | Evidence |
-|---|---|---|---|
-
-### First Meaningful Error
-Explain the first real error found in the chain, not only the final propagated error.
-
-### Last Successful Request Comparison
-Include this section only when `--compare-last-success` is enabled.
-
-- Success request ID:
-- Success integration request ID:
-- Success timestamp:
-- Success status:
-- Comparison basis:
-- First meaningful divergence:
-
-Compare the error request and last successful request across API Gateway fields, Lambda log sequence, downstream HTTP calls, status, latency, request/response payloads, and post-response behavior. If no exact prior `2xx` or `3xx` success is found for the same API ID, stage, resource path, and HTTP method, say that directly and skip the comparison.
-
-### Suspected Root Cause
-Confirmed:
-- ...
-
-Hypothesis:
-- ...
-
-### Impact
-State what appears to be affected and what is still unknown.
-
-### Recommended Next Safe Checks
-List read-only diagnostic steps first. Do not recommend production changes unless evidence strongly supports them.
 
 ### Commands Used
 List AWS CLI commands used, including the region, log groups, trace IDs, request IDs, and internal log IDs used for the investigation.

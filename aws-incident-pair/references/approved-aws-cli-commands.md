@@ -277,9 +277,19 @@ aws logs start-query --profile saml --region <aws-region> --log-group-name "<api
 Find the latest prior successful API Gateway request for the same route:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <error-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter @message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] / | sort @timestamp desc | limit 1"
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <success-search-start-epoch-seconds> --end-time <error-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp desc | limit 1"
 ```
 
-Use this only after the failing request has identified the exact API ID, stage, resource path, HTTP method, and error timestamp. API Gateway log formats vary, so adapt the field names or message filters to the actual access/execution log shape. The successful request must exactly match the same API ID, stage, resource path, and HTTP method. Do not compare against nearest or guessed success logs.
+Use this only after the failing request has identified the exact API ID, stage, resource path, HTTP method, and error timestamp. Search only before the failing request timestamp. Start with the portion of the error investigation window before the failure, then expand `success-search-start-epoch-seconds` backward to 6 hours and 24 hours before the failure if no exact success is found.
+
+Find the first later successful API Gateway request for the same route:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <error-epoch-seconds> --end-time <success-search-end-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1"
+```
+
+Use this only after the failing request has identified the exact API ID, stage, resource path, HTTP method, and error timestamp. Search only after the failing request timestamp and never beyond the current time. Start with the portion of the error investigation window after the failure, then expand `success-search-end-epoch-seconds` forward to 6 hours and 24 hours after the failure if no exact success is found.
+
+API Gateway log formats vary, so adapt the field names or message filters to the actual access/execution log shape. The successful request must exactly match the same API ID, stage, resource path, and HTTP method. Do not compare against nearest, adjacent, similar, or guessed success logs.
 
 Use API Gateway access or execution logs to identify API ID, stage, resource path, HTTP method, status, integration request ID, integration status, latency, and X-Ray root values such as `Root=<xray-trace-id>` when these fields are present. Access and execution log formats vary by team, so inspect the raw event fields before deciding which API Gateway metadata command to run next.

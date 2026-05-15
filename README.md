@@ -38,7 +38,7 @@ By default, the installer copies all skills to `~/.copilot/skills`. Use `--skill
 Use this skill as an AWS incident investigation pair. It detects the installed AWS CLI version, uses read-only AWS CLI commands to inspect X-Ray traces and CloudWatch logs, then summarizes evidence directly in chat. It does not remediate, invoke business functions, write report files, or generate investigation output files.
 
 ```bash
-/aws-incident-pair --region <aws-region> --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success]
+/aws-incident-pair --region <aws-region> --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success] [--compare-first-success]
 ```
 
 Key inputs:
@@ -48,6 +48,7 @@ Key inputs:
 - X-Ray trace ID through `--xray-id` is required.
 - Optional time window through `--since`; defaults to the last 60 minutes.
 - Optional `--compare-last-success` compares the error request with the latest prior `2xx` or `3xx` request for the same API ID, stage, resource path, and HTTP method.
+- Optional `--compare-first-success` compares the error request with the first later `2xx` or `3xx` request for the same API ID, stage, resource path, and HTTP method.
 
 Operating assumptions:
 
@@ -69,8 +70,11 @@ Primary investigation flow:
 - Use the internal log ID to reconstruct the request log sequence.
 - Use only exact matches for the provided request ID, X-Ray trace ID, or internal log ID. If no exact match is found, state that directly instead of using nearby logs.
 - With `--compare-last-success`, compare only against an exact prior `2xx` or `3xx` match for the same API Gateway route.
+- With `--compare-first-success`, compare only against an exact later `2xx` or `3xx` match for the same API Gateway route.
+- Comparison lookups start inside the error investigation window, then expand in the requested direction to 6 hours and 24 hours if no exact success is found. Forward searches never go beyond the current time.
 - Treat post-response errors as secondary symptoms unless they appear before response generation.
 - Provide as much relevant testing-environment log detail as possible, including downstream HTTP request/response logs when they explain the failure.
+- Present the summary, suspected root cause, first meaningful error, comparison, impact, and next checks before detailed context, raw logs, commands, and missing evidence.
 
 ## ba-analyze-tool
 
