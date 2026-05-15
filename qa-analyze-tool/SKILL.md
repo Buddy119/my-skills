@@ -359,7 +359,7 @@ The BDD format must follow [references/bdd-template.md](references/bdd-template.
 
 ### `final`
 
-Purpose: convert the current BDD Markdown into an Xray/Jira-oriented, Excel-ready Markdown table.
+Purpose: convert the current BDD Markdown into an Xray/Jira-oriented, Excel-ready Markdown table with executable `Test Step` and `Expected Result` columns.
 
 Workflow:
 
@@ -367,7 +367,7 @@ Workflow:
 2. If `output/00-pending-blockers.md` exists and contains unresolved blockers, stop and replay them through `preview` first.
 3. If `output/03-bdd-test-cases.md` is missing or stale, generate the missing prerequisite first.
 4. Read `output/03-bdd-test-cases.md`.
-5. Convert the scenarios into the upload-oriented table.
+5. Convert the scenarios into the upload-oriented table. Do not preserve separate `Given`, `When`, or `Then` export columns.
 6. Save the result to `output/04-xray-jira-export.md`.
 7. Update `latest-status.md`.
 8. Record the invocation in `audit/`.

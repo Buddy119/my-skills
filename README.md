@@ -1,4 +1,4 @@
-# Skills
+# Buddy Skills
 
 This folder contains self-contained open standard skill packages. Each skill lives in its own subfolder and includes its own `SKILL.md` with detailed operating rules, inputs, outputs, and workflow guidance.
 
@@ -10,10 +10,22 @@ Install all skills into the default GitHub Copilot skills folder:
 ./install-copilot-skills.sh
 ```
 
+Install all skills and automatically overwrite existing installed copies:
+
+```bash
+./install-copilot-skills.sh --y
+```
+
 Install one skill on macOS or Linux:
 
 ```bash
 ./install-copilot-skills.sh --skill postman2insomnia
+```
+
+Install one skill and automatically overwrite its existing installed copy:
+
+```bash
+./install-copilot-skills.sh --skill postman2insomnia --y
 ```
 
 Install all skills on Windows PowerShell:
@@ -22,13 +34,25 @@ Install all skills on Windows PowerShell:
 .\install-copilot-skills.ps1
 ```
 
+Install all skills and automatically overwrite existing installed copies:
+
+```powershell
+.\install-copilot-skills.ps1 --y
+```
+
 Install one skill on Windows PowerShell:
 
 ```powershell
 .\install-copilot-skills.ps1 -Skill postman2insomnia
 ```
 
-The install target is always `~/.copilot/skills`. If the target folder does not exist, the installer creates it. If a skill already exists there, the installer asks before overwriting and backs up the old copy before replacement.
+Install one skill and automatically overwrite its existing installed copy:
+
+```powershell
+.\install-copilot-skills.ps1 -Skill postman2insomnia --y
+```
+
+The install target is always `~/.copilot/skills`. If the target folder does not exist, the installer creates it. If a skill already exists there, the installer asks before overwriting unless the auto-overwrite option is provided. Existing installed skills are backed up before replacement.
 
 ## Skills Overview
 

@@ -1,18 +1,61 @@
-[CmdletBinding()]
-param(
-  [string]$Skill,
-  [Parameter(ValueFromRemainingArguments = $true)]
-  [string[]]$ExtraArgs
-)
-
 $ErrorActionPreference = "Stop"
+
+$Skill = $null
+$AutoOverwrite = $false
 
 function Show-Usage {
   Write-Host "Usage:"
-  Write-Host "  .\install-copilot-skills.ps1"
-  Write-Host "  .\install-copilot-skills.ps1 -Skill <skill-name>"
+  Write-Host "  .\install-copilot-skills.ps1 [--y]"
+  Write-Host "  .\install-copilot-skills.ps1 -Skill <skill-name> [--y]"
   Write-Host ""
   Write-Host "Installs skill folders into `$HOME\.copilot\skills."
+  Write-Host "Use --y to overwrite existing installed skills without prompting."
+}
+
+function Read-Arguments {
+  for ($index = 0; $index -lt $args.Count; $index++) {
+    $arg = [string]$args[$index]
+    switch ($arg) {
+      "-Skill" {
+        if (($index + 1) -ge $args.Count -or [string]::IsNullOrWhiteSpace([string]$args[$index + 1])) {
+          Show-Usage
+          exit 1
+        }
+        $script:Skill = [string]$args[$index + 1]
+        $index += 1
+      }
+      "--skill" {
+        if (($index + 1) -ge $args.Count -or [string]::IsNullOrWhiteSpace([string]$args[$index + 1])) {
+          Show-Usage
+          exit 1
+        }
+        $script:Skill = [string]$args[$index + 1]
+        $index += 1
+      }
+      "--y" {
+        $script:AutoOverwrite = $true
+      }
+      "-Y" {
+        $script:AutoOverwrite = $true
+      }
+      "-y" {
+        $script:AutoOverwrite = $true
+      }
+      "-h" {
+        Show-Usage
+        exit 0
+      }
+      "--help" {
+        Show-Usage
+        exit 0
+      }
+      default {
+        Write-Host "Unsupported option: $arg"
+        Show-Usage
+        exit 1
+      }
+    }
+  }
 }
 
 function Ask-YesNo {
@@ -120,7 +163,7 @@ function Install-Skill {
   }
 
   if (Test-Path -LiteralPath $destination) {
-    if (Ask-YesNo "Skill `"$Name`" already exists in target. Overwrite?") {
+    if ($AutoOverwrite -or (Ask-YesNo "Skill `"$Name`" already exists in target. Overwrite?")) {
       $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
       $backupDir = Join-Path $TargetDir ".backup"
       $backupPath = Join-Path $backupDir "$Name-$timestamp"
@@ -140,11 +183,7 @@ function Install-Skill {
   Write-Host "Installed `"$Name`" to $destination"
 }
 
-if ($ExtraArgs.Count -gt 0) {
-  Write-Host "Unsupported option: $($ExtraArgs -join ' ')"
-  Show-Usage
-  exit 1
-}
+Read-Arguments @args
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TargetDir = Join-Path $HOME ".copilot\skills"

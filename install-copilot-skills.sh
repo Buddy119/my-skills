@@ -4,10 +4,11 @@ set -eu
 usage() {
   cat <<'EOF'
 Usage:
-  ./install-copilot-skills.sh
-  ./install-copilot-skills.sh --skill <skill-name>
+  ./install-copilot-skills.sh [--y]
+  ./install-copilot-skills.sh --skill <skill-name> [--y]
 
 Installs skill folders into $HOME/.copilot/skills.
+Use --y to overwrite existing installed skills without prompting.
 EOF
 }
 
@@ -28,6 +29,7 @@ prompt_yes_no() {
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 TARGET_DIR="$HOME/.copilot/skills"
 SKILL_NAME=""
+AUTO_OVERWRITE=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -38,6 +40,10 @@ while [ "$#" -gt 0 ]; do
       fi
       SKILL_NAME="$2"
       shift 2
+      ;;
+    --y)
+      AUTO_OVERWRITE=1
+      shift
       ;;
     -h|--help)
       usage
@@ -130,7 +136,7 @@ install_skill() {
   fi
 
   if [ -e "$dest" ]; then
-    if prompt_yes_no "Skill \"$name\" already exists in target. Overwrite?"; then
+    if [ "$AUTO_OVERWRITE" -eq 1 ] || prompt_yes_no "Skill \"$name\" already exists in target. Overwrite?"; then
       timestamp=$(date +%Y%m%d-%H%M%S)
       backup_dir="$TARGET_DIR/.backup"
       backup_path="$backup_dir/$name-$timestamp"
