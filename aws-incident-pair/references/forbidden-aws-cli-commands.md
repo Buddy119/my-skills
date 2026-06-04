@@ -34,6 +34,21 @@ aws cloudformation update-stack
 aws ssm send-command
 ```
 
+## API Gateway Mutation
+
+Forbidden:
+
+```bash
+aws apigateway create-*
+aws apigateway update-*
+aws apigateway delete-*
+aws apigateway put-*
+aws apigatewayv2 create-*
+aws apigatewayv2 update-*
+aws apigatewayv2 delete-*
+aws apigatewayv2 import-*
+```
+
 ## Secrets, Decryption, And Security-Sensitive Access
 
 Forbidden:

@@ -30,6 +30,7 @@ By default, the installer copies all skills to `~/.copilot/skills`. Use `--skill
 | [ba-analyze-tool](ba-analyze-tool/) | Convert business requirements, reference docs, and current implementation materials into evidence-based BA gap analysis artifacts. | `/ba-analyze-tool --business <path> --current <path> ...` |
 | [qa-analyze-tool](qa-analyze-tool/) | Turn requirements, Jira issues, or Confluence pages into clarified QA artifacts and test exports. | `/qa-analyze-tool --mode <mode> ...` |
 | [postman2insomnia](postman2insomnia/) | Convert Postman collection, environment, and globals JSON exports into Insomnia import files. | `/postman2insomnia --source <folder-path-to-postman>` |
+| [reading-pair](reading-pair/) | Read Markdown books with a persistent AI mentor that creates per-book workspaces, chunks source text, tracks progress, and resumes sessions. | `[$reading-pair](/Users/buddy/AI_Skill/my-skills/reading-pair/SKILL.md) --book <book.md>` |
 
 ## aws-incident-pair
 
@@ -159,3 +160,25 @@ Primary outputs:
 By default, generated files are written to `<folder-path-to-postman>/insomnia-migration/`. If `--output <folder>` is provided, generated files are written to that dedicated output path instead.
 
 The converter validates source files, builds a normalized migration model, emits Insomnia resources, rewrites known-safe Postman script APIs, and reports unsupported or risky behavior for manual review.
+
+## reading-pair
+
+[Skill details](reading-pair/SKILL.md)
+
+Use this skill to create or resume a persistent reading workspace for a Markdown book. It copies the original source into `reading-pair/reading_pair_workspace/`, generates a manifest and semantic chunks, tracks progress, writes session records, and prepares `state/session-state.json` for the AI reading mentor.
+
+```bash
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md --status
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md --review
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md --prepare-answer "teach the next section" --reading-scope chapter
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md --record-turn turn-update.json
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --last
+python3 -m unittest discover reading-pair/tests
+```
+
+After a mentor session, persist the result with:
+
+```bash
+python3 /Users/buddy/AI_Skill/my-skills/reading-pair/scripts/reading_pair.py --book path/to/book.md --complete-session session-update.json
+```

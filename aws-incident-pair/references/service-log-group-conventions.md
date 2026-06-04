@@ -38,7 +38,11 @@ aws logs describe-log-groups --profile saml --region <aws-region> --log-group-na
 aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/apigateway/"
 ```
 
-Team API Gateway access log groups may use custom names. If multiple API Gateway log groups exist, search likely API Gateway access log groups for the required request ID and use only exact matching events to identify API ID, stage, resource path, method, and status.
+REST API Gateway execution logs commonly use `API-Gateway-Execution-Logs_<rest-api-id>/<stage>`. Access log groups can be custom and should be read from stage settings when available.
+
+HTTP API Gateway and WebSocket API Gateway use API Gateway v2 metadata. Their access log groups are usually configured on the stage and can use custom names. Use `aws apigatewayv2 get-stages --api-id <api-id>` to inspect stage access log settings before searching broad prefixes.
+
+Team API Gateway access log groups may use custom names. If multiple API Gateway log groups exist, search likely API Gateway access log groups for the required request ID or alarm-discovered route identity and use only exact matching events to identify API ID, stage, resource path, route key, method, and status.
 
 ## Guidance
 
@@ -46,6 +50,7 @@ Team API Gateway access log groups may use custom names. If multiple API Gateway
 - Use `describe-log-groups` first if the service-to-log-group mapping is unknown.
 - Always discover actual Lambda log groups with `describe-log-groups`; do not assume `/aws/lambda/<function-name>` exists.
 - For X-Ray misses, prefer exact API Gateway execution/access log evidence over guessing Lambda log groups.
+- For alarm-name investigations, prefer API Gateway log groups discovered from the alarm's API Gateway dimensions and stage access log settings. Do not infer the gateway only from the alarm name.
 - Prefer environment-specific names when the naming convention makes the target clear.
 - State uncertainty if multiple candidate log groups exist.
 - If there are several candidates, search plausible candidates by exact request ID. Do not use nearest or adjacent logs as substitutes for an exact ID match.

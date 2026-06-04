@@ -1,6 +1,6 @@
 ---
 name: aws-incident-pair
-description: Investigate AWS incidents using read-only commands with the installed AWS CLI version.
+description: Investigate AWS incidents, request IDs, X-Ray traces, API Gateway failures, and CloudWatch alarm-name driven API impact using read-only commands with the installed AWS CLI version.
 compatibility: GitHub Copilot agent skill. Requires an already authenticated terminal that can run AWS CLI commands against the intended AWS environment.
 allowed-tools: shell
 ---
@@ -38,11 +38,15 @@ Examples:
 
 ```bash
 /aws-incident-pair --region ap-southeast-1 --request-id <request-id> --xray-id <xray-trace-id> --since 60m [--compare-last-success] [--compare-first-success]
+/aws-incident-pair --region ap-southeast-1 --alarm-name "<cloudwatch-alarm-name>" [--alarm-name "<another-alarm-name>"] [--since 60m]
 ```
 
-The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, required `saml` profile, request ID, X-Ray trace ID, and time window to select read-only AWS CLI commands.
+The skill does not parse parameters programmatically. Interpret the developer's request and use the provided region, required `saml` profile, request ID, X-Ray trace ID, alarm name, and time window to select read-only AWS CLI commands.
 
-`--request-id` and `--xray-id` are mandatory. If either one is missing, ask the developer to provide the missing ID before starting AWS log or trace investigation.
+The skill has two investigation entrypoints:
+
+- Request workflow: `--request-id` and `--xray-id` are mandatory. If either one is missing, ask the developer to provide the missing ID before starting AWS log or trace investigation.
+- Alarm workflow: one or more `--alarm-name` values are mandatory. Match CloudWatch alarm names exactly. Do not use prefix, substring, nearest, or guessed alarm matches. `--request-id` and `--xray-id` are not required for the alarm workflow.
 
 `--compare-last-success` is optional. When enabled, compare the error request with the latest prior successful request before the failing request timestamp for the same API Gateway API ID, stage, resource path, and HTTP method. Success means HTTP `2xx` or `3xx`.
 
@@ -50,9 +54,21 @@ The skill does not parse parameters programmatically. Interpret the developer's 
 
 If both comparison flags are provided, run both comparisons and report both. The error investigation window remains based on `--since` or the default 60 minutes. Comparison lookups use separate bounded windows: start inside the error window, then expand to 6 hours and 24 hours in the requested direction if no exact success is found. Last-success lookup searches only before the failing request timestamp. First-success lookup searches only after the failing request timestamp and never beyond the current time.
 
+In the alarm workflow, use `aws cloudwatch describe-alarms --alarm-names` to resolve the exact alarm. Prefer the alarm's latest transition into `ALARM` as the failed API discovery anchor, add a 5-minute backward buffer, and search API Gateway logs through the current time. If the developer provides `--since`, use that explicit time window instead and state the concrete start and end times. Failed API request means HTTP status `4xx` or `5xx`. Success means HTTP `2xx` or `3xx`.
+
+For alarm workflow impact, count different failed APIs by route identity:
+
+- REST API Gateway: API ID or name, stage, resource path, and HTTP method.
+- HTTP API Gateway: API ID or name, stage, route key, HTTP method, and path when available.
+- WebSocket API Gateway: API ID or name, stage, and route key.
+
+From the first failed request timestamp through now, report for each failed route: total API request count, failed API request count, and whether at least one successful request exists for the same route identity. For each failed route, pick the earliest failed request as the representative failed request and extract request ID, integration request ID, status, timestamp, route identity, and X-Ray root if present. Present the calculation report first, then ask the developer which failed API route they want to continue investigating. Do not run the deeper request-level API Gateway to Lambda log workflow until the developer chooses a route.
+
+Composite alarms or alarms whose metric dimensions cannot be resolved to API Gateway must be reported as unresolved unless the referenced metric alarm names are also provided. Do not infer API Gateway identity from unrelated alarm names.
+
 Do not define service name or error keyword as standard skill-level options. If the developer wants a specific service, server, Lambda, log group, or error pattern investigated, they can ask for it in follow-up chat, and Copilot should treat it as extra context for that turn.
 
-If no time window is provided, default to the last 60 minutes and state that default in chat.
+If no time window is provided for the request workflow, default to the last 60 minutes and state that default in chat. If no time window is provided for the alarm workflow, use the alarm transition based discovery window described above.
 
 If no region is provided, ask the developer for the AWS region before running AWS service commands. Do not guess the region. Do not ask the developer for a profile; always use `--profile saml` in AWS CLI commands.
 
@@ -102,6 +118,7 @@ Use only read-only commands from these categories:
 - Lambda read-only metadata
 - CloudWatch metrics and alarms
 - API Gateway read-only metadata
+- API Gateway v2 read-only metadata
 
 See the approved commands reference for templates.
 
@@ -112,6 +129,10 @@ Never run commands that mutate state, invoke production business behavior, expos
 See the forbidden commands reference before considering any command outside the approved categories.
 
 ## Default Workflow
+
+Use the request workflow when the developer provides `--request-id` or `--xray-id`. Use the alarm workflow when the developer provides one or more `--alarm-name` values. If both entrypoints are provided, start with the alarm workflow and use the provided request or trace IDs only as extra context when they exactly match discovered evidence.
+
+### Request Workflow
 
 1. Confirm AWS CLI version with `aws --version`.
 2. Confirm the developer provided `--region <aws-region>`, `--request-id <request-id>`, and `--xray-id <xray-trace-id>`. Ask for any missing value before starting AWS investigation. Always use `--profile saml` in AWS CLI commands.
@@ -131,6 +152,23 @@ See the forbidden commands reference before considering any command outside the 
 16. If comparison is enabled and an exact success is found, reconstruct each success request's Lambda logs using integration request ID first, then request ID or internal log ID. Compare error and success flows across API Gateway fields, Lambda log sequence, downstream calls, status, latency, request/response payloads, and first meaningful divergence.
 17. Correlate evidence into a concise timeline and present findings directly in chat. Do not write incident output files.
 
+### Alarm Workflow
+
+1. Confirm AWS CLI version with `aws --version`.
+2. Confirm the developer provided `--region <aws-region>` and at least one exact `--alarm-name`. Ask only for missing region or missing alarm name. Always use `--profile saml` in AWS CLI commands.
+3. Describe the exact alarm names with `aws cloudwatch describe-alarms --alarm-names`. If an alarm is missing, say the exact name was not found and do not substitute similar names.
+4. For each alarm, identify whether it is a metric alarm or composite alarm. For composite alarms, report it as unresolved unless its referenced metric alarm names were also provided and found.
+5. From metric alarm namespace, metric name, dimensions, and alarm configuration, resolve API Gateway context. Support REST API Gateway, HTTP API Gateway, and WebSocket API Gateway. Use API Gateway metadata commands only to confirm API, stage, route/resource, integration, and log settings.
+6. Normalize the discovery window. If `--since` is provided, use it. Otherwise use the alarm's latest transition into `ALARM` with a 5-minute backward buffer through the current time. State the concrete window.
+7. Discover the relevant API Gateway access or execution log groups from alarm dimensions, stage access log settings, execution log naming conventions, and known team log prefixes. If multiple candidate log groups exist, inspect only plausible API Gateway log groups and state uncertainty.
+8. Search API Gateway logs in the discovery window for failed events. Failed means HTTP status `4xx` or `5xx`. If no failed API Gateway log events are found, report that directly with the alarm, log groups, and window searched.
+9. Group failed events by route identity. REST route identity is API ID or name, stage, resource path, and method. HTTP API route identity is API ID or name, stage, route key, method, and path when available. WebSocket route identity is API ID or name, stage, and route key.
+10. For every failed route, find the first failed request timestamp. From that timestamp through now, calculate total request count, failed request count, and whether at least one `2xx` or `3xx` success exists for that exact route identity.
+11. For each failed route, choose the earliest failed request as the representative failed request. Extract request ID, integration request ID when present, status, timestamp, API ID/name, stage, route/resource, method or route key, integration status, latency, and X-Ray root when present.
+12. Present the alarm investigation summary and failed API route table directly in chat before deeper log investigation. Include enough route labels or row numbers for the developer to choose one or more failed APIs.
+13. Ask the developer which failed API route they want to continue investigating. Do not continue into Lambda or backend logs until the developer selects a route.
+14. After the developer selects a failed API route, use that route's representative failed request and continue the existing request-level API Gateway to Lambda workflow: map the route to integration, discover the Lambda log group, search Lambda logs by integration request ID first, then X-Ray trace ID, request ID, correlation ID, or internal log ID, reconstruct the whole request log, and identify the first meaningful error. If no X-Ray ID is present, continue through API Gateway and Lambda correlation and state that exact X-Ray evidence is missing.
+
 ## Evidence Rules
 
 - Be concise but evidence-driven.
@@ -143,6 +181,9 @@ See the forbidden commands reference before considering any command outside the 
 - Never say root cause is confirmed unless logs or traces prove it.
 - Always distinguish confirmed evidence from hypothesis.
 - Match only the exact provided `--request-id`, `--xray-id`, or exact internal log ID. Do not use nearest logs, nearby timestamps, similar IDs, adjacent request logs, or inferred matches as evidence.
+- Match only exact provided `--alarm-name` values. Do not use nearest, prefix, substring, or inferred alarm matches.
+- In alarm workflow, failed API means HTTP status `4xx` or `5xx`; successful API means HTTP status `2xx` or `3xx`.
+- In alarm workflow, failed API route counts must match exact route identity. Do not merge different methods, stages, resources, route keys, or API IDs unless the log format lacks those fields; if fields are missing, state the limitation instead of inventing them.
 - If no trace, API Gateway access log, Lambda log, or internal request log is found for the exact provided IDs, say that directly and list the exact IDs, log groups, and time window searched.
 - For `--compare-last-success` and `--compare-first-success`, match successful requests exactly by API ID, stage, resource path, and HTTP method. Do not compare against nearest, adjacent, similar, or guessed success logs.
 - `--compare-last-success` may only use successful requests before the failing request timestamp. `--compare-first-success` may only use successful requests after the failing request timestamp and never beyond the current time.
@@ -178,6 +219,29 @@ Hypothesis:
 
 ### First Meaningful Error
 Explain the first real error found in the chain, not only the final propagated error.
+
+### Alarm Investigation Summary
+Include this section only when the alarm workflow is used.
+
+- Alarm names:
+- Alarm state:
+- Alarm metric and dimensions:
+- Gateway type:
+- Discovery window:
+- API Gateway API ID/name:
+- API Gateway stage:
+- First failed request time:
+- Total request count from first failure to now:
+- Failed request count from first failure to now:
+- Failed route count:
+
+### Failed APIs
+Include this section only when the alarm workflow is used.
+
+| # | Route identity | First failed time | Total requests | Failed requests | Success observed | Representative request ID | Representative status |
+|---:|---|---:|---:|---:|---|---|---|
+
+After this table, ask the developer which failed API route number or route identity they want to continue investigating. Do not include representative request log reconstruction until the developer selects a route.
 
 ### Last Successful Request Comparison
 Include this section only when `--compare-last-success` is enabled.
@@ -223,8 +287,10 @@ List read-only diagnostic steps first. Do not recommend production changes unles
 - AWS region:
 - Time window:
 - Main evidence used:
+- Alarm names checked:
 - Affected service:
 - X-Ray trace status:
+- API Gateway type:
 - API Gateway API ID:
 - API Gateway stage:
 - API Gateway resource path:

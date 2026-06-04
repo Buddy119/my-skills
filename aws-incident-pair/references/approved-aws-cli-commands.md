@@ -202,6 +202,14 @@ Describe alarms:
 aws cloudwatch describe-alarms --profile saml --region <aws-region>
 ```
 
+Describe exact alarm names:
+
+```bash
+aws cloudwatch describe-alarms --profile saml --region <aws-region> --alarm-names "<alarm-name-1>" "<alarm-name-2>"
+```
+
+Use `--alarm-names` for alarm-name investigations. Match exact names only. If an alarm is not returned, report that exact alarm name as missing and do not search by prefix or substring.
+
 Get Lambda error statistics:
 
 ```bash
@@ -235,6 +243,10 @@ Approved operations:
 - `aws apigateway get-rest-apis`
 - `aws apigateway get-resources`
 - `aws apigateway get-stages`
+- `aws apigatewayv2 get-apis`
+- `aws apigatewayv2 get-routes`
+- `aws apigatewayv2 get-stages`
+- `aws apigatewayv2 get-integrations`
 
 List REST APIs:
 
@@ -254,7 +266,31 @@ List stages for an API:
 aws apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
 ```
 
-Use API Gateway metadata only to map an incoming API path or stage to backend components. Do not update deployment, stage, method, integration, authorizer, or gateway configuration.
+List HTTP and WebSocket APIs:
+
+```bash
+aws apigatewayv2 get-apis --profile saml --region <aws-region>
+```
+
+List routes for an HTTP or WebSocket API:
+
+```bash
+aws apigatewayv2 get-routes --profile saml --region <aws-region> --api-id "<api-id>"
+```
+
+List stages for an HTTP or WebSocket API:
+
+```bash
+aws apigatewayv2 get-stages --profile saml --region <aws-region> --api-id "<api-id>"
+```
+
+List integrations for an HTTP or WebSocket API:
+
+```bash
+aws apigatewayv2 get-integrations --profile saml --region <aws-region> --api-id "<api-id>"
+```
+
+Use API Gateway metadata only to map an incoming API path, route key, or stage to backend components and log settings. Do not update deployment, stage, method, route, integration, authorizer, or gateway configuration.
 
 Search a known API Gateway access log group by request ID:
 
@@ -273,6 +309,46 @@ Run a Logs Insights query against API Gateway access or execution logs by reques
 ```bash
 aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500"
 ```
+
+Inspect API Gateway log shape before counting failures:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | sort @timestamp desc | limit 20"
+```
+
+Use this when the API Gateway access or execution log format is unknown. Identify the status, request ID, integration request ID, API ID/name, stage, path/resource, method, route key, integration status, latency, and X-Ray root fields before writing more specific queries.
+
+Find failed API Gateway requests for an alarm investigation:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1000"
+```
+
+Use this as a fallback when logs are unstructured. When the log group has structured fields, prefer field filters such as `status >= 400` or equivalent parsed status field names. Failed API request means HTTP status `4xx` or `5xx`.
+
+Count total and failed API Gateway requests for a route identity from first failure to now:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | stats count(*) as totalRequests"
+```
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | stats count(*) as failedRequests"
+```
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1"
+```
+
+Use the third query only to determine whether at least one success exists. Adapt each query to structured fields when available. The route identity must be exact: REST API ID/name, stage, resource path, and method; HTTP API ID/name, stage, route key, method, and path when available; WebSocket API ID/name, stage, and route key. If the log format does not expose a field, state the limitation instead of inferring it from nearby logs.
+
+Find one representative failed request for a failed route:
+
+```bash
+aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1"
+```
+
+Use the earliest failed request for each failed route as the representative request for deeper API Gateway to Lambda log investigation.
 
 Find the latest prior successful API Gateway request for the same route:
 
