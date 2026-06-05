@@ -17,6 +17,16 @@ Interpret the output:
 
 Do not require a different AWS CLI version for the MVP. Use the installed `aws` command unless the developer explicitly says otherwise.
 
+Use `--no-cli-pager` by default on AWS service commands so command output returns directly to chat and does not stop at an interactive `--More--` prompt. If the detected AWS CLI version rejects `--no-cli-pager`, rerun the same read-only command without it and note the compatibility fallback. `aws --version` does not need `--no-cli-pager`.
+
+Use Windows/PowerShell-safe templates by default:
+
+- Keep commands on one line; do not use POSIX line continuations, heredocs, command substitution, or inline environment variable assignments.
+- Use double quotes for normal scalar AWS CLI values.
+- Use single quotes around CloudWatch Logs Insights query strings.
+- For exact CloudWatch Logs `filter-log-events` phrase matching, use single quotes around the quoted phrase, for example `--filter-pattern '"<request-id>"'`.
+- Avoid shell pipelines and local JSON processors; use AWS CLI query options only when supported by the detected AWS CLI version.
+
 If command compatibility is uncertain, inspect local AWS CLI help first:
 
 ```bash
@@ -35,29 +45,29 @@ aws --version
 
 Approved operations:
 
-- `aws logs describe-log-groups`
-- `aws logs describe-log-streams`
-- `aws logs filter-log-events`
-- `aws logs start-query`
-- `aws logs get-query-results`
-- `aws logs stop-query`
+- `aws --no-cli-pager logs describe-log-groups`
+- `aws --no-cli-pager logs describe-log-streams`
+- `aws --no-cli-pager logs filter-log-events`
+- `aws --no-cli-pager logs start-query`
+- `aws --no-cli-pager logs get-query-results`
+- `aws --no-cli-pager logs stop-query`
 
 Discover Lambda log groups:
 
 ```bash
-aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/"
+aws --no-cli-pager logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/"
 ```
 
 Discover service-specific log groups:
 
 ```bash
-aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<service-name>"
+aws --no-cli-pager logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<service-name>"
 ```
 
 Discover the actual Lambda log group for a function name:
 
 ```bash
-aws logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<function-name>"
+aws --no-cli-pager logs describe-log-groups --profile saml --region <aws-region> --log-group-name-prefix "/aws/lambda/<function-name>"
 ```
 
 Use the returned log group name. Do not assume `/aws/lambda/<function-name>` exists unless it appears in the `describe-log-groups` result.
@@ -65,125 +75,125 @@ Use the returned log group name. Do not assume `/aws/lambda/<function-name>` exi
 List recent streams for a known log group:
 
 ```bash
-aws logs describe-log-streams --profile saml --region <aws-region> --log-group-name "<log-group-name>" --order-by LastEventTime --descending --limit 20
+aws --no-cli-pager logs describe-log-streams --profile saml --region <aws-region> --log-group-name "<log-group-name>" --order-by LastEventTime --descending --limit 20
 ```
 
 Search a known log group by request ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<request-id>"' --limit 500
 ```
 
 Search a known log group by X-Ray trace ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<xray-trace-id>\"" --limit 500
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<xray-trace-id>"' --limit 500
 ```
 
 Search a known log group by internal log ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<internal-log-id>\"" --limit 1000
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<internal-log-id>"' --limit 1000
 ```
 
 Search a Lambda log group by API Gateway integration request ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<lambda-log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<integration-request-id>\"" --limit 1000
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<lambda-log-group-name>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<integration-request-id>"' --limit 1000
 ```
 
 Run a focused CloudWatch Logs Insights query to find a request or trace:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id-or-trace-id>/ | sort @timestamp asc | limit 500"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter @message like /<request-id-or-trace-id>/ | sort @timestamp asc | limit 500'
 ```
 
 Run a focused CloudWatch Logs Insights query to reconstruct the whole request by internal log ID:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<internal-log-id>/ | sort @timestamp asc | limit 1000"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter @message like /<internal-log-id>/ | sort @timestamp asc | limit 1000'
 ```
 
 Run a focused CloudWatch Logs Insights query to reconstruct a successful request by API Gateway integration request ID:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<lambda-log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<success-integration-request-id>/ | sort @timestamp asc | limit 1000"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<lambda-log-group-name>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter @message like /<success-integration-request-id>/ | sort @timestamp asc | limit 1000'
 ```
 
 Retrieve CloudWatch Logs Insights results:
 
 ```bash
-aws logs get-query-results --profile saml --region <aws-region> --query-id "<query-id>"
+aws --no-cli-pager logs get-query-results --profile saml --region <aws-region> --query-id "<query-id>"
 ```
 
 Stop a long-running or no-longer-needed Logs Insights query:
 
 ```bash
-aws logs stop-query --profile saml --region <aws-region> --query-id "<query-id>"
+aws --no-cli-pager logs stop-query --profile saml --region <aws-region> --query-id "<query-id>"
 ```
 
 ## X-Ray
 
 Approved operations:
 
-- `aws xray get-trace-summaries`
-- `aws xray batch-get-traces`
-- `aws xray get-service-graph`
+- `aws --no-cli-pager xray get-trace-summaries`
+- `aws --no-cli-pager xray batch-get-traces`
+- `aws --no-cli-pager xray get-service-graph`
 
 Find trace summaries in a time window:
 
 ```bash
-aws xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>"
+aws --no-cli-pager xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>"
 ```
 
 Find traces with faults:
 
 ```bash
-aws xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --filter-expression "fault = true"
+aws --no-cli-pager xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --filter-expression "fault = true"
 ```
 
 Find traces with errors:
 
 ```bash
-aws xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --filter-expression "error = true"
+aws --no-cli-pager xray get-trace-summaries --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --filter-expression "error = true"
 ```
 
 Get full trace details by trace ID:
 
 ```bash
-aws xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
+aws --no-cli-pager xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
 ```
 
 Inspect service graph in the incident time window:
 
 ```bash
-aws xray get-service-graph --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>"
+aws --no-cli-pager xray get-service-graph --profile saml --region <aws-region> --start-time "<iso-start-time>" --end-time "<iso-end-time>"
 ```
 
 ## Lambda Read-Only Metadata
 
 Approved operations:
 
-- `aws lambda list-functions`
-- `aws lambda get-function`
-- `aws lambda get-function-configuration`
+- `aws --no-cli-pager lambda list-functions`
+- `aws --no-cli-pager lambda get-function`
+- `aws --no-cli-pager lambda get-function-configuration`
 
 List Lambda functions:
 
 ```bash
-aws lambda list-functions --profile saml --region <aws-region>
+aws --no-cli-pager lambda list-functions --profile saml --region <aws-region>
 ```
 
 Get Lambda function metadata:
 
 ```bash
-aws lambda get-function --profile saml --region <aws-region> --function-name "<function-name>"
+aws --no-cli-pager lambda get-function --profile saml --region <aws-region> --function-name "<function-name>"
 ```
 
 Get Lambda runtime configuration:
 
 ```bash
-aws lambda get-function-configuration --profile saml --region <aws-region> --function-name "<function-name>"
+aws --no-cli-pager lambda get-function-configuration --profile saml --region <aws-region> --function-name "<function-name>"
 ```
 
 Use Lambda metadata to confirm runtime, timeout, memory, last modified time, environment variable names, and tracing mode. Do not expose sensitive environment variable values in chat.
@@ -192,20 +202,20 @@ Use Lambda metadata to confirm runtime, timeout, memory, last modified time, env
 
 Approved operations:
 
-- `aws cloudwatch get-metric-data`
-- `aws cloudwatch get-metric-statistics`
-- `aws cloudwatch describe-alarms`
+- `aws --no-cli-pager cloudwatch get-metric-data`
+- `aws --no-cli-pager cloudwatch get-metric-statistics`
+- `aws --no-cli-pager cloudwatch describe-alarms`
 
 Describe alarms:
 
 ```bash
-aws cloudwatch describe-alarms --profile saml --region <aws-region>
+aws --no-cli-pager cloudwatch describe-alarms --profile saml --region <aws-region>
 ```
 
 Describe exact alarm names:
 
 ```bash
-aws cloudwatch describe-alarms --profile saml --region <aws-region> --alarm-names "<alarm-name-1>" "<alarm-name-2>"
+aws --no-cli-pager cloudwatch describe-alarms --profile saml --region <aws-region> --alarm-names "<alarm-name-1>" "<alarm-name-2>"
 ```
 
 Use `--alarm-names` for alarm-name investigations. Match exact names only. If an alarm is not returned, report that exact alarm name as missing and do not search by prefix or substring.
@@ -213,25 +223,25 @@ Use `--alarm-names` for alarm-name investigations. Match exact names only. If an
 Get Lambda error statistics:
 
 ```bash
-aws cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Errors --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Sum
+aws --no-cli-pager cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Errors --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Sum
 ```
 
 Get Lambda duration statistics:
 
 ```bash
-aws cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Duration --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Average Maximum
+aws --no-cli-pager cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Duration --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Average Maximum
 ```
 
 Get Lambda throttle statistics:
 
 ```bash
-aws cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Throttles --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Sum
+aws --no-cli-pager cloudwatch get-metric-statistics --profile saml --region <aws-region> --namespace AWS/Lambda --metric-name Throttles --dimensions Name=FunctionName,Value=<function-name> --start-time "<iso-start-time>" --end-time "<iso-end-time>" --period 60 --statistics Sum
 ```
 
 Run a metric data query when supported by the detected AWS CLI version:
 
 ```bash
-aws cloudwatch get-metric-data --profile saml --region <aws-region> --metric-data-queries '<metric-data-queries-json>' --start-time "<iso-start-time>" --end-time "<iso-end-time>"
+aws --no-cli-pager cloudwatch get-metric-data --profile saml --region <aws-region> --metric-data-queries '<metric-data-queries-json>' --start-time "<iso-start-time>" --end-time "<iso-end-time>"
 ```
 
 If unsure about the JSON shape for `get-metric-data`, inspect local help before using it.
@@ -240,54 +250,54 @@ If unsure about the JSON shape for `get-metric-data`, inspect local help before 
 
 Approved operations:
 
-- `aws apigateway get-rest-apis`
-- `aws apigateway get-resources`
-- `aws apigateway get-stages`
-- `aws apigatewayv2 get-apis`
-- `aws apigatewayv2 get-routes`
-- `aws apigatewayv2 get-stages`
-- `aws apigatewayv2 get-integrations`
+- `aws --no-cli-pager apigateway get-rest-apis`
+- `aws --no-cli-pager apigateway get-resources`
+- `aws --no-cli-pager apigateway get-stages`
+- `aws --no-cli-pager apigatewayv2 get-apis`
+- `aws --no-cli-pager apigatewayv2 get-routes`
+- `aws --no-cli-pager apigatewayv2 get-stages`
+- `aws --no-cli-pager apigatewayv2 get-integrations`
 
 List REST APIs:
 
 ```bash
-aws apigateway get-rest-apis --profile saml --region <aws-region>
+aws --no-cli-pager apigateway get-rest-apis --profile saml --region <aws-region>
 ```
 
 List resources for an API:
 
 ```bash
-aws apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>" --embed methods
+aws --no-cli-pager apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>" --embed methods
 ```
 
 List stages for an API:
 
 ```bash
-aws apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
+aws --no-cli-pager apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
 ```
 
 List HTTP and WebSocket APIs:
 
 ```bash
-aws apigatewayv2 get-apis --profile saml --region <aws-region>
+aws --no-cli-pager apigatewayv2 get-apis --profile saml --region <aws-region>
 ```
 
 List routes for an HTTP or WebSocket API:
 
 ```bash
-aws apigatewayv2 get-routes --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigatewayv2 get-routes --profile saml --region <aws-region> --api-id "<api-id>"
 ```
 
 List stages for an HTTP or WebSocket API:
 
 ```bash
-aws apigatewayv2 get-stages --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigatewayv2 get-stages --profile saml --region <aws-region> --api-id "<api-id>"
 ```
 
 List integrations for an HTTP or WebSocket API:
 
 ```bash
-aws apigatewayv2 get-integrations --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigatewayv2 get-integrations --profile saml --region <aws-region> --api-id "<api-id>"
 ```
 
 Use API Gateway metadata only to map an incoming API path, route key, or stage to backend components and log settings. Do not update deployment, stage, method, route, integration, authorizer, or gateway configuration.
@@ -295,25 +305,25 @@ Use API Gateway metadata only to map an incoming API path, route key, or stage t
 Search a known API Gateway access log group by request ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-access-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<request-id>"' --limit 500
 ```
 
 Search a known API Gateway execution log group by request ID:
 
 ```bash
-aws logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-execution-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern "\"<request-id>\"" --limit 500
+aws --no-cli-pager logs filter-log-events --profile saml --region <aws-region> --log-group-name "<api-gateway-execution-log-group>" --start-time <epoch-ms-start> --end-time <epoch-ms-end> --filter-pattern '"<request-id>"' --limit 500
 ```
 
 Run a Logs Insights query against API Gateway access or execution logs by request ID:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter @message like /<request-id>/ | sort @timestamp asc | limit 500'
 ```
 
 Inspect API Gateway log shape before counting failures:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | sort @timestamp desc | limit 20"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | sort @timestamp desc | limit 20'
 ```
 
 Use this when the API Gateway access or execution log format is unknown. Identify the status, request ID, integration request ID, API ID/name, stage, path/resource, method, route key, integration status, latency, and X-Ray root fields before writing more specific queries.
@@ -321,7 +331,7 @@ Use this when the API Gateway access or execution log format is unknown. Identif
 Find failed API Gateway requests for an alarm investigation:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1000"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1000'
 ```
 
 Use this as a fallback when logs are unstructured. When the log group has structured fields, prefer field filters such as `status >= 400` or equivalent parsed status field names. Failed API request means HTTP status `4xx` or `5xx`.
@@ -329,15 +339,15 @@ Use this as a fallback when logs are unstructured. When the log group has struct
 Count total and failed API Gateway requests for a route identity from first failure to now:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | stats count(*) as totalRequests"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string 'fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | stats count(*) as totalRequests'
 ```
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | stats count(*) as failedRequests"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string 'fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | stats count(*) as failedRequests'
 ```
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <first-failed-epoch-seconds> --end-time <now-epoch-seconds> --query-string 'fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1'
 ```
 
 Use the third query only to determine whether at least one success exists. Adapt each query to structured fields when available. The route identity must be exact: REST API ID/name, stage, resource path, and method; HTTP API ID/name, stage, route key, method, and path when available; WebSocket API ID/name, stage, and route key. If the log format does not expose a field, state the limitation instead of inferring it from nearby logs.
@@ -345,7 +355,7 @@ Use the third query only to determine whether at least one success exists. Adapt
 Find one representative failed request for a failed route:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string "fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <epoch-seconds-start> --end-time <epoch-seconds-end> --query-string 'fields @timestamp, @message | filter @message like /<api-id-or-name>/ and @message like /<stage>/ and @message like /<route-or-resource-path>/ and @message like /<method-or-route-key>/ | filter (@message like / 4[0-9][0-9] / or @message like / 5[0-9][0-9] /) | sort @timestamp asc | limit 1'
 ```
 
 Use the earliest failed request for each failed route as the representative request for deeper API Gateway to Lambda log investigation.
@@ -353,7 +363,7 @@ Use the earliest failed request for each failed route as the representative requ
 Find the latest prior successful API Gateway request for the same route:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <success-search-start-epoch-seconds> --end-time <error-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp desc | limit 1"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <success-search-start-epoch-seconds> --end-time <error-epoch-seconds> --query-string 'fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp desc | limit 1'
 ```
 
 Use this only after the failing request has identified the exact API ID, stage, resource path, HTTP method, and error timestamp. Search only before the failing request timestamp. Start with the portion of the error investigation window before the failure, then expand `success-search-start-epoch-seconds` backward to 6 hours and 24 hours before the failure if no exact success is found.
@@ -361,7 +371,7 @@ Use this only after the failing request has identified the exact API ID, stage, 
 Find the first later successful API Gateway request for the same route:
 
 ```bash
-aws logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <error-epoch-seconds> --end-time <success-search-end-epoch-seconds> --query-string "fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1"
+aws --no-cli-pager logs start-query --profile saml --region <aws-region> --log-group-name "<api-gateway-log-group>" --start-time <error-epoch-seconds> --end-time <success-search-end-epoch-seconds> --query-string 'fields @timestamp, @message | filter @message like /<api-id>/ and @message like /<stage>/ and @message like /<resource-path>/ and @message like /<http-method>/ | filter (@message like / 2[0-9][0-9] / or @message like / 3[0-9][0-9] /) | sort @timestamp asc | limit 1'
 ```
 
 Use this only after the failing request has identified the exact API ID, stage, resource path, HTTP method, and error timestamp. Search only after the failing request timestamp and never beyond the current time. Start with the portion of the error investigation window after the failure, then expand `success-search-end-epoch-seconds` forward to 6 hours and 24 hours after the failure if no exact success is found.

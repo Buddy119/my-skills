@@ -14,6 +14,10 @@ Confirm that the command works and identify whether the active `aws` command is 
 
 If a command or option may differ between AWS CLI v1 and v2, run `aws <service> <operation> help` and use the form supported by the detected version.
 
+Run AWS service commands with `--no-cli-pager` by default so output does not pause at an interactive `--More--` prompt. If the detected AWS CLI version rejects `--no-cli-pager`, rerun the same read-only command without it and note the fallback.
+
+Use Windows/PowerShell-safe command syntax by default: one-line commands, double quotes for scalar values, single quotes around Logs Insights query strings, and exact CloudWatch Logs phrase filters like `--filter-pattern '"<request-id>"'`. Do not use shell line continuations, heredocs, pipelines, command substitution, or inline environment variable assignments.
+
 ## Step 2: Confirm Required Inputs
 
 Require `--region <aws-region>` before running AWS service commands. Use `--profile saml` internally and the same region value on every AWS service command in the investigation.
@@ -50,7 +54,7 @@ If the developer provided `--alarm-name`, run the alarm workflow. If the develop
 Start with X-Ray using the required trace ID:
 
 ```bash
-aws xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
+aws --no-cli-pager xray batch-get-traces --profile saml --region <aws-region> --trace-ids "<xray-trace-id>"
 ```
 
 If the trace is found:
@@ -69,11 +73,12 @@ If the trace ID cannot be found:
 - From the API Gateway log event, identify API ID, stage, resource path, HTTP method, status, integration request ID, and any integration status or latency fields present.
 - If the execution log contains an X-Ray tracing value such as `Root=<xray-trace-id>`, record the X-Ray status as partial evidence even though `batch-get-traces` did not return the trace.
 - Only declare no exact X-Ray evidence when neither `batch-get-traces` nor exact API Gateway execution log events contain the supplied trace ID.
-- Use `aws apigateway get-rest-apis` to confirm the API ID or API name.
-- Use `aws apigateway get-resources --embed methods` to map the resource path and HTTP method to the integration URI.
-- Use `aws apigateway get-stages` to confirm the stage and access log configuration if needed.
+- Use the API Gateway log event found through `filter-log-events` or Logs Insights as the route source of truth before metadata enumeration.
+- Use `aws --no-cli-pager apigateway get-rest-apis` to confirm the API ID or API name.
+- Use `aws --no-cli-pager apigateway get-resources --embed methods` to map the already observed resource path and HTTP method to the integration URI.
+- Use `aws --no-cli-pager apigateway get-stages` to confirm the already observed stage and access log configuration if needed.
 - Extract the Lambda function name from the integration URI. Lambda proxy integration URIs usually contain `function:<lambda-name>` before `/invocations`.
-- Discover the actual Lambda CloudWatch log group with `aws logs describe-log-groups`. Do not assume `/aws/lambda/<function-name>` exists.
+- Discover the actual Lambda CloudWatch log group with `aws --no-cli-pager logs describe-log-groups`. Do not assume `/aws/lambda/<function-name>` exists.
 - Continue the investigation in the discovered Lambda CloudWatch log group.
 
 ## Request Workflow Step 2: Search CloudWatch Logs For The Internal Log ID
@@ -157,7 +162,7 @@ Identify the first meaningful error in the chain, not just the final propagated 
 Describe the exact alarm names:
 
 ```bash
-aws cloudwatch describe-alarms --profile saml --region <aws-region> --alarm-names "<alarm-name-1>" "<alarm-name-2>"
+aws --no-cli-pager cloudwatch describe-alarms --profile saml --region <aws-region> --alarm-names "<alarm-name-1>" "<alarm-name-2>"
 ```
 
 Rules:
@@ -177,19 +182,19 @@ Support these gateway types:
 - HTTP API Gateway: route identity is API ID or name, stage, route key, HTTP method, and path when available.
 - WebSocket API Gateway: route identity is API ID or name, stage, and route key.
 
-Use read-only metadata to confirm identity and find stage log settings:
+Use alarm dimensions and known log naming conventions to narrow candidate API Gateway log groups first. Then use Logs Insights to extract the observed failed route identity from traffic. Use read-only API Gateway metadata after route evidence is found to confirm identity, integration, and stage log settings:
 
 ```bash
-aws apigateway get-rest-apis --profile saml --region <aws-region>
-aws apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>" --embed methods
-aws apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
-aws apigatewayv2 get-apis --profile saml --region <aws-region>
-aws apigatewayv2 get-routes --profile saml --region <aws-region> --api-id "<api-id>"
-aws apigatewayv2 get-stages --profile saml --region <aws-region> --api-id "<api-id>"
-aws apigatewayv2 get-integrations --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigateway get-rest-apis --profile saml --region <aws-region>
+aws --no-cli-pager apigateway get-resources --profile saml --region <aws-region> --rest-api-id "<rest-api-id>" --embed methods
+aws --no-cli-pager apigateway get-stages --profile saml --region <aws-region> --rest-api-id "<rest-api-id>"
+aws --no-cli-pager apigatewayv2 get-apis --profile saml --region <aws-region>
+aws --no-cli-pager apigatewayv2 get-routes --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigatewayv2 get-stages --profile saml --region <aws-region> --api-id "<api-id>"
+aws --no-cli-pager apigatewayv2 get-integrations --profile saml --region <aws-region> --api-id "<api-id>"
 ```
 
-If alarm dimensions cannot be resolved to API Gateway, report the alarm as unresolved. Do not infer the API from the alarm name alone.
+If alarm dimensions and API Gateway log evidence cannot be resolved to API Gateway, report the alarm as unresolved. Do not infer the API from the alarm name alone.
 
 ## Alarm Workflow Step 3: Normalize The Discovery Window
 
@@ -201,16 +206,16 @@ If no `--since` is provided, use the alarm's latest transition into `ALARM` as t
 
 Find access or execution log groups from:
 
-- stage access log settings returned by API Gateway metadata
+- alarm dimensions
 - REST execution log naming, such as `API-Gateway-Execution-Logs_<api-id>/<stage>`
 - `/aws/apigateway/` log group prefixes
 - team-maintained service log group conventions
 
-If multiple candidate API Gateway log groups exist, inspect raw shape with a small Logs Insights sample before selecting specific queries. State uncertainty and all candidate log groups checked.
+If stage access log settings are already known from narrow metadata, include them. If not, do not start with broad API metadata enumeration; inspect plausible API Gateway log groups first. If multiple candidate API Gateway log groups exist, inspect raw shape with a small Logs Insights sample before selecting specific queries. State uncertainty and all candidate log groups checked.
 
 ## Alarm Workflow Step 5: Find Failed API Events
 
-Search the selected API Gateway log groups in the discovery window for API Gateway events with HTTP status `4xx` or `5xx`.
+Search the selected API Gateway log groups in the discovery window for API Gateway events with HTTP status `4xx` or `5xx`. Prefer Logs Insights for this step because it can quickly sort, filter, group, and expose route fields.
 
 Preferred behavior:
 
