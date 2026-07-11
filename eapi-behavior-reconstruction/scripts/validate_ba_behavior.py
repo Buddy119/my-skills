@@ -18,10 +18,14 @@ REQUIRED_KEYS = {
     "behavior_type",
     "overall_status",
     "actors",
+    "business_data_object_ids",
+    "business_rule_ids",
+    "business_exception_ids",
     "tech_behavior_document",
 }
 REQUIRED_HEADINGS = {
     "Business summary",
+    "Related BA knowledge",
     "Business trigger and actors",
     "Business flow",
     "Business preconditions",
@@ -109,6 +113,18 @@ def main() -> int:
 
     if RAW_CITATION_RE.search(body):
         errors.append("BA behavior must not contain raw source citations; link to the Tech behavior")
+
+    related_documents = (
+        "../capability-map.md",
+        "../business-data-lifecycle.md",
+        "../business-rule-catalog.md",
+        "../business-exception-catalog.md",
+    )
+    for related in related_documents:
+        if not (args.document.parent / related).resolve().is_file():
+            errors.append(f"linked BA knowledge document does not exist: {related}")
+        if not re.search(rf"\]\({re.escape(related)}\)", body):
+            errors.append(f"BA behavior must link related knowledge document: {related}")
 
     tech_document = scalar_value(frontmatter, "tech_behavior_document")
     tech_frontmatter = ""

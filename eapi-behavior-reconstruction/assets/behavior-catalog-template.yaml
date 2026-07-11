@@ -14,10 +14,19 @@ behaviors:
     duplicate_of: null
     document: "behaviors/repository.behavior-name.md"
     ba_document: null
-    api_contract: null
+    endpoint_ids:
+      - "EP-POST-resource"
+    api_contracts:
+      - "endpoints/contracts/EP-POST-resource.api-contract.md"
+    data_asset_ids: []
+    field_ids: []
+    dependency_ids: []
+    config_ids: []
+    failure_ids: []
     notes: "Short evidence-based note"
 summary:
-  discovered: 0
+  total_inventory: 0
+  pending: 0
   documented: 0
   technical: 0
   duplicate: 0

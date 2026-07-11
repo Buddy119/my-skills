@@ -8,12 +8,22 @@ behavior_type: "business|integration"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
 actors:
   - "Business actor or system participant"
+business_data_object_ids: []
+business_rule_ids: []
+business_exception_ids: []
 tech_behavior_document: "../../tech-pack/behaviors/repository.behavior-name.md"
 ---
 
 # Business-readable behavior title
 
 [View technical behavior](../../tech-pack/behaviors/repository.behavior-name.md)
+
+## Related BA knowledge
+
+- [Capability map](../capability-map.md)
+- [Business data lifecycle](../business-data-lifecycle.md)
+- [Business rule catalog](../business-rule-catalog.md)
+- [Business exception catalog](../business-exception-catalog.md)
 
 ## Business summary
 

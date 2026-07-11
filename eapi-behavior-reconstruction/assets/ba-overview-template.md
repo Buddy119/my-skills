@@ -2,12 +2,23 @@
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 tech_pack: "../tech-pack/repository-overview.md"
+knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-# Business behavior overview
+# Business repository overview
 
 [View technical repository overview](../tech-pack/repository-overview.md)
+
+## BA knowledge navigation
+
+| Business question | Document |
+|---|---|
+| What capabilities and actors exist? | [Capability map](capability-map.md) |
+| Where does business information come from and go? | [Business data lifecycle](business-data-lifecycle.md) |
+| What business rules apply? | [Business rule catalog](business-rule-catalog.md) |
+| What can go wrong from a business perspective? | [Business exception catalog](business-exception-catalog.md) |
+| What flows can users or systems initiate? | [Behavior catalog](behavior-catalog.md) |
 
 ## Business capabilities
 

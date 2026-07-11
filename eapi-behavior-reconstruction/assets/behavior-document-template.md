@@ -7,8 +7,17 @@ entry_type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
 entry_point: "handler-or-route"
 behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
-api_contract_document: null
 ba_behavior_document: null
+endpoint_ids: []
+api_contract_documents: []
+data_asset_ids: []
+field_ids: []
+dependency_ids: []
+config_ids: []
+validation_rule_ids: []
+failure_ids: []
+external_http_call_ids: []
+external_mapping_ids: []
 consumes:
   - type: "http-api|event|queue|topic|stream|schedule|other"
     name: "stable connection name"
@@ -21,11 +30,6 @@ reads:
 writes:
   - type: "dynamodb|rds|s3|other"
     name: "resource or logical name"
-external_dependencies:
-  - type: "service|lambda|api|library|layer|other"
-    name: "dependency name"
-external_http_calls: []
-field_mappings: []
 analysis_limitations:
   - "Describe an excluded or unavailable area"
 ---
@@ -45,11 +49,11 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 - Evidence:
   - `path/to/file.ext:line`
 
-## API contract
+## API contracts
 
-Include this section only for `entry_type: api`. Keep it short and link to the separate contract document:
+Include this section whenever `endpoint_ids` is nonempty; it is mandatory for `entry_type: api`. List every endpoint that invokes or routes into this behavior and link to its endpoint-owned contract:
 
-[View detailed API contract](../contracts/repository.behavior-name.api-contract.md)
+- `EP-POST-resource` — [View API contract](../endpoints/contracts/EP-POST-resource.api-contract.md)
 
 ## BA view
 
@@ -76,33 +80,20 @@ Describe non-API input messages, events, records, schedules, or invocation conte
 
 ## External HTTP field mappings
 
-Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
+Include this section only when `external_mapping_ids` is nonempty. Summarize the interaction and link to the canonical [External HTTP mapping matrix](../fields/external-http-mapping-matrix.md). List `HTTP-` and `MAP-` IDs; do not duplicate the full mapping table.
 
-Record each proven call in YAML before its mappings:
+## Related repository knowledge
 
-```yaml
-external_http_calls:
-  - call_id: "HTTP-001"
-    client_operation: "ExternalCustomerClient.updateCustomer"
-    method: "POST"
-    target: "external-customer-system /customers"
-    evidence:
-      - "src/client.ext:line"
-```
-
-| ID | HTTP call | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|---|
-| FM-001 | HTTP-001 | eapi-to-external | EAPI model: `field.path` | External request: `field.path` | Rename | Always; no default | No | Confirmed | `path/to/file.ext:line` |
-
-### Unmapped, dropped, or unresolved fields
-
-| HTTP call and field | Observed treatment | Status | Evidence or evidence needed |
-|---|---|---|---|
-| HTTP-001 request/response: `field.path` | Dropped/ignored/unresolved | Unknown | `path/to/file.ext:line` or required artifact |
+- [Endpoint matrix](../endpoints/endpoint-matrix.md)
+- [Data assets](../data/data-asset-catalog.md), [data lineage](../data/data-lineage.md), and [state transitions](../data/state-transition-matrix.md)
+- [Field catalog](../fields/field-catalog.md), [validation rules](../fields/validation-rule-matrix.md), and [field lineage](../fields/field-lineage.md)
+- [Runtime configuration](../runtime/runtime-config-matrix.md)
+- [External dependencies](../dependencies/dependency-matrix.md)
+- [Failure taxonomy](../reliability/failure-taxonomy.md)
 
 ## Preconditions and business rules
 
-### BR-001 — Rule title
+### VR-rule-id — Rule title
 
 - Behavior:
 - Status: Confirmed
@@ -120,7 +111,7 @@ external_http_calls:
 
 | Operation | Resource | Key/record | State change | Status | Evidence |
 |---|---|---|---|---|---|
-| Read/Write | Resource | Identifier | Description | Confirmed | `path/to/file.ext:line` |
+| Read/Write | DATA- ID / resource | Identifier | Description | Confirmed | `path/to/file.ext:line` |
 
 ## Outputs and side effects
 
@@ -130,13 +121,13 @@ external_http_calls:
 
 ## Failures, retries, and partial success
 
-| Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
-|---|---|---|---|---|
-| Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
+| Failure ID | Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
+|---|---|---|---|---|---|
+| FAIL- ID | Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
 
 ## External dependency stubs
 
-For each dependency outside this repository, record the request/event/resource name, invocation evidence, observed contract, and unknown internal behavior.
+List relevant `DEP-` IDs, summarize their role, and link to their canonical stubs under `../dependencies/stubs/`. Do not reproduce the full dependency contract here.
 
 ## Open questions and conflicts
 

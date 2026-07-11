@@ -2,6 +2,7 @@
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 tech_catalog: "../tech-pack/behavior-catalog.yaml"
+knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 

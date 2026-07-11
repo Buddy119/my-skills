@@ -54,6 +54,17 @@ Each BA behavior must state:
 
 The Mermaid flow must use actor, action, decision, and outcome labels. Do not reproduce internal call chains.
 
+## Repository-wide BA views
+
+Derive these views from validated Tech Pack records at the same commit:
+
+- `capability-map.md`: capabilities, actors, behaviors, outcomes, and external participants.
+- `business-data-lifecycle.md`: where business information originates, how its business state changes, and where it is used or sent.
+- `business-rule-catalog.md`: business-meaningful rules derived from validated field and behavior rules; exclude purely technical validation.
+- `business-exception-catalog.md`: business-visible subset of the global failure taxonomy.
+
+Do not copy endpoint schemas, field paths, configuration keys, exception classes, or source citations into these views. Link to the canonical Tech Pack documents.
+
 ## Traceability and links
 
 - Tech Behavior path: `tech-pack/behaviors/<behavior-id>.md`.

@@ -3,14 +3,26 @@ repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic|targeted"
 behavior_catalog: "behavior-catalog.yaml"
+knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-# Repository behavior overview
+# Technical repository overview
 
 ## Observable responsibility
 
 Summarize what the repository appears to do from executable evidence. Separate confirmed responsibilities from inferred business purpose.
+
+## Knowledge pack navigation
+
+| Area | Document |
+|---|---|
+| Endpoints and API contracts | [Endpoint matrix](endpoints/endpoint-matrix.md) |
+| Data assets and lifecycle | [Data catalog](data/data-asset-catalog.md), [lineage](data/data-lineage.md), [state transitions](data/state-transition-matrix.md) |
+| Fields, validation, and mappings | [Field catalog](fields/field-catalog.md), [validation rules](fields/validation-rule-matrix.md), [external mappings](fields/external-http-mapping-matrix.md) |
+| Runtime configuration | [Runtime matrix](runtime/runtime-config-matrix.md) |
+| External dependencies | [Dependency matrix](dependencies/dependency-matrix.md) |
+| Failures | [Failure taxonomy](reliability/failure-taxonomy.md) |
 
 ## Technology and deployment
 
@@ -26,9 +38,9 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 ## Behavior summary
 
-| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contract |
+| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | Endpoint IDs |
 |---|---|---|---|---|---|---|
-| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | [Contract](contracts/repository.behavior.api-contract.md) or N/A |
+| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | EP- IDs or N/A |
 
 ## External connections
 

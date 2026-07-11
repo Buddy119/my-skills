@@ -42,6 +42,8 @@ ROLE_PATH_RULES = {
     "repository": re.compile(r"repository|dao|persistence", re.I),
     "transformer": re.compile(r"mapper|transformer|converter|assembler|serializer", re.I),
     "model-schema": re.compile(r"model|dto|schema|contract|entity|request|response", re.I),
+    "configuration": re.compile(r"config|configuration|properties|environment|setting|parameter|secret", re.I),
+    "reliability": re.compile(r"error|exception|failure|retry|dead.?letter|dlq|fallback", re.I),
     "infrastructure": re.compile(r"terraform|cloudformation|serverless|template|infrastructure|infra|cdk|sam", re.I),
 }
 
@@ -61,6 +63,43 @@ MARKER_RULES = {
     "external-http-call": re.compile(
         r"\b(?:fetch|axios\.(?:get|post|put|delete|patch)|requests\.(?:get|post|put|delete|patch))\s*\(|"
         r"\b(?:restTemplate|webClient|httpClient|client)\s*\.\s*(?:get|post|put|delete|patch|exchange|send|execute)\s*\(",
+        re.I,
+    ),
+    "config-read": re.compile(
+        r"\bos\.(?:environ|getenv)\b|\bprocess\.env\b|\bSystem\.getenv\s*\(|"
+        r"\bEnvironment\.GetEnvironmentVariable\s*\(|@Value\s*\(|"
+        r"\b(?:config|configuration|environment)\.(?:get|getProperty)\s*\(|"
+        r"\b(?:Ref|Fn::Sub|Fn::FindInMap):|\b(?:ssm|secretsmanager|parameterStore)\b",
+        re.I,
+    ),
+    "data-access": re.compile(
+        r"\b(?:dynamodb|documentClient|entityManager|jdbcTemplate|repository|dao)\b|"
+        r"\.(?:find|findById|query|scan|getItem|putItem|updateItem|deleteItem|save|insert|upsert)\s*\(|"
+        r"\b(?:SELECT|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b",
+        re.I,
+    ),
+    "event-publish": re.compile(
+        r"\b(?:publish|sendMessage|sendBatch|putEvents|putRecord|emit|enqueue)\s*\(|"
+        r"\b(?:sns|sqs|eventbridge|kinesis)\b.*\.(?:publish|send|put)",
+        re.I,
+    ),
+    "failure-branch": re.compile(
+        r"\b(?:throw|raise)\b|\b(?:catch|except)\b|\bstatusCode\s*[:=]\s*[45]\d\d\b|"
+        r"\b(?:deadLetter|dead-letter|DLQ|onFailure|fallback)\b",
+        re.I,
+    ),
+    "retry-resilience": re.compile(
+        r"\b(?:retry|retries|backoff|circuit.?breaker|visibilityTimeout|deadLetter|DLQ|RedrivePolicy|MaximumRetryAttempts)\b",
+        re.I,
+    ),
+    "state-mutation": re.compile(
+        r"\b(?:setStatus|updateStatus|transitionTo)\s*\(|\.status\s*=|"
+        r"\bUpdateExpression\b|\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|putItem|updateItem|save)\b",
+        re.I,
+    ),
+    "auth": re.compile(
+        r"\b(?:authorizer|authentication|authorization|authenticate|authorize|jwt|oauth|scope|permission)\b|"
+        r"\bAuthorization\b",
         re.I,
     ),
     "test-declaration": re.compile(

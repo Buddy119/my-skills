@@ -9,7 +9,7 @@ Create mappings only after locating a real outbound HTTP/HTTPS call in executabl
 - An SDK or repository wrapper whose implementation performs an external HTTP request.
 - A framework adapter that invokes an external HTTP endpoint.
 
-Record the confirmed call in `external_http_calls`. Then map EAPI fields to the external request and, when consumed, external response fields back to EAPI.
+Record the confirmed call in the canonical manifest `external_http_calls` section and `external-http-mapping-matrix.md`. Then map EAPI fields to the external request and, when consumed, external response fields back to EAPI.
 
 Do not create mappings for:
 
@@ -19,7 +19,7 @@ Do not create mappings for:
 - DTO-to-domain, repository-model, or utility-object conversions.
 - A configured URL with no executable HTTP call path.
 
-Keep both `external_http_calls: []` and `field_mappings: []`, and omit the mapping section, when no outbound HTTP call is proven.
+Keep both manifest `external_http_calls: []` and `field_mappings: []`, and write `None observed` in the repository-wide mapping matrix when no outbound HTTP call is proven.
 
 ## Mapping boundary
 
@@ -35,8 +35,8 @@ Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream
 
 Record each mapping with:
 
-- A stable ID local to the behavior document, such as `FM-001`.
-- The related `external_http_calls.call_id`, such as `HTTP-001`.
+- A stable repository-wide ID such as `MAP-customer-update-eapi-to-external-customer-id`.
+- The related canonical call ID, such as `HTTP-customer-update`.
 - Direction: `eapi-to-external` or `external-to-eapi`.
 - Source boundary and one or more exact source field paths.
 - Target boundary and one or more exact target field paths.
@@ -89,4 +89,4 @@ Inspect and record:
 - Enum values without a known downstream equivalent.
 - PII or financial fields that are masked, logged, or propagated.
 
-Do not claim full field coverage unless the relevant schemas or models were fully enumerated. Record the limitation when only fields touched by the chosen behavior were traced.
+Do not claim full field coverage unless the relevant schemas or models were fully enumerated. Record the limitation when only fields touched by the chosen behavior were traced. Behavior documents reference `HTTP-` and `MAP-` IDs and link to the matrix; they do not duplicate complete mapping rows.
