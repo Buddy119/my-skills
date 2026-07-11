@@ -1,0 +1,24 @@
+repository: "repository-name"
+source_commit: "git-commit-or-unknown"
+analysis_mode: "automatic|targeted"
+behaviors:
+  - behavior_id: "repository.behavior-name"
+    title: "Human-readable title"
+    category: "business|integration|technical"
+    triggers:
+      - type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
+        name: "stable trigger name"
+    entry_points:
+      - "repository-relative-file:line"
+    status: "discovered|documented|technical|duplicate|excluded|blocked"
+    duplicate_of: null
+    document: "behaviors/repository.behavior-name.md"
+    notes: "Short evidence-based note"
+summary:
+  discovered: 0
+  documented: 0
+  technical: 0
+  duplicate: 0
+  excluded: 0
+  blocked: 0
+

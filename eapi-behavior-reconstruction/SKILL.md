@@ -1,21 +1,22 @@
 ---
 name: eapi-behavior-reconstruction
-description: Reconstruct one observable business or integration behavior from a single EAPI microservice or AWS Lambda code repository and produce a standardized Markdown behavior document with source evidence, confidence labels, upstream/internal/downstream field mappings, rules, side effects, failures, tests, and external dependency stubs. Use when Codex needs to reverse-engineer undocumented behavior from code, explain what a Lambda/API/event consumer currently does, document API or event field transformations, document one repository incrementally, or create behavior documents that can later be connected for cross-service impact analysis.
+description: Automatically discover and reconstruct observable business and integration behaviors from a single EAPI microservice or AWS Lambda code repository, starting with only a local repository path. Produce a repository overview, behavior catalog, and standardized evidence-backed behavior documents with upstream/internal/downstream field mappings, rules, side effects, failures, tests, and external dependency stubs. Use when Codex needs to determine what an unfamiliar repository does, reverse-engineer undocumented code, explain Lambda/API/event-consumer behavior, document field transformations, or create behavior documents for later cross-service impact analysis.
 ---
 
 # EAPI Behavior Reconstruction
 
-Reconstruct the system's observable current behavior without inventing the missing historical intent. Analyze one behavior at a time and keep every material conclusion traceable to code, tests, configuration, or infrastructure definitions.
+Discover and reconstruct a repository's observable current behaviors without requiring the user to understand its handlers or architecture. Keep every material conclusion traceable to code, tests, configuration, or infrastructure definitions.
 
 ## Required inputs
 
-Obtain:
+Require only the local path of one repository.
 
-- The local path of one repository.
-- A behavior selector: Lambda handler, API route, event consumer, scheduled job, or a concise behavior name.
-- An output directory, or default to `behavior-docs/<repository-name>/` beside the working context.
+Accept these optional inputs when supplied:
 
-If no behavior selector is supplied, inventory candidate entry points and present up to five concise candidates. Recommend the smallest representative behavior, then ask the user to choose before performing deep reconstruction.
+- A behavior selector to restrict analysis to one Lambda handler, API route, event consumer, scheduled job, or named behavior.
+- An output directory; otherwise default to `behavior-docs/<repository-name>/` beside the working context.
+
+When only the repository path is supplied, enter repository auto-discovery mode. Do not ask the user to identify handlers, choose behaviors, explain the repository, or rank entry points. Perform those tasks from source evidence.
 
 ## Load the evidence policy
 
@@ -32,19 +33,45 @@ When the behavior receives, transforms, or emits structured data, also read [ref
 - Do not access credentials, secret values, production customer data, or live AWS resources.
 - State excluded or unreadable areas in the final document.
 
-### 2. Locate the entry point
+### 2. Inventory the repository
 
-Search with `rg` and `rg --files` first. Look for the selector in:
+Search with `rg` and `rg --files` first. Detect:
 
+- Languages, runtimes, frameworks, build files, and module boundaries.
 - Lambda handlers and runtime registration.
 - API Gateway, SAM, CDK, Serverless, Terraform, or CloudFormation definitions.
 - SQS, SNS, EventBridge, DynamoDB Stream, Kinesis, S3, and schedule triggers.
 - Step Functions tasks.
 - Tests, fixtures, schemas, and deployment configuration.
+- Data stores, outbound clients, shared libraries, Lambda Layers, and environment-controlled dependencies.
 
-Record the concrete trigger and entry-point evidence before tracing deeper.
+Group related trigger, handler, and orchestration code into distinct behaviors. Avoid counting the API route, Lambda handler, and service method as three behaviors when they implement one flow. Keep health checks, framework glue, migrations, and deployment-only utilities in the catalog but classify them as technical behaviors.
 
-### 3. Trace the behavior
+Create:
+
+```text
+behavior-docs/<repository-name>/
+├── repository-overview.md
+├── behavior-catalog.yaml
+└── behaviors/
+```
+
+Copy [assets/repository-overview-template.md](assets/repository-overview-template.md) and [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml). Populate every discovered behavior with a stable ID, trigger, entry point, category, evidence, and analysis status.
+
+If a behavior selector was supplied, use the inventory only to locate that behavior and analyze it in targeted mode. Otherwise continue automatically through every discovered business and integration behavior.
+
+### 3. Plan internal analysis batches
+
+Order behaviors by dependency and signal:
+
+1. Public API and synchronous request handlers.
+2. Event, queue, stream, and scheduled consumers.
+3. Shared orchestration behaviors referenced by multiple entry points.
+4. Technical behaviors.
+
+Process at most five behaviors in one internal batch to keep evidence focused. Persist completed documents and update `behavior-catalog.yaml`, then continue with the next batch without asking the user to select it. Stop early only when the repository is inaccessible, required permissions are unavailable, or source ambiguity makes further claims unsafe; record the exact blocker and partial coverage.
+
+### 4. Trace each behavior
 
 Follow the executable path from entry point to observable outcomes:
 
@@ -61,7 +88,7 @@ Inspect tests alongside implementation. Inspect IaC and configuration for runtim
 
 Stop at repository boundaries. Represent calls or events owned elsewhere as external dependency stubs; do not infer the other repository's internal behavior.
 
-### 4. Trace field mappings
+### 5. Trace field mappings
 
 Trace mappings at every visible boundary:
 
@@ -73,7 +100,7 @@ Record direct copies, renames, nested-path changes, type/format conversions, enu
 
 Use stable boundary names that can later connect documents. Do not manufacture an upstream or downstream field name that is unavailable in this repository; create an `Unknown` mapping endpoint or an open question instead.
 
-### 5. Separate observations from interpretation
+### 6. Separate observations from interpretation
 
 - Describe what the implementation currently does.
 - Do not claim to recover the original requirement or design rationale.
@@ -81,9 +108,11 @@ Use stable boundary names that can later connect documents. Do not manufacture a
 - Record contradictions rather than choosing the most convenient source.
 - Record unanswered transactional, retry, security, or data-consistency questions explicitly.
 
-### 6. Create the behavior document
+### 7. Create each behavior document
 
 Copy and complete [assets/behavior-document-template.md](assets/behavior-document-template.md). Preserve the YAML keys even when a list is empty so future aggregation remains deterministic.
+
+Write each document to `behaviors/<behavior-id>.md`. After validation, update the corresponding catalog entry from `discovered` to `documented` or `blocked`.
 
 Use stable connection names when the code provides them:
 
@@ -94,7 +123,7 @@ Use stable connection names when the code provides them:
 
 Use repository-relative POSIX paths in evidence citations. Cite as `path/to/file.ext:line` or `path/to/file.ext:start-end`.
 
-### 7. Validate
+### 8. Validate
 
 Run:
 
@@ -104,16 +133,16 @@ python3 scripts/validate_behavior_doc.py <behavior-document.md> --repo <reposito
 
 Resolve validation errors before delivering. Treat warnings as review items and mention any warning that remains intentional.
 
-### 8. Deliver
+### 9. Deliver
 
 Report:
 
-- The behavior document path.
+- The repository overview, behavior catalog, and generated behavior document paths.
 - The analyzed repository and commit.
-- The behavior entry point.
+- The number of discovered, documented, technical, and blocked behaviors.
 - The strongest confirmed findings.
 - The important inferred, conflicting, or unknown items.
-- The validation result.
+- Validation results for every behavior document.
 
 Do not modify application source code unless the user separately requests an implementation change.
 
@@ -130,3 +159,4 @@ Before completing, verify that:
 - External dependencies are named but not over-interpreted.
 - The document records the Git commit and analysis limitations.
 - No secret value or customer data is reproduced.
+- The catalog accounts for every discovered executable entry point as documented, technical, duplicate, excluded, or blocked.

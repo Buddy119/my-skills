@@ -1,4 +1,4 @@
 interface:
   display_name: "EAPI Behavior Reconstruction"
-  short_description: "从 EAPI 代码反推行为、上下游字段映射与源码证据"
-  default_prompt: "Use $eapi-behavior-reconstruction to trace one behavior from an EAPI repository and produce an evidence-backed behavior document."
+  short_description: "只需仓库路径，自动反推 EAPI 行为、字段映射与源码证据"
+  default_prompt: "Use $eapi-behavior-reconstruction to analyze this repository automatically, discover what it does, and produce an evidence-backed overview, behavior catalog, and behavior documents."
