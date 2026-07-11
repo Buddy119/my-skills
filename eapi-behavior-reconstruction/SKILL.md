@@ -1,6 +1,6 @@
 ---
 name: eapi-behavior-reconstruction
-description: Automatically discover and reconstruct observable business and integration behaviors from a single EAPI microservice or AWS Lambda code repository, starting with only a local repository path. Produce a repository overview, behavior catalog, and standardized evidence-backed behavior documents with upstream/internal/downstream field mappings, rules, side effects, failures, tests, and external dependency stubs. Use when Codex needs to determine what an unfamiliar repository does, reverse-engineer undocumented code, explain Lambda/API/event-consumer behavior, document field transformations, or create behavior documents for later cross-service impact analysis.
+description: Automatically discover and reconstruct observable business and integration behaviors from a single EAPI microservice or AWS Lambda code repository, starting with only a local repository path. Produce a repository overview, behavior catalog, and standardized evidence-backed behavior documents with Mermaid flows, conditional upstream/downstream field mappings, detailed API input/output contracts and rules, side effects, failures, tests, and external dependency stubs. Use when Codex needs to determine what an unfamiliar repository does, reverse-engineer undocumented code, explain Lambda/API/event-consumer behavior, document external field transformations, or create behavior documents for later cross-service impact analysis.
 ---
 
 # EAPI Behavior Reconstruction
@@ -22,7 +22,9 @@ When only the repository path is supplied, enter repository auto-discovery mode.
 
 Read [references/evidence-policy.md](references/evidence-policy.md) completely before analyzing source code. Apply its status and citation rules to every output.
 
-When the behavior receives, transforms, or emits structured data, also read [references/field-mapping-policy.md](references/field-mapping-policy.md) completely and apply it to the field mapping metadata and prose.
+When the behavior exchanges structured data with an upstream or downstream system, also read [references/field-mapping-policy.md](references/field-mapping-policy.md) completely and apply it. Do not load or apply field-mapping requirements to purely internal transformations.
+
+For an API behavior, read [references/api-contract-policy.md](references/api-contract-policy.md) completely and apply it to the API input and output sections.
 
 ## Workflow
 
@@ -88,15 +90,18 @@ Inspect tests alongside implementation. Inspect IaC and configuration for runtim
 
 Stop at repository boundaries. Represent calls or events owned elsewhere as external dependency stubs; do not infer the other repository's internal behavior.
 
-### 5. Trace field mappings
+Create a Mermaid `flowchart` for every behavior. Show the trigger, major internal steps, decisions, data access, external calls, emitted events, success result, and material failure branches. Keep the diagram at behavior level rather than reproducing every method call. Mark inferred nodes with `(Inferred)` and explain their evidence status in the surrounding prose.
 
-Trace mappings at every visible boundary:
+### 5. Trace cross-boundary field mappings when applicable
+
+Generate field mappings only when structured data crosses an external boundary:
 
 - Upstream request or event to EAPI transport/domain model.
-- EAPI model to persistence representation.
 - EAPI model to downstream request, command, response, or event.
 
-Record direct copies, renames, nested-path changes, type/format conversions, enum translations, defaults, constants, conditional mappings, computed fields, one-to-many or many-to-one transformations, masking, truncation, and intentionally dropped fields. Cite both the source-field read and target-field write when they occur at different locations.
+Do not create `field_mappings` for DTO-to-domain, domain-to-persistence, or other purely internal object conversions. When an internal conversion implements an external mapping, describe the end-to-end upstream/downstream mapping and cite the intermediate assignments as evidence.
+
+For applicable external mappings, record direct copies, renames, nested-path changes, type/format conversions, enum translations, defaults, constants, conditional mappings, computed fields, one-to-many or many-to-one transformations, masking, truncation, and intentionally dropped fields. Cite both the source-field read and target-field write when they occur at different locations.
 
 Use stable boundary names that can later connect documents. Do not manufacture an upstream or downstream field name that is unavailable in this repository; create an `Unknown` mapping endpoint or an open question instead.
 
@@ -113,6 +118,8 @@ Use stable boundary names that can later connect documents. Do not manufacture a
 Copy and complete [assets/behavior-document-template.md](assets/behavior-document-template.md). Preserve the YAML keys even when a list is empty so future aggregation remains deterministic.
 
 Write each document to `behaviors/<behavior-id>.md`. After validation, update the corresponding catalog entry from `discovered` to `documented` or `blocked`.
+
+For API behaviors, insert and complete [assets/api-contract-section-template.md](assets/api-contract-section-template.md) after `Trigger and entry point`. Enumerate request headers, path parameters, query parameters, body fields, validation rules, defaults, successful outputs, error outputs, response fields, and conditional output rules. Do not reduce the contract to only DTO class names.
 
 Use stable connection names when the code provides them:
 
@@ -151,10 +158,12 @@ Do not modify application source code unless the user separately requests an imp
 Before completing, verify that:
 
 - The document covers the happy path and failure paths.
+- The `Behavior flow` section contains a readable Mermaid flowchart with decisions and material failure branches.
 - Business rules cite source or test evidence.
 - Data reads, writes, events, and external calls appear in both YAML metadata and prose.
-- Every observed cross-boundary field mapping appears in `field_mappings` metadata and the `Field mappings` section.
-- Each mapping records transformation, condition, default, lossiness, confidence, and evidence; use explicit empty or `Unknown` values when unresolved.
+- `field_mappings` is empty when no structured upstream/downstream interaction exists.
+- When external field mappings exist, every observed mapping appears in metadata and the `Cross-boundary field mappings` section with transformation, condition, default, lossiness, confidence, and evidence.
+- Every API behavior includes field-level input and output contracts, request/output rules, status codes, and evidence.
 - AWS behavior comes from IaC/configuration evidence when available.
 - External dependencies are named but not over-interpreted.
 - The document records the Git commit and analysis limitations.

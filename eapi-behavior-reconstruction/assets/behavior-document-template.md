@@ -21,22 +21,7 @@ writes:
 external_dependencies:
   - type: "service|lambda|api|library|layer|other"
     name: "dependency name"
-field_mappings:
-  - mapping_id: "FM-001"
-    direction: "upstream-to-eapi|eapi-internal|eapi-to-downstream"
-    source_boundary: "stable source boundary"
-    source_fields:
-      - path: "customer.address.postCode"
-        type: "string"
-    target_boundary: "stable target boundary"
-    target_fields:
-      - path: "customer.address.postalCode"
-        type: "string"
-    transformation: "direct copy|rename|format conversion|enum mapping|derived|other"
-    condition: "always or exact condition"
-    default_value: "none|value|Unknown"
-    lossy: "false|true|Unknown"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
+field_mappings: []
 analysis_limitations:
   - "Describe an excluded or unavailable area"
 ---
@@ -56,13 +41,26 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 - Evidence:
   - `path/to/file.ext:line`
 
-## Inputs and mapping
+## Behavior flow
 
-| Input | Source | Required | Mapping/default | Status | Evidence |
-|---|---|---:|---|---|---|
-| Example | Request field | Yes | Domain field | Confirmed | `path/to/file.ext:line` |
+```mermaid
+flowchart TD
+    A[Trigger] --> B[Parse input]
+    B --> C{Valid?}
+    C -- No --> D[Return or route failure]
+    C -- Yes --> E[Execute behavior]
+    E --> F[Observable result]
+```
 
-## Field mappings
+Explain the important nodes and branches with source evidence.
+
+## Inputs
+
+Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
+
+## Cross-boundary field mappings
+
+Include this section only when structured data crosses an upstream or downstream boundary. Otherwise remove it and keep `field_mappings: []`.
 
 | ID | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|

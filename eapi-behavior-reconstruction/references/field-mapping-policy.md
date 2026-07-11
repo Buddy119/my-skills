@@ -1,5 +1,16 @@
 # Field mapping policy
 
+## When to create mappings
+
+Create mappings only when structured data crosses a system boundary:
+
+- An upstream HTTP request, event, queue message, stream record, or external response enters EAPI.
+- EAPI sends an HTTP request, command, response, event, queue message, or stream record to a downstream system.
+
+Do not create mappings for purely internal DTO-to-domain, domain-to-persistence, repository-model, or utility-object conversions. If internal conversions implement an external mapping, record one end-to-end external mapping and cite the relevant internal assignments as evidence.
+
+Keep `field_mappings: []` and omit the mapping section when no applicable external boundary exists.
+
 ## Mapping boundary
 
 Name both sides of every mapping with stable identifiers. Prefer:
@@ -8,8 +19,7 @@ Name both sides of every mapping with stable identifiers. Prefer:
 - `<event-source>:<event-type>`
 - `<queue-or-topic-logical-name> message`
 - `<external-client>.<operation> request|response`
-- `<table-logical-name> item|record`
-- Fully qualified transport or domain model name for internal boundaries
+- Fully qualified EAPI transport or domain model name only as the EAPI side of an external boundary
 
 Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream` when the code exposes a more stable name.
 
@@ -18,7 +28,7 @@ Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream
 Record each mapping with:
 
 - A stable ID local to the behavior document, such as `FM-001`.
-- Direction: `upstream-to-eapi`, `eapi-internal`, or `eapi-to-downstream`.
+- Direction: `upstream-to-eapi` or `eapi-to-downstream`.
 - Source boundary and one or more exact source field paths.
 - Target boundary and one or more exact target field paths.
 - Source and target types or formats when visible.
@@ -71,4 +81,3 @@ Inspect and record:
 - PII or financial fields that are masked, logged, or propagated.
 
 Do not claim full field coverage unless the relevant schemas or models were fully enumerated. Record the limitation when only fields touched by the chosen behavior were traced.
-

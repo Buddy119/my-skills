@@ -29,8 +29,8 @@ REQUIRED_KEYS = {
 REQUIRED_HEADINGS = {
     "Summary",
     "Trigger and entry point",
-    "Inputs and mapping",
-    "Field mappings",
+    "Behavior flow",
+    "Inputs",
     "Preconditions and business rules",
     "Happy path",
     "Data access and state changes",
@@ -109,9 +109,24 @@ def main() -> int:
     if missing_headings:
         errors.append("missing sections: " + ", ".join(missing_headings))
 
+    if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
+        errors.append("Behavior flow must contain a Mermaid flowchart or graph")
+
+    entry_type = scalar_value(frontmatter, "entry_type")
+    if entry_type == "api":
+        api_headings = {"API input contract", "API output contract"}
+        missing_api_headings = sorted(api_headings - headings)
+        if missing_api_headings:
+            errors.append("API behavior is missing sections: " + ", ".join(missing_api_headings))
+
     has_structured_mappings = bool(re.search(r"^field_mappings:\s*\n\s+-\s+mapping_id:", frontmatter, re.M))
-    if has_structured_mappings and not re.search(r"\bFM-\d+\b", body):
-        errors.append("structured field_mappings exist but no FM-nnn mapping appears in the Field mappings section")
+    if has_structured_mappings:
+        if "Cross-boundary field mappings" not in headings:
+            errors.append("structured field_mappings exist but the Cross-boundary field mappings section is missing")
+        if not re.search(r"\bFM-\d+\b", body):
+            errors.append("structured field_mappings exist but no FM-nnn mapping appears in the mapping section")
+        if re.search(r"^\s+direction:\s*[\"']?eapi-internal\b", frontmatter, re.M):
+            errors.append("field_mappings must not contain purely internal eapi-internal mappings")
 
     citations = list(EVIDENCE_RE.finditer(body))
     if not citations:
