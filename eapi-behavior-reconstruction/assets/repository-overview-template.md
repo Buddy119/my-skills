@@ -26,9 +26,9 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 ## Behavior summary
 
-| Behavior ID | Summary | Inputs | Outputs and side effects | Document |
-|---|---|---|---|---|
-| repository.behavior | Observable behavior | Boundary | Boundary | `behaviors/repository.behavior.md` |
+| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contract |
+|---|---|---|---|---|---|---|
+| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | [Contract](contracts/repository.behavior.api-contract.md) or N/A |
 
 ## External connections
 
@@ -45,4 +45,3 @@ Account for excluded, duplicate, generated, dynamic, unreadable, and blocked ent
 ## Repository-level open questions
 
 List unknown responsibilities, conflicting wiring, missing schemas, environment-defined dependencies, and behavior that may live outside the repository.
-

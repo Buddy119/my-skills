@@ -2,7 +2,17 @@
 
 ## Scope
 
-Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Do not rely on DTO names alone.
+Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write it as a separate API contract document, not inline in the behavior document. Link both documents to each other using relative Markdown links. Do not rely on DTO names alone.
+
+## Evidence layers
+
+Keep these layers separate in both input and output contracts:
+
+- **L1 — Executable evidence:** Fields directly read, validated, defaulted, transformed, or written by executable implementation. This is the strongest contract evidence.
+- **L2 — Schema-level evidence:** Fields declared by request/response models, OpenAPI, JSON Schema, annotations, or generated types but not directly exercised by the traced implementation. Label them `schema-level`; do not imply runtime enforcement without L1 evidence.
+- **L3 — Shared or opaque transformer evidence:** Fields produced or consumed through shared controllers, common transformers, generated mappers, reflection, or unavailable libraries. Mark exact fields `Inferred` or `Unknown` unless the transformer implementation is inspected.
+
+Do not merge fields from weaker layers into L1. If a layer has no evidence, write `None observed` rather than omitting the layer.
 
 ## Input contract
 
@@ -51,4 +61,4 @@ Do not invent fields for opaque framework-generated errors. Mark the body `Unkno
 - Record conflicts between published schemas and executable code.
 - Mark contract coverage partial when dynamic schemas, generated models, shared libraries, or infrastructure response mappings are unavailable.
 - Treat API Gateway or Lambda integration mappings as part of the contract when present.
-
+- Cite assertion-level tests when they prove a validation failure, status code, error body, or conditional response field.

@@ -16,12 +16,16 @@ REQUIRED_KEYS = {
     "source_commit",
     "entry_type",
     "entry_point",
+    "behavior_category",
     "overall_status",
+    "api_contract_document",
+    "ba_behavior_document",
     "consumes",
     "produces",
     "reads",
     "writes",
     "external_dependencies",
+    "external_http_calls",
     "field_mappings",
     "analysis_limitations",
 }
@@ -36,14 +40,13 @@ REQUIRED_HEADINGS = {
     "Data access and state changes",
     "Outputs and side effects",
     "Failures, retries, and partial success",
-    "Security, privacy, and audit",
     "External dependency stubs",
-    "Test coverage",
     "Open questions and conflicts",
     "Evidence index",
 }
 
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
+ALLOWED_CATEGORIES = {"business", "integration", "technical"}
 EVIDENCE_RE = re.compile(
     r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
 )
@@ -77,6 +80,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
     parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument(
+        "--allow-missing-ba",
+        action="store_true",
+        help="pre-BA validation only: allow the declared BA target file to be created later",
+    )
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -104,6 +112,10 @@ def main() -> int:
     if status not in ALLOWED_STATUSES:
         errors.append("overall_status must be Confirmed, Inferred, Conflicting, or Unknown")
 
+    behavior_category = scalar_value(frontmatter, "behavior_category")
+    if behavior_category not in ALLOWED_CATEGORIES:
+        errors.append("behavior_category must be business, integration, or technical")
+
     headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
     missing_headings = sorted(REQUIRED_HEADINGS - headings)
     if missing_headings:
@@ -113,20 +125,52 @@ def main() -> int:
         errors.append("Behavior flow must contain a Mermaid flowchart or graph")
 
     entry_type = scalar_value(frontmatter, "entry_type")
+    api_contract_document = scalar_value(frontmatter, "api_contract_document")
     if entry_type == "api":
-        api_headings = {"API input contract", "API output contract"}
-        missing_api_headings = sorted(api_headings - headings)
-        if missing_api_headings:
-            errors.append("API behavior is missing sections: " + ", ".join(missing_api_headings))
+        if "API contract" not in headings:
+            errors.append("API behavior is missing the API contract link section")
+        if not api_contract_document or api_contract_document.lower() in {"null", "none"}:
+            errors.append("API behavior must set api_contract_document")
+        else:
+            contract_path = (args.document.parent / api_contract_document).resolve()
+            if not contract_path.is_file():
+                errors.append(f"linked API contract does not exist: {api_contract_document}")
+            if not re.search(rf"\]\({re.escape(api_contract_document)}\)", body):
+                errors.append("API behavior body must contain a Markdown link matching api_contract_document")
+    elif api_contract_document and api_contract_document.lower() not in {"null", "none"}:
+        errors.append("non-API behavior must set api_contract_document to null")
+
+    ba_behavior_document = scalar_value(frontmatter, "ba_behavior_document")
+    if behavior_category in {"business", "integration"}:
+        if "BA view" not in headings:
+            errors.append("business or integration behavior is missing the BA view link section")
+        if not ba_behavior_document or ba_behavior_document.lower() in {"null", "none"}:
+            errors.append("business or integration behavior must set ba_behavior_document")
+        else:
+            ba_path = (args.document.parent / ba_behavior_document).resolve()
+            if not ba_path.is_file() and not args.allow_missing_ba:
+                errors.append(f"linked BA behavior does not exist: {ba_behavior_document}")
+            if not re.search(rf"\]\({re.escape(ba_behavior_document)}\)", body):
+                errors.append("Tech behavior body must contain a Markdown link matching ba_behavior_document")
+    elif behavior_category == "technical":
+        if ba_behavior_document and ba_behavior_document.lower() not in {"null", "none"}:
+            errors.append("technical behavior must set ba_behavior_document to null")
+        if "BA view" in headings:
+            errors.append("technical behavior must omit the BA view section")
 
     has_structured_mappings = bool(re.search(r"^field_mappings:\s*\n\s+-\s+mapping_id:", frontmatter, re.M))
+    has_external_http_calls = bool(re.search(r"^external_http_calls:\s*\n\s+-\s+call_id:", frontmatter, re.M))
     if has_structured_mappings:
-        if "Cross-boundary field mappings" not in headings:
-            errors.append("structured field_mappings exist but the Cross-boundary field mappings section is missing")
+        if not has_external_http_calls:
+            errors.append("field_mappings require a proven outbound call in external_http_calls")
+        if "External HTTP field mappings" not in headings:
+            errors.append("structured field_mappings exist but the External HTTP field mappings section is missing")
         if not re.search(r"\bFM-\d+\b", body):
             errors.append("structured field_mappings exist but no FM-nnn mapping appears in the mapping section")
-        if re.search(r"^\s+direction:\s*[\"']?eapi-internal\b", frontmatter, re.M):
-            errors.append("field_mappings must not contain purely internal eapi-internal mappings")
+        directions = re.findall(r"^\s+direction:\s*[\"']?([^\"'\s]+)", frontmatter, re.M)
+        invalid_directions = sorted(set(directions) - {"eapi-to-external", "external-to-eapi"})
+        if invalid_directions:
+            errors.append("invalid field mapping direction(s): " + ", ".join(invalid_directions))
 
     citations = list(EVIDENCE_RE.finditer(body))
     if not citations:

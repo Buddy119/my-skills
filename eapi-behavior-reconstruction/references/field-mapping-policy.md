@@ -2,24 +2,32 @@
 
 ## When to create mappings
 
-Create mappings only when structured data crosses a system boundary:
+Create mappings only after locating a real outbound HTTP/HTTPS call in executable code. Examples include:
 
-- An upstream HTTP request, event, queue message, stream record, or external response enters EAPI.
-- EAPI sends an HTTP request, command, response, event, queue message, or stream record to a downstream system.
+- An HTTP client invocation.
+- A generated REST client operation.
+- An SDK or repository wrapper whose implementation performs an external HTTP request.
+- A framework adapter that invokes an external HTTP endpoint.
 
-Do not create mappings for purely internal DTO-to-domain, domain-to-persistence, repository-model, or utility-object conversions. If internal conversions implement an external mapping, record one end-to-end external mapping and cite the relevant internal assignments as evidence.
+Record the confirmed call in `external_http_calls`. Then map EAPI fields to the external request and, when consumed, external response fields back to EAPI.
 
-Keep `field_mappings: []` and omit the mapping section when no applicable external boundary exists.
+Do not create mappings for:
+
+- The repository's inbound API request or API response.
+- EventBridge, SQS, SNS, Kinesis, DynamoDB Stream, or other messages/events.
+- Database or persistence representations.
+- DTO-to-domain, repository-model, or utility-object conversions.
+- A configured URL with no executable HTTP call path.
+
+Keep both `external_http_calls: []` and `field_mappings: []`, and omit the mapping section, when no outbound HTTP call is proven.
 
 ## Mapping boundary
 
 Name both sides of every mapping with stable identifiers. Prefer:
 
-- `HTTP <METHOD> <normalized-route> request|response`
-- `<event-source>:<event-type>`
-- `<queue-or-topic-logical-name> message`
 - `<external-client>.<operation> request|response`
-- Fully qualified EAPI transport or domain model name only as the EAPI side of an external boundary
+- `HTTP <METHOD> <external-host-or-service> <path> request|response`
+- Fully qualified EAPI model name as the EAPI side
 
 Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream` when the code exposes a more stable name.
 
@@ -28,7 +36,8 @@ Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream
 Record each mapping with:
 
 - A stable ID local to the behavior document, such as `FM-001`.
-- Direction: `upstream-to-eapi` or `eapi-to-downstream`.
+- The related `external_http_calls.call_id`, such as `HTTP-001`.
+- Direction: `eapi-to-external` or `external-to-eapi`.
 - Source boundary and one or more exact source field paths.
 - Target boundary and one or more exact target field paths.
 - Source and target types or formats when visible.

@@ -54,6 +54,8 @@ When higher-ranked evidence conflicts with lower-ranked evidence, record the con
 - Include a line or tight line range: `src/handler.ts:42-48`.
 - Cite the definition or executable branch, not only a search result or import.
 - Cite tests separately from production code.
+- Cite concrete assertions or expectations, not only test filenames, classes, or method declarations.
+- When relevant tests exist for a behavior, extract one or two assertions that prove a core outcome; prioritize a failure-path assertion.
 - Do not cite generated build output when a source definition is available.
 - Never reproduce secrets, tokens, customer identifiers, or production payloads.
 
@@ -64,16 +66,12 @@ When higher-ranked evidence conflicts with lower-ranked evidence, record the con
 - Distinguish source-defined behavior from environment-specific deployment behavior.
 - Record missing IaC, indirect environment variables, reflection, dynamic loading, and generated code as limitations.
 
-## Required review flags
+## Required functional review flags
 
 Raise an explicit open question when evidence is incomplete for:
 
-- Authentication and authorization.
-- Personally identifiable or financial data handling.
 - Idempotency, duplicate delivery, and concurrency.
 - Transaction boundaries and partial failure.
 - Retry, timeout, DLQ, and compensation behavior.
 - Monetary precision, currency, date, time zone, and ordering.
-- Audit logging and regulatory records.
 - Backward compatibility of API or event contracts.
-

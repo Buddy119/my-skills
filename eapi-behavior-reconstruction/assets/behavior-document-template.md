@@ -5,7 +5,10 @@ repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 entry_type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
 entry_point: "handler-or-route"
+behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
+api_contract_document: null
+ba_behavior_document: null
 consumes:
   - type: "http-api|event|queue|topic|stream|schedule|other"
     name: "stable connection name"
@@ -21,6 +24,7 @@ writes:
 external_dependencies:
   - type: "service|lambda|api|library|layer|other"
     name: "dependency name"
+external_http_calls: []
 field_mappings: []
 analysis_limitations:
   - "Describe an excluded or unavailable area"
@@ -41,6 +45,18 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 - Evidence:
   - `path/to/file.ext:line`
 
+## API contract
+
+Include this section only for `entry_type: api`. Keep it short and link to the separate contract document:
+
+[View detailed API contract](../contracts/repository.behavior-name.api-contract.md)
+
+## BA view
+
+Include this section only for `behavior_category: business|integration`:
+
+[View business behavior](../../ba-pack/behaviors/repository.behavior-name.md)
+
 ## Behavior flow
 
 ```mermaid
@@ -58,19 +74,31 @@ Explain the important nodes and branches with source evidence.
 
 Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
 
-## Cross-boundary field mappings
+## External HTTP field mappings
 
-Include this section only when structured data crosses an upstream or downstream boundary. Otherwise remove it and keep `field_mappings: []`.
+Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
 
-| ID | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|
-| FM-001 | upstream-to-eapi | Boundary: `field.path` | Boundary: `field.path` | Rename | Always; no default | No | Confirmed | `path/to/file.ext:line` |
+Record each proven call in YAML before its mappings:
+
+```yaml
+external_http_calls:
+  - call_id: "HTTP-001"
+    client_operation: "ExternalCustomerClient.updateCustomer"
+    method: "POST"
+    target: "external-customer-system /customers"
+    evidence:
+      - "src/client.ext:line"
+```
+
+| ID | HTTP call | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+| FM-001 | HTTP-001 | eapi-to-external | EAPI model: `field.path` | External request: `field.path` | Rename | Always; no default | No | Confirmed | `path/to/file.ext:line` |
 
 ### Unmapped, dropped, or unresolved fields
 
-| Boundary and field | Observed treatment | Status | Evidence or evidence needed |
+| HTTP call and field | Observed treatment | Status | Evidence or evidence needed |
 |---|---|---|---|
-| Boundary: `field.path` | Dropped/ignored/unresolved | Unknown | `path/to/file.ext:line` or required artifact |
+| HTTP-001 request/response: `field.path` | Dropped/ignored/unresolved | Unknown | `path/to/file.ext:line` or required artifact |
 
 ## Preconditions and business rules
 
@@ -106,19 +134,9 @@ Include this section only when structured data crosses an upstream or downstream
 |---|---|---|---|---|
 | Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
 
-## Security, privacy, and audit
-
-Describe authorization, sensitive-data handling, logging, and audit behavior. Use `Unknown` when evidence is absent.
-
 ## External dependency stubs
 
 For each dependency outside this repository, record the request/event/resource name, invocation evidence, observed contract, and unknown internal behavior.
-
-## Test coverage
-
-| Scenario | Test | Coverage assessment | Evidence |
-|---|---|---|---|
-| Scenario | Test name | Covered/Partial/Missing | `path/to/test.ext:line` |
 
 ## Open questions and conflicts
 
