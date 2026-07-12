@@ -7,7 +7,7 @@ tech_failure_taxonomy: "../tech-pack/reliability/failure-taxonomy.md"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with a business-readable exception view. Use claim_ids for material conclusions; do not leave this comment. -->
 
 # Business exception catalog
 
@@ -15,13 +15,11 @@ coverage_status: "complete|partial|blocked"
 
 ## Business-visible exceptions
 
-| Business exception ID | Capability/behavior | Business condition | Business impact | Visible result | Recovery/next action | Status |
-|---|---|---|---|---|---|---|
+Group exceptions by scenario. Explain the business condition, visible impact, result, and recovery or next action when supported. Do not expose exception classes or infrastructure identifiers.
 
 ## Partial and delayed outcomes
 
-| Business exception ID | Completed outcome | Incomplete/delayed outcome | Remaining business state | Recovery owner | Status |
-|---|---|---|---|---|---|
+Explain partial or delayed results as short scenarios. Distinguish what completed, what remains uncertain, and who owns recovery only when known.
 
 ## Exception gaps
 

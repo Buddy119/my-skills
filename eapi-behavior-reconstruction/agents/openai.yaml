@@ -1,4 +1,4 @@
 interface:
   display_name: "EAPI Repository Knowledge Pack"
-  short_description: "从代码证据和原子 Claim 重建 BA/Tech 仓库知识包"
-  default_prompt: "Use $eapi-behavior-reconstruction through its immutable launcher to build a claim-first repository knowledge pack from this codebase, preserving Unknowns and refusing unsupported template-derived facts."
+  short_description: "从代码证据重建可读、可追溯的 BA/Tech 仓库知识包"
+  default_prompt: "Use $eapi-behavior-reconstruction to build an evidence-grounded, human-readable BA and Tech repository knowledge pack from this codebase."

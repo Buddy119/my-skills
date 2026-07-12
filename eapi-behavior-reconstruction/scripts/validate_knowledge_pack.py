@@ -11,15 +11,32 @@ import sys
 from pathlib import Path
 
 from runtime_guard import run_guarded
-from validate_claim_ledger import CLAIM_MARKER_RE, material_blocks, validate_claim_pack
+from validate_claim_ledger import (
+    CLAIM_MARKER_RE,
+    document_profile,
+    material_blocks,
+    pack_format_version,
+    validate_claim_pack,
+)
 from validate_evidence_index import validate_evidence_index
 from validate_flow_separation import validate_pair, validate_tech_document
+from validate_readability import readability_diagnostics
 
 
 ALLOWED_EVIDENCE_STATUS = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
 ALLOWED_COVERAGE = {"complete", "partial", "blocked"}
 EVIDENCE_RE = re.compile(
     r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
+)
+BA_RAW_CITATION_RE = re.compile(
+    r"(?<![A-Za-z0-9_./-])(?P<path>(?!https?://)(?:[A-Za-z0-9_.-]+/)*"
+    r"[A-Za-z0-9_.-]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?"
+)
+OBVIOUS_SECRET_RE = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+    r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|"
+    r"\baws_secret_access_key\s*[:=]\s*[\"'][A-Za-z0-9/+=]{32,}[\"']",
+    re.I,
 )
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\((?P<target>[^)]+)\)")
 
@@ -570,6 +587,9 @@ def main() -> int:
         print("ERROR: knowledge-manifest.yaml does not exist")
         return 1
     manifest = manifest_path.read_text(encoding="utf-8")
+    format_version = pack_format_version(pack)
+    if format_version not in {1, 2}:
+        errors.append("manifest pack_format_version must be 2, or absent only for a legacy v1 pack")
 
     repository = top_scalar(manifest, "repository")
     source_commit = top_scalar(manifest, "source_commit")
@@ -944,12 +964,27 @@ def main() -> int:
         required = REQUIRED_HEADINGS.get(relative)
         if required:
             headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
-            missing = sorted(required - headings)
-            if missing:
-                errors.append(f"{relative} missing section(s): " + ", ".join(missing))
+            if format_version >= 2 and document_profile(document, pack) == "narrative":
+                if len(headings) < 2:
+                    warnings.append(
+                        f"{relative} has little reader-oriented structure; review whether navigation would help"
+                    )
+            else:
+                missing = sorted(required - headings)
+                if missing:
+                    errors.append(f"{relative} missing section(s): " + ", ".join(missing))
 
-        if relative.startswith("ba-pack/") and EVIDENCE_RE.search(body):
-            errors.append(f"BA document contains raw source citation: {relative}")
+        if relative.startswith("ba-pack/"):
+            if BA_RAW_CITATION_RE.search(body):
+                errors.append(f"BA document contains raw source citation: {relative}")
+            if OBVIOUS_SECRET_RE.search(body):
+                errors.append(f"BA document contains an obvious secret literal: {relative}")
+
+        if format_version >= 2 and document_profile(document, pack) == "narrative":
+            try:
+                warnings.extend(readability_diagnostics(document, claims_by_id))
+            except (OSError, ValueError) as exc:
+                errors.append(f"cannot run readability diagnostics for {relative}: {exc}")
 
         for match in MARKDOWN_LINK_RE.finditer(body):
             target_text = match.group("target").strip().strip("<>")
@@ -997,8 +1032,9 @@ def main() -> int:
         return 1
     counts = ", ".join(f"{section}={len(entries)}" for section, entries in all_entities.items())
     print(
-        f"OK: repository knowledge pack provenance, claim coverage, and structure are valid "
-        f"({counts}); {len(set(warnings))} warning(s). Semantic entailment still depends on the independent claim audit and final rendered-document review."
+        f"OK: Core Fact Gate passed for pack format v{format_version}; provenance, canonical graph, "
+        f"structured references, and material high-risk checks are valid ({counts}); "
+        f"{len(set(warnings))} readability/review warning(s). Final Narrative quality still depends on Reader Review."
     )
     return 0
 

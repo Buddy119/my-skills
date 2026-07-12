@@ -6,7 +6,7 @@ knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind each structured field transformation and exact source/target value to passing CLM IDs. -->
 
 # Field lineage
 

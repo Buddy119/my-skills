@@ -7,7 +7,7 @@ tech_data_lineage: "../tech-pack/data/data-lineage.md"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with a business-readable information journey. Use claim_ids for material conclusions; do not leave this comment. -->
 
 # Business data lifecycle
 
@@ -19,16 +19,16 @@ coverage_status: "complete|partial|blocked"
 flowchart TD
 ```
 
-## Business data objects
+Explain where material business information originates when known, which decisions or actions use it, how its meaning/state changes, and where it goes. Do not reproduce field paths or storage mechanics.
 
-| Business data object ID | Business information | Originating actor/participant | Used for | Business state changes | Destination/recipient | Status |
-|---|---|---|---|---|---|---|
+## Important business information
 
-## Business-visible state changes
+Describe significant information objects in short, readable entries. Use a compact table only when it makes comparison easier.
 
-| Business data object ID | Before | Business trigger/rule | After | Visible result | Exception impact | Status |
-|---|---|---|---|---|---|---|
+## Business-visible changes
+
+Explain supported before/after meanings and their visible results. Do not turn local assignments or opaque save calls into business state changes.
 
 ## Lifecycle gaps
 
-List unknown ownership, retention, upstream origin, downstream use, and state meaning. Keep database, field-path, and AWS details in the Tech Pack.
+Summarize material unknown ownership, upstream origin, downstream use, or state meaning. Keep database, field-path, retention implementation, and AWS details in the Tech Pack.

@@ -1,6 +1,6 @@
 ---
 name: eapi-behavior-reconstruction
-description: "Automatically reconstruct a claim-first, evidence-grounded repository knowledge pack from one unfamiliar EAPI microservice or AWS Lambda repository using only its local path, remaining explicitly partial or Unknown wherever evidence is insufficient. Inventory behavior, inbound endpoints and endpoint-owned API contracts, data assets and lifecycle, state transitions, boundary fields, validation rules, internal field lineage, proven external HTTP mappings, runtime configuration, external dependency contract stubs, and a global failure taxonomy. Produce linked developer Tech Pack and business-readable BA Pack views, a canonical knowledge manifest, navigation map, and coverage report. Use when Codex needs to understand an undocumented repository, onboard BA or developers, recover implementation and business-facing knowledge, or prepare reliable impact-analysis inputs."
+description: "Automatically reconstruct an evidence-grounded, human-readable repository knowledge pack from one unfamiliar EAPI microservice or AWS Lambda repository using only its local path, remaining explicitly partial or Unknown wherever evidence is insufficient. Inventory behavior, inbound endpoints and endpoint-owned API contracts, data assets and lifecycle, state transitions, boundary fields, validation rules, internal field lineage, proven external HTTP mappings, runtime configuration, external dependency contract stubs, and a global failure taxonomy. Produce linked developer Tech Pack and business-readable BA Pack views, a canonical knowledge manifest, navigation map, and coverage report. Use when Codex needs to understand an undocumented repository, onboard BA or developers, recover implementation and business-facing knowledge, or prepare reliable impact-analysis inputs."
 ---
 
 # EAPI Repository Knowledge Pack
@@ -37,7 +37,9 @@ Before the first operation, run `preflight`. A validation failure means fix the 
 
 Read [references/runtime-integrity-policy.md](references/runtime-integrity-policy.md) completely before invoking any bundled command. Its execution and failure-handling rules are mandatory.
 
-Read [references/evidence-policy.md](references/evidence-policy.md), [references/claim-first-policy.md](references/claim-first-policy.md), and [references/knowledge-pack-policy.md](references/knowledge-pack-policy.md) completely before analysis. The claim-first policy controls generation order and overrides presentation completeness.
+Read [references/evidence-policy.md](references/evidence-policy.md), [references/claim-first-policy.md](references/claim-first-policy.md), and [references/knowledge-pack-policy.md](references/knowledge-pack-policy.md) completely before analysis. Claims define the fact boundary, not the final writing style.
+
+Read [references/editorial-synthesis-policy.md](references/editorial-synthesis-policy.md) before drafting `knowledge-map.md`, either overview, or any Tech/BA Behavior. Its high-freedom narrative rules are mandatory.
 
 Read [references/flow-perspective-policy.md](references/flow-perspective-policy.md) completely before creating any Tech or BA Behavior. Its separate-model and semantic-comparison requirements are mandatory.
 
@@ -104,6 +106,8 @@ repository-knowledge-pack/<repository-name>/
 
 Keep `knowledge-manifest.yaml` as the canonical relationship registry and `knowledge-map.md` as the human landing page.
 
+Generate `pack_format_version: 2`. Treat a legacy manifest without this key as v1 only when validating an existing pack; never generate a new v1 pack.
+
 ## Workflow
 
 Run the immutable runtime preflight once before step 1:
@@ -157,7 +161,7 @@ Trace each executable behavior through:
 
 Inspect relevant tests alongside implementation. Extract one or two concrete assertions for core outcomes when available; prioritize a failure path. A test name alone is not behavioral evidence.
 
-Process at most five behaviors per internal analysis batch. For every potential conclusion, open the exact source range before writing prose. Capture its canonical hash and ledger entry:
+Work in manageable behavior batches based on repository complexity. For every potential Claim, open the exact source range before recording it. Capture its canonical hash and ledger entry:
 
 ```bash
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" show-evidence \
@@ -215,15 +219,15 @@ For every inbound endpoint, copy [assets/api-contract-document-template.md](asse
 - Link the contract to the endpoint matrix and its primary Tech Behavior.
 - Link every API entry behavior and shared behavior reached from an endpoint to each relevant endpoint and contract.
 - Keep unobserved route, gateway, authorization, status, or error behavior `Unknown`; do not fill industry-standard defaults.
-- Bind every contract row, paragraph, and example to passing Claim IDs. Contract frontmatter values such as method, route, operation ID, and status are facts too and must be covered by those claims.
+- Bind every structured contract row, machine-readable value, and example to passing Claim IDs. Contract frontmatter values such as method, route, operation ID, and status are facts too and must be covered. Let the short consumer-oriented summary synthesize those facts naturally without sentence-level markers.
 
 ### 5. Build the Tech Behavior view
 
-Complete the scaffolded [assets/repository-overview-template.md](assets/repository-overview-template.md) and [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml). Copy [assets/behavior-document-template.md](assets/behavior-document-template.md) for each behavior.
+Use [assets/repository-overview-template.md](assets/repository-overview-template.md) as an editorial guide and complete the machine-readable [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml). Copy [assets/behavior-document-template.md](assets/behavior-document-template.md) for each behavior, then adapt its Narrative outline: keep the required orientation and flow, but rename, reorder, merge, or omit other sections when the supported material reads better that way. Never generate filler or repeat the same Unknown to satisfy template headings.
 
-Before writing a Tech Behavior, copy [assets/tech-flow-model-template.json](assets/tech-flow-model-template.json) to `.work/flow-models/<behavior-id>.tech-flow.json`. Populate `summary_claim_ids`, every node's `claim_ids`, and every edge's `claim_ids` from passing claims. An edge needs a claim that proves its sequence/branch relationship; node claims alone are insufficient. Raw evidence on a Tech node must belong to those claims.
+Before writing a Tech Behavior, copy [assets/tech-flow-model-template.json](assets/tech-flow-model-template.json) to `.work/flow-models/<behavior-id>.tech-flow.json`. Populate the diagram caption Claim IDs, every node's `claim_ids`, and every edge's `claim_ids` from passing claims. An edge needs evidence for its sequence or branch; direct executable control flow is sufficient for ordinary technical order, while business causality and high-risk guarantees need an explicit relationship Claim. Raw evidence on a Tech node must belong to those claims.
 
-Write behaviors to `tech-pack/behaviors/<behavior-id>.md`. Render the Tech summary and Mermaid node labels from that Tech model. Bind every other factual paragraph, list item, table row, and example to passing claims with `<!-- claims: CLM-... -->` markers.
+Write behaviors to `tech-pack/behaviors/<behavior-id>.md`. Render Mermaid node labels from the Tech model, then write the Summary and execution story independently for a developer. Use the document-level `claim_ids` as the material fact set; do not attach Claim markers to every sentence or require Claim wording in prose.
 
 Keep the model at the canonical `.work/flow-models/<behavior-id>.tech-flow.json` path and render its exact edge source, target, and condition topology. Do not substitute another in-pack or out-of-pack model with the same node count.
 
@@ -273,7 +277,7 @@ Assign every material failure one `FAIL-` ID backed by a passing `claim_type: fa
 
 ### 9. Derive the BA Pack
 
-Generate BA views only from passing claims at the same commit. BA claim status must never be stronger than the underlying Tech claim. Complete the scaffolded repository-wide BA documents and copy the dynamic behavior template as needed:
+Generate BA views only from passing claims at the same commit. BA claim status must never be stronger than the underlying Tech claim. Use the repository-wide BA templates as reader-question guides and copy the dynamic behavior template as needed. Adapt, merge, reorder, or omit Narrative sections when evidence is sparse; the templates are not fixed copy-and-fill schemas:
 
 - [assets/ba-overview-template.md](assets/ba-overview-template.md)
 - [assets/ba-capability-map-template.md](assets/ba-capability-map-template.md)
@@ -283,13 +287,13 @@ Generate BA views only from passing claims at the same commit. BA claim status m
 - [assets/ba-behavior-catalog-template.md](assets/ba-behavior-catalog-template.md)
 - [assets/ba-behavior-document-template.md](assets/ba-behavior-document-template.md) for business/integration behaviors
 
-For each business/integration behavior, copy [assets/ba-flow-model-template.json](assets/ba-flow-model-template.json) to `.work/flow-models/<behavior-id>.ba-flow.json`. Build it independently from passing business-meaning claims, and bind `summary_claim_ids`, every node's `claim_ids`, and every edge's relationship `claim_ids`. Do not infer actors, recipients, purpose, ownership, rules, or business state from component names or technical literals. Do not connect Unknown facts without a passing relationship claim. When business meaning is unavailable, produce a shorter or single-node BA flow with an audited `Unknown` claim rather than mirroring Tech.
+For each business/integration behavior, copy [assets/ba-flow-model-template.json](assets/ba-flow-model-template.json) to `.work/flow-models/<behavior-id>.ba-flow.json`. Build it independently from passing business-meaning claims, and bind the diagram caption, nodes, and edges to passing Claims. Do not infer actors, recipients, purpose, ownership, rules, or business state from component names or technical literals. Do not connect Unknown business facts without supporting evidence. When business meaning is unavailable, produce a shorter or single-node BA flow with an audited `Unknown` claim rather than mirroring Tech.
 
 Keep the BA model at that canonical path and render its exact edge topology and conditions; manifest, BA frontmatter, and resolved model path must agree.
 
-If you create temporary generation code, use separate Tech and BA input types and separate render functions. The Tech renderer may load only the Tech model and the BA renderer only the BA model. Never use a common `meta["flow"]`/`meta["summary"]`, never fall back from a missing BA model to Tech content, and fail generation if the required perspective model is absent.
+If you create temporary generation code, use separate Tech and BA inputs and separate render functions. The Tech renderer may load only the Tech model and the BA renderer only the BA model. Never use a common `meta["flow"]`/`meta["summary"]`, never fall back from a missing BA model to Tech content, and fail generation if the required perspective model is absent. The implementation technique is otherwise flexible; judge the generated prose by material accuracy and reader usefulness.
 
-Render the BA summary and Mermaid labels only from the BA model. The Tech and BA models must remain separate files with different perspectives and node ID namespaces.
+Render Mermaid labels from the BA model, but write the BA Summary independently around the business event, decision, information, visible outcome, and important unknowns. The Tech and BA models must remain separate files with different perspectives and node ID namespaces.
 
 Use business capabilities, actors, information, decisions, outcomes, and visible exceptions. Do not include source citations, classes, methods, AWS identifiers, API field paths, configuration keys, or exception classes. Link to canonical Tech documents for details. Preserve evidence confidence.
 
@@ -310,6 +314,7 @@ python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-tech --document <t
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-contract --document <endpoint-contract.md> --repo <repository-root>
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-ba --document <ba-behavior.md> --repo <repository-root>
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-flow --tech <tech-behavior.md> --ba <ba-behavior.md> --repo <repository-root>
+python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-readability --document <narrative-document.md> --repo <repository-root>
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-index --pack <pack-root> --repo <repository-root>
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-claims --pack <pack-root> --repo <repository-root>
 ```
@@ -324,13 +329,13 @@ python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-pack \
   --repo <repository-root>
 ```
 
-Rebuild the evidence index if any candidate repository file changed, appeared, or disappeared after indexing. Resolve all errors. Mention intentional warnings in delivery.
+Rebuild the evidence index if any candidate repository file changed, appeared, or disappeared after indexing. Resolve all Core Fact errors. Treat readability diagnostics as prompts for Reader Review; revise when the document is hard to understand rather than writing to a numeric threshold.
 
-Validator success is necessary but not sufficient. Before delivery, read every linked Tech/BA Mermaid pair side by side and perform the semantic review required by the flow-perspective policy. Rewrite any BA flow that is still the Tech execution sequence with renamed nouns, even if lexical checks did not catch it (for example, because the two views use different languages). Also inspect every dynamic factual heading and keep each factual prose block to one claim-bound sentence; a valid Claim marker must never be used to carry an additional unsupported sentence.
+Validator success is necessary but not sufficient. Before delivery, read each Narrative document as a reader and compare every linked Tech/BA pair side by side. Rewrite Claim Dump, template-shaped prose, or a BA flow that is still the Tech execution sequence with renamed nouns. Review material conclusions—trigger, decision, state/data change, external interaction, visible outcome, failure, contract, and business meaning—against the document Claim set. Do not audit ordinary phrasing, connective language, sentence count, or paragraph length word by word.
 
 ## Delivery
 
-Report pack path, repository, commit, evidence-index repository fingerprint (especially when commit is `unknown`), immutable runtime bundle fingerprint, analysis mode, coverage status, entity/claim counts, strongest confirmed findings, important unknown/conflicting/blocked areas, and validator results. Do not modify application source code unless separately requested.
+Report pack path, pack format version, repository, commit, evidence-index repository fingerprint (especially when commit is `unknown`), immutable runtime bundle fingerprint, analysis mode, coverage status, entity/claim counts, strongest confirmed findings, important unknown/conflicting/blocked areas, Core Fact result, and Reader Review notes. Do not modify application source code unless separately requested.
 
 ## Quality bar
 
@@ -339,7 +344,7 @@ Before completion, verify:
 - `knowledge-manifest.yaml` accounts for every discovered entity and relationship.
 - Every repository assertion exists first as one atomic claim with current source-range hashes.
 - Every `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` claim satisfies its evidence invariant and has a passing semantic audit.
-- Every manifest entity, factual Markdown block, flow summary, and flow node binds to passing claim IDs.
+- Every manifest entity, structured Reference fact, flow caption/node/edge, and material Narrative conclusion is supported by passing Claim IDs.
 - No template example, evidence-index marker, manifest value, flow metadata, or temporary generator is used as evidence.
 - No opaque `save`, client, queue, or publisher invocation is described as a completed external side effect without direct evidence.
 - `knowledge-map.md` lets BA and developers reach every canonical view.
@@ -354,7 +359,7 @@ Before completion, verify:
 - Every material failure has one canonical `FAIL-` record referenced by behaviors.
 - BA views contain business language, no raw source citations, and no unsupported business intent.
 - Every Tech Behavior renders a separate `technical` flow model; every BA Behavior renders a separate `business` flow model.
-- Tech and BA summaries and Mermaid node labels are neither identical nor near-identical mechanical rewrites.
+- Tech and BA never share one flow model, generic flow object, or fallback. Treat lexical similarity as a review signal unless the content is directly reused.
 - BA flow nodes contain business semantics and no implementation terms; Tech flow nodes describe implementation execution.
 - Final validation compares every linked Tech/BA pair; individual document validation alone is insufficient.
 - All documents use the same repository commit and all relative links resolve.

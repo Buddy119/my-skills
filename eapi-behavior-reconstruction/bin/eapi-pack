@@ -97,6 +97,7 @@ VALIDATION_COMMANDS = {
     "validate-flow",
     "validate-index",
     "validate-claims",
+    "validate-readability",
     "validate-pack",
 }
 RUNTIME_FAILURE_PREFIXES = (
@@ -180,6 +181,13 @@ def build_parser() -> argparse.ArgumentParser:
     ba = subparsers.add_parser("validate-ba", help="validate one BA Behavior")
     add_repo(ba)
     ba.add_argument("--document", type=Path, required=True)
+
+    readability = subparsers.add_parser(
+        "validate-readability",
+        help="emit non-blocking readability diagnostics for one v2 Narrative document",
+    )
+    add_repo(readability)
+    readability.add_argument("--document", type=Path, required=True)
 
     flow = subparsers.add_parser("validate-flow", help="validate a linked Tech/BA flow pair")
     add_repo(flow)
@@ -282,12 +290,13 @@ def _command_for(args: argparse.Namespace) -> list[str]:
         child.extend(args.references)
         return child
 
-    if command in {"validate-tech", "validate-contract", "validate-ba"}:
+    if command in {"validate-tech", "validate-contract", "validate-ba", "validate-readability"}:
         document = _resolved_document(args.document, repo, "document")
         script_name = {
             "validate-tech": "validate_behavior_doc.py",
             "validate-contract": "validate_api_contract.py",
             "validate-ba": "validate_ba_behavior.py",
+            "validate-readability": "validate_readability.py",
         }[command]
         child = [*CHILD_PYTHON, _script(script_name), str(document), *repo_args]
         if command == "validate-tech" and args.allow_missing_ba:

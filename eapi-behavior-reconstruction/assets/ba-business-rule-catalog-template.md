@@ -7,7 +7,7 @@ tech_validation_rules: "../tech-pack/fields/validation-rule-matrix.md"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with a business-readable rule view. Use claim_ids for material conclusions; do not leave this comment. -->
 
 # Business rule catalog
 
@@ -15,17 +15,15 @@ coverage_status: "complete|partial|blocked"
 
 ## Business-meaningful rules
 
-| Business rule ID | Capability/behavior | Rule | Business information | Condition | Business outcome or exception | Status |
-|---|---|---|---|---|---|---|
+Group supported rules by capability or scenario. Explain the condition, affected business information, and outcome or exception in natural language. Use a table only when readers need to compare several rules.
 
 ## Rule interactions
 
-| Business rule ID | Depends on | Conflicts with | Ordering or precedence | Status |
-|---|---|---|---|---|
+Explain supported dependencies, conflicts, ordering, or precedence. Omit this section when the repository establishes none.
 
 ## Excluded technical validation
 
-Summarize categories intentionally omitted because they only concern serialization, null safety, transport shape, framework behavior, or infrastructure rather than a supported business meaning.
+Briefly identify categories intentionally omitted because they concern serialization, null safety, transport shape, framework behavior, or infrastructure rather than a supported business meaning.
 
 ## Rule gaps
 

@@ -41,7 +41,7 @@ Prefer semantic IDs that survive discovery-order changes. Never renumber existin
 - Runtime configuration is owned by the Runtime Pack.
 - External dependency details are owned by dependency stubs.
 - Failures are owned by the global failure taxonomy; behavior tables reference failure IDs.
-- Tech and BA summaries/flows are owned by separate `.work/flow-models/*.tech-flow.json` and `*.ba-flow.json` models. Never store one generic flow for both views.
+- Tech and BA flows are owned by separate `.work/flow-models/*.tech-flow.json` and `*.ba-flow.json` models. Their diagram captions are model-backed; their human document summaries are written independently. Never store one generic flow for both views.
 - Flow models, behavior metadata, catalogs, and manifest relationships must reference passing claims. Every flow edge needs its own relationship `claim_ids`. They may organize facts but cannot create them.
 - `tech-pack/behavior-catalog.yaml` is a strict projection of manifest behavior identity, status, paths, relationships, claims, repository/commit, analysis mode, and counts; it may not drift independently.
 
@@ -49,7 +49,7 @@ Behavior documents summarize and link to these canonical records. Do not duplica
 
 ## Required navigation and coverage
 
-Create `knowledge-map.md` as the claim-bearing human entry point and `coverage-report.md` as the claim-bearing completeness statement. The coverage report must account for discovered, documented, excluded, blocked, and unknown items across behaviors, endpoints, data assets, fields, validation rules, dependencies, configurations, failures, HTTP calls, and mappings. Bind inventory counts and coverage notes to the entity, absence, or coverage-gap Claims that justify them.
+Create `knowledge-map.md` as a Narrative human entry point and `coverage-report.md` as a Reference completeness statement. Let the Knowledge Map synthesize repository responsibility, reading paths, major behaviors, and important limitations from its document-level Claim set without per-sentence markers. The coverage report must account for discovered, documented, excluded, blocked, and unknown items across behaviors, endpoints, data assets, fields, validation rules, dependencies, configurations, failures, HTTP calls, and mappings. Bind exact inventory counts and coverage conclusions to the entity, absence, or coverage-gap Claims that justify them.
 
 Targeted analysis is always `partial` unless a prior complete manifest is being refreshed. Complete coverage requires every discovered executable entry point and every indexed repository signal to have an explicit disposition.
 

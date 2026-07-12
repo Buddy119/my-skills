@@ -4,7 +4,7 @@
 
 Describe observable implementation behavior without presenting reconstructed intent as historical fact.
 
-Apply this policy through the atomic claim ledger defined in `claim-first-policy.md`. A citation attached somewhere in a document does not support unrelated statements elsewhere in that document.
+Apply this policy through the atomic claim ledger defined in `claim-first-policy.md`. A document-level Claim set supports only compatible material conclusions; it is not a license for unrelated behavior, guarantees, or outcomes. Narrative prose does not need sentence-level citations or literal Claim wording.
 
 ## Evidence statuses
 

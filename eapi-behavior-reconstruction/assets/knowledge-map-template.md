@@ -6,30 +6,26 @@ knowledge_manifest: "knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example row and instruction with repository-specific navigation. Bind each repository fact and relationship edge to passing Claim IDs; keep pure navigation links fact-free. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with repository-specific orientation and navigation. Use claim_ids for material conclusions; do not leave this comment. The headings below are reader prompts, not a mandatory outline: rename, reorder, merge, or omit sections with no useful supported content, and state each material Unknown once. -->
 
 # Repository knowledge map
 
-## Start here
+## Understand this repository in 60 seconds
 
-Describe how a BA, developer, tester, or change analyst should navigate this pack. Link to [coverage and limitations](coverage-report.md) before claiming complete understanding.
+Explain the observable responsibility, main entry style, most important output or boundary, and the single most important limitation. Keep this short and readable.
 
-## Repository at a glance
+## Choose a reading path
 
-| Question | Answer | Status | Detail |
-|---|---|---|---|
+Give a developer, BA, tester, and change analyst a short recommended route through the pack. Use links rather than repeating canonical detail.
 
-## Knowledge navigation
+## Core behavior landscape
 
-| Need | Primary document |
-|---|---|
+Add a small Mermaid relationship map only when it makes the repository easier to understand; a single Behavior or linear repository may need only prose and links. When used, render only supported relationships and explain how the most important Behaviors, data, and external boundaries relate.
 
-## Relationship map
+## Important unknowns and coverage boundary
 
-```mermaid
-flowchart TD
-```
+Summarize only the Unknown, Conflicting, excluded, or blocked areas that materially affect understanding. Link to the [full coverage report](coverage-report.md) and [canonical manifest](knowledge-manifest.yaml).
 
-## Coverage and known gaps
+## Knowledge pack index
 
-Summarize the most important `Unknown`, `Conflicting`, excluded, and blocked areas. Link to the [full coverage report](coverage-report.md) and [canonical manifest](knowledge-manifest.yaml).
+Link the Tech overview, BA overview, Behavior views, endpoint contracts, data/field/config/dependency/failure references, and machine-readable catalog without adding another inventory explanation.

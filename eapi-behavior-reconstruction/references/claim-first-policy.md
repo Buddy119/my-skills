@@ -8,17 +8,17 @@
 - Evidence entailment boundaries
 - Claim audit
 - Document rendering
-- Generator restrictions
+- Generator guidance
 
 ## Truth before pack completeness
 
 Use this priority order throughout reconstruction:
 
-1. Evidence truth and scope.
+1. Evidence truth and scope for structured and material conclusions.
 2. Explicit uncertainty and conflicts.
-3. Claim-to-document traceability.
-4. Inventory coverage.
-5. Presentation completeness.
+3. Canonical entity and high-risk fact traceability.
+4. Reader comprehension and audience fit.
+5. Inventory coverage.
 
 A sparse pack with explicit `Unknown` items is valid. A polished or fully populated pack containing unsupported statements is invalid. “Complete” means every discovered signal has a disposition; it never means every template row has been filled.
 
@@ -37,8 +37,8 @@ For each analysis batch, perform these steps in order:
 5. Re-read every cited range in a separate claim-audit pass. Record `Pass`, `Revise`, or `Reject` in `.work/claim-audit.json`.
 6. Revise or remove every non-passing claim and rerun validation.
 7. Derive manifest relationships and flow models only from passing claim IDs.
-8. Render documents only from passing claims. Add an invisible `<!-- claims: CLM-... -->` marker to every factual paragraph, list item, table row, or non-Mermaid example block.
-9. Run document claim-coverage and full-pack validation.
+8. Render Reference rows, fields, and examples from passing Claims with exact markers. Synthesize Narrative documents from document- or section-level passing Claim groups without sentence-level markers.
+9. Review material Narrative conclusions and run full-pack validation plus readability diagnostics.
 
 Never render documents directly from discovery metadata. Never create a large `meta` object and treat its values as established facts.
 
@@ -107,13 +107,13 @@ Use `verification.mode: contains-all|contains-any` for structured claims whose m
 
 For Confirmed or Inferred technical claims, verification tokens must appear both in the claim statement and in the cited supporting evidence. Do not choose a generic token merely because it is easy to find. `behavior-trigger`, `behavior-step`, `behavior-branch`, `input`, `output`, `dependency`, and `failure` are structured technical types too; they may not use `manual` unless the status is `Unknown`. `claim_type: other` is reserved for Unknown gaps.
 
-Set `render_terms` to one or more short literals that must occur in every document block bound to the claim. Include supported business-language or translated terms when BA prose uses another language. These terms make a valid but unrelated claim marker fail document validation; they do not replace semantic review.
+Set `render_terms` to one or more short literals used to bind exact machine-readable Reference facts and preserve v1 compatibility. They do not constrain v2 Narrative prose and need not occur in a Summary, walkthrough, or BA explanation.
 
-High-risk confirmed claims about authorization, monetary behavior, state persistence, transactionality, idempotency, retry/DLQ, concurrency, consumer-visible failures, or external side effects require direct support from two distinct physical files. Relabeling one range with a second `source_kind`, or citing two ranges in one file, is not independent corroboration. Otherwise downgrade the claim or state the limitation.
+The material-semantic guard defined in the editorial synthesis policy covers every fact that must not be introduced or strengthened casually, including encryption, retention, and sensitivity/PII. Within that wider set, this narrower independent-corroboration rule applies to Confirmed authorization, monetary behavior, state persistence, transactionality, idempotency, retry/DLQ, concurrency, consumer-visible failures, or completed external side effects: require direct support from two distinct physical files. Relabeling one range with a second `source_kind`, or citing two ranges in one file, is not independent corroboration. Otherwise downgrade the claim or state the limitation.
 
 A Confirmed or Inferred claim may not carry contradicting evidence. When relevant contradiction exists, use `Conflicting` and present both sides.
 
-Always mark `state-transition`, `retry`, `business-rule`, and `business-outcome` claims as high risk.
+Always mark `state-transition` and `retry` claims as high risk. Mark a `business-rule` or `business-outcome` high risk only when its statement carries one of the independent-corroboration semantics above; an ordinary directly executable rule or local outcome may remain normal risk.
 
 ## Evidence entailment boundaries
 
@@ -128,7 +128,7 @@ Describe only what the cited range proves:
 - A configuration field inside a payload is not proof of AWS retry configuration.
 - Absence from inspected files is `None observed within scope`, not proof that behavior does not exist elsewhere.
 
-When a sentence contains both an observed call and an assumed outcome, split it. Confirm the call and mark the outcome `Unknown` or `Inferred` as appropriate.
+Split an observed call and an assumed outcome into separate Claims. Narrative prose may discuss several Claims together, but it must not turn an attempted call into a completed external outcome.
 
 ## Claim audit
 
@@ -174,32 +174,39 @@ Use this top-level review metadata and exact per-claim audit shape:
 
 ## Document rendering
 
-List all claims used by a claim-bearing Markdown document in frontmatter under `claim_ids`. Mark each factual block with the same IDs:
+Classify each output as Narrative, Reference, or Machine/Audit as defined in the editorial synthesis policy.
+
+For a Narrative document, list the passing Claims that support its material conclusions in frontmatter under `claim_ids`. Use them as a document- or section-level fact set. Write natural multi-sentence paragraphs; do not add Claim markers to every paragraph, list item, heading, or sentence. Do not require `render_terms` to appear in prose. Ordinary framing, connective language, and terminology explanations do not need their own Claims unless they add a material behavior, guarantee, cause, or outcome.
+
+For a Reference document, mark exact factual rows, cells, examples, and machine-readable values with Claim IDs:
 
 ```markdown
 The handler invokes the repository save method after assigning `DONE`. <!-- claims: CLM-process-item-assigns-done CLM-process-item-calls-save -->
 ```
 
-For a Markdown table, place the marker in the final cell of each data row. Place a marker immediately before or after every code, JSON example, or Mermaid fence. Behavior Mermaid facts must additionally be traced through `summary_claim_ids` and each node's `claim_ids` in the separate flow model.
+For a Reference Markdown table, place the marker in the final cell of each data row. Place a marker immediately before or after every factual code or JSON example. Behavior Mermaid facts remain traced through the separate flow model's caption, node, and edge Claim IDs rather than paragraph markers.
+
+For a factual Mermaid in any non-Behavior Reference document, place a Claim marker immediately before or after the fenced diagram. The marker must cover every rendered relationship; if one set of Claims does not support the whole graph, split it into smaller diagrams.
 
 One row marker does not license unrelated cells. In the Field Catalog, type/format, requiredness, nullability, ownership/business meaning, default/source, and sensitivity values must be asserted by the bound claims. Use `Unknown` or `—` when the repository does not establish a cell; never fill it with a conventional schema assumption.
 
-Keep each prose paragraph or list item to one auditable factual sentence. Split multiple factual sentences and bind each separately. A dynamic heading that is not a template-owned navigation heading is also a factual block and requires Claim IDs. Both `knowledge-map.md` and `coverage-report.md` are claim-bearing. Inventory counts and coverage conclusions must bind to the entity, absence, or coverage-gap Claims that justify them; deterministic counting alone cannot justify a behavioral note.
+Treat `knowledge-map.md`, overviews, Behaviors, and BA explanatory views as Narrative. Treat `coverage-report.md`, contracts, and canonical matrices as Reference. Inventory counts and coverage conclusions remain Claim-backed, but navigation headings and explanatory prose are not sentence-level audit units.
 
 Every flow-model edge must carry nonempty `claim_ids` proving its ordering, branch, dependency, or causal relationship. Node claims do not automatically prove an edge. Never draw an edge supported only by Unknown claims; leave the nodes disconnected or use one Unknown node.
 
-Navigation-only links, template-owned structural headings, and structural frontmatter do not require claim markers. Dynamic factual headings do. Do not use markers to launder unsupported prose: the marked text must remain within the scope of the referenced atomic claims.
+Review Narrative documents for material overstatement at document or section level. Do not reject them for wording, sentence count, paragraph length, missing literal terms, or a reasonable summary that does not mirror Claim statements.
 
-## Generator restrictions
+## Generator guidance
 
 If temporary generation code such as `generate_pack_documents.py` is created:
 
 - Accept the validated claim ledger and passing claim audit as the only factual inputs.
 - Treat manifest/entity metadata as identifiers and relationships only.
-- Require explicit claim IDs for every rendered factual block.
-- Reject unknown claim IDs, non-passing claims, missing block markers, and template sentinel text.
+- Require explicit Claim IDs for every structured Reference fact and a valid document-level Claim set for Narrative output.
+- Reject unknown or non-passing Claim IDs and template sentinel text.
 - Never invent values to make a table or section look complete.
 - Never turn a template example, evidence-index marker, filename, or metadata field into prose.
 - Emit `Unknown` or omit a non-required row when no passing claim supports it.
+- Do not iterate through the ledger and emit one Claim statement per paragraph. Combine related facts around reader questions and write Tech/BA prose independently.
 
 Delete or keep temporary generator code only as work material; it is not repository evidence.

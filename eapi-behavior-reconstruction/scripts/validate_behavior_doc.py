@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from runtime_guard import run_guarded
-from validate_claim_ledger import validate_single_document
+from validate_claim_ledger import find_pack_root, pack_format_version, validate_single_document
 from validate_flow_separation import validate_tech_document
 
 
@@ -141,6 +141,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 1
+    pack = find_pack_root(args.document.resolve())
+    version = pack_format_version(pack) if pack is not None else 1
 
     missing_keys = sorted(REQUIRED_KEYS - top_level_keys(frontmatter))
     if missing_keys:
@@ -155,9 +157,26 @@ def main() -> int:
         errors.append("behavior_category must be business, integration, or technical")
 
     headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
-    missing_headings = sorted(REQUIRED_HEADINGS - headings)
-    if missing_headings:
-        errors.append("missing sections: " + ", ".join(missing_headings))
+    if version >= 2:
+        if "At a glance" not in headings:
+            warnings.append("preferred At a glance heading is absent; review whether the opening still orients a developer")
+        if "Execution story" not in headings:
+            warnings.append("preferred Execution story heading is absent; Mermaid flow and execution explanation are still required")
+        recommended = {
+            "Important decisions and rules",
+            "Data and external interactions",
+            "Outputs, failures, and recovery",
+            "Unknowns and change risks",
+            "Detailed references",
+            "Technical traceability",
+        }
+        missing_recommended = sorted(recommended - headings)
+        if missing_recommended:
+            warnings.append("reader-oriented section(s) absent: " + ", ".join(missing_recommended))
+    else:
+        missing_headings = sorted(REQUIRED_HEADINGS - headings)
+        if missing_headings:
+            errors.append("missing sections: " + ", ".join(missing_headings))
 
     if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
         errors.append("Behavior flow must contain a Mermaid flowchart or graph")
@@ -200,8 +219,9 @@ def main() -> int:
 
     ba_behavior_document = scalar_value(frontmatter, "ba_behavior_document")
     if behavior_category in {"business", "integration"}:
-        if "BA view" not in headings:
-            errors.append("business or integration behavior is missing the BA view link section")
+        expected_ba_heading = "Business view" if version >= 2 else "BA view"
+        if expected_ba_heading not in headings:
+            errors.append(f"business or integration behavior is missing the {expected_ba_heading} link section")
         if not ba_behavior_document or ba_behavior_document.lower() in {"null", "none"}:
             errors.append("business or integration behavior must set ba_behavior_document")
         else:
@@ -213,15 +233,15 @@ def main() -> int:
     elif behavior_category == "technical":
         if ba_behavior_document and ba_behavior_document.lower() not in {"null", "none"}:
             errors.append("technical behavior must set ba_behavior_document to null")
-        if "BA view" in headings:
-            errors.append("technical behavior must omit the BA view section")
+        if "BA view" in headings or "Business view" in headings:
+            errors.append("technical behavior must omit the Business/BA view section")
 
     external_mapping_ids = list_values(frontmatter, "external_mapping_ids")
     external_http_call_ids = list_values(frontmatter, "external_http_call_ids")
     if external_mapping_ids:
         if not external_http_call_ids:
             errors.append("external_mapping_ids require a proven external_http_call_id")
-        if "External HTTP field mappings" not in headings:
+        if version < 2 and "External HTTP field mappings" not in headings:
             errors.append("external_mapping_ids exist but External HTTP field mappings section is missing")
         for mapping_id in external_mapping_ids:
             if mapping_id not in body:

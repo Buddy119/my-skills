@@ -17,74 +17,50 @@ business_exception_ids: []
 tech_behavior_document: "../../tech-pack/behaviors/repository.behavior-name.md"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind the dynamic H1 and each single-sentence factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with business-readable prose. Use claim_ids as the material fact set; do not translate Tech prose sentence by sentence or leave this comment. Keep the scenario orientation and the flow, but rename, reorder, merge, or omit every other section when that produces a clearer explanation. State each material Unknown once instead of filling empty sections. -->
 
 # Business-readable behavior title
 
 [View technical behavior](../../tech-pack/behaviors/repository.behavior-name.md)
 
-## Related BA knowledge
+## Scenario at a glance
 
-- [Capability map](../capability-map.md)
-- [Business data lifecycle](../business-data-lifecycle.md)
-- [Business rule catalog](../business-rule-catalog.md)
-- [Business exception catalog](../business-exception-catalog.md)
+Explain the supported business or operational event, the meaningful action or decision, and the visible outcome in natural language. Write this independently from the Tech summary. If the repository does not establish the capability, actor, purpose, or outcome, state that limitation once and keep the document concise.
 
-## Business summary
+## Participants and starting point
 
-Render the independent BA model's business-focused `summary`. Explain the business event, decision/action, and visible outcome in two or three sentences. Do not reuse or mechanically paraphrase the Tech summary.
+Describe known participants, their supported roles, the starting event, and relevant preconditions. Omit unsupported actors instead of inferring them from component names.
 
-## Business trigger and actors
-
-| Actor or participant | Trigger or role | Status |
-|---|---|---|
-
-## Business flow
+## Business journey
 
 ```mermaid
 flowchart TD
 ```
 
-Render node labels and edges from the separate BA flow model. Describe business actors/events, decisions, actions, outcomes, and visible exceptions. Mark inferred nodes with `(Inferred)`. Do not copy or mechanically rename Tech nodes.
+Render the exact nodes and topology from the independent BA flow model. Explain the journey using business events, decisions, actions, information, outcomes, and visible exceptions. Do not copy or rename the internal Tech call sequence.
 
-## Business preconditions
+## Decisions and business rules
 
-| Preconditions | Business meaning | Status |
-|---|---|---|
+Explain only rules with supported business meaning. Keep transport checks and framework validation in the Tech Pack.
 
-## Business rules
+## Information and outcomes
 
-Add only rules backed by passing `business-rule` claims. Leave the section empty when no business meaning is established.
+Describe business information conceptually, where it comes from when known, how it is used, and what visible result follows. Do not reproduce API schemas or field mappings.
 
-## Business inputs and outputs
+## Exceptions and external participants
 
-Describe concepts, not API fields or schemas.
+Explain business-visible exceptions, incomplete or delayed results, recovery when known, and material external participants. Omit low-level HTTP, queue, database, and exception-class names. When asynchronous delivery, timing, duplication, or recovery changes what a participant can observe, preserve that business meaning without exposing unnecessary infrastructure mechanics.
 
-| Direction | Business information | Business meaning or rule | Status |
-|---|---|---|---|
+## Open business questions
 
-## Business outcomes
+List only unanswered questions that would materially change requirements, impact analysis, ownership, or the interpretation of the outcome.
 
-| Outcome | Who or what is affected | When it occurs | Status |
-|---|---|---|---|
+## Related knowledge
 
-## Business exceptions
-
-| Exception condition | Business impact | Visible result or recovery | Status |
-|---|---|---|---|
-
-## External business interactions
-
-| External participant | Business purpose | Information exchanged | Business dependency | Status |
-|---|---|---|---|---|
-
-## Open questions
-
-| Question | Business importance | Status |
-|---|---|---|
-
-## Traceability
-
+- [Capability map](../capability-map.md)
+- [Business data lifecycle](../business-data-lifecycle.md)
+- [Business rule catalog](../business-rule-catalog.md)
+- [Business exception catalog](../business-exception-catalog.md)
 - [Technical behavior](../../tech-pack/behaviors/repository.behavior-name.md)
-- Repository commit: `git-commit-or-unknown`
-- Technical implementation and source evidence remain in the linked Tech Pack.
+
+Technical implementation and source evidence remain in the linked Tech Pack.

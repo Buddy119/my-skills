@@ -6,11 +6,13 @@ knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind each structured lineage row, relationship, and exact value to passing CLM IDs; Reference prose may summarize naturally. -->
 
 # Data lineage
 
 ## Repository data flow
+
+Place a `<!-- claims: CLM-... -->` marker immediately before or after the diagram. Its passing Claims must support every rendered relationship; split the graph when one Claim set cannot support the whole diagram.
 
 ```mermaid
 flowchart TD

@@ -8,46 +8,38 @@ knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with a developer-oriented repository explanation. Use claim_ids for material conclusions; do not leave this comment. The headings below are reader prompts, not a mandatory outline: rename, reorder, merge, or omit sections with no useful supported content, and state each material Unknown once. -->
 
 # Technical repository overview
 
-## Observable responsibility
+## Repository purpose and boundary
 
-Summarize what the repository appears to do from executable evidence. Separate confirmed responsibilities from inferred business purpose.
+Explain the repository's observable responsibility, what starts work here, what remains outside the repository, and which apparent purpose is inferred or unknown. Give the reader a coherent orientation rather than a list of Claims.
 
-## Knowledge pack navigation
+## Runtime and architecture context
 
-| Area | Document |
-|---|---|
+Explain the deployment/runtime shape and the path from entry adapter to orchestration, data, and external boundaries. Include a small Mermaid diagram when it improves understanding.
 
-## Technology and deployment
+## Main execution paths
 
-| Area | Observed value | Status | Evidence |
-|---|---|---|---|
+Introduce the important Behaviors as a readable index. For each, state why a developer would open it, then link its Tech view and BA view when one exists.
 
-## Entry-point inventory
+## Data and external boundaries
 
-| Entry point | Trigger | Behavior ID | Classification | Status | Evidence |
-|---|---|---|---|---|---|
+Summarize the main information journeys, supported state-changing points, external dependencies, and outbound interactions. Link the canonical data, field, mapping, and dependency views for detail.
 
-## Behavior summary
+## Cross-cutting behavior
 
-| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | Endpoint IDs |
-|---|---|---|---|---|---|---|
+Explain shared validation, authorization, configuration, error handling, retry, or other reusable behavior only when it affects multiple paths.
 
-## External connections
+## Reliability and change considerations
 
-List upstream triggers, downstream calls, emitted events, queues, topics, streams, tables, shared libraries, and unresolved external dependencies.
-
-## Shared rules and components
-
-Record validation, authorization, mapping, persistence, error-handling, and utility components reused by multiple behaviors.
+Explain important failure boundaries, opaque dependencies, partial-success risks, and code/configuration hotspots likely to matter during change analysis.
 
 ## Coverage and limitations
 
-Account for excluded, duplicate, generated, dynamic, unreadable, and blocked entry points. Do not claim complete coverage unless every discovered executable entry point has a catalog disposition.
+Explain excluded, duplicate, dynamic, unreadable, and environment-owned areas. Link the full coverage report; do not call coverage complete unless every executable entry point has a disposition.
 
-## Repository-level open questions
+## Where to go next
 
-List unknown responsibilities, conflicting wiring, missing schemas, environment-defined dependencies, and behavior that may live outside the repository.
+Provide role-based links to the endpoint matrix, Behaviors, API contracts, data lifecycle, field rules/mappings, runtime configuration, dependencies, failure taxonomy, BA overview, canonical manifest, and coverage report.

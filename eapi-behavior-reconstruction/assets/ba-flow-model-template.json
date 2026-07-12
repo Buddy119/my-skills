@@ -4,8 +4,8 @@
   "source_commit": "git-commit-or-unknown",
   "scaffold_state": "SCAFFOLD_ONLY_REMOVE_AFTER_POPULATION",
   "perspective": "business",
-  "summary": "",
-  "summary_claim_ids": [],
+  "diagram_caption": "",
+  "diagram_claim_ids": [],
   "nodes": [],
   "edges": [],
   "derived_from": {

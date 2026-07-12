@@ -157,7 +157,7 @@ summary_perspective: "{perspective}"
         errors, _warnings, _metrics = validate_pair(tech, ba, self.repo)
         self.assertTrue(any("identical" in error for error in errors), errors)
 
-    def test_mechanical_noun_insertion_is_rejected(self) -> None:
+    def test_mechanical_noun_insertion_is_rejected_for_legacy_v1(self) -> None:
         tech, ba = self.write_pair(
             "The business handler receives a request, validates the customer identifier, "
             "and returns a business error or success response.",
@@ -172,7 +172,7 @@ summary_perspective: "{perspective}"
         self.assertGreaterEqual(metrics["node_similarity"], 0.72)
         self.assertTrue(any("near-identical" in error for error in errors), errors)
 
-    def test_technical_terminology_in_ba_flow_is_rejected(self) -> None:
+    def test_technical_terminology_in_ba_flow_is_rejected_for_legacy_v1(self) -> None:
         tech, ba = self.write_pair(
             "A customer request is checked and receives an accepted or rejected outcome.",
             [
@@ -184,6 +184,29 @@ summary_perspective: "{perspective}"
         )
         errors, _warnings, _metrics = validate_pair(tech, ba, self.repo)
         self.assertTrue(any("implementation terminology" in error for error in errors), errors)
+
+    def test_legacy_v1_does_not_gain_long_paragraph_reuse_gate(self) -> None:
+        tech, ba = self.write_pair(
+            "Customer information is checked so the request can be accepted or rejected.",
+            [
+                "Customer information is submitted",
+                "Customer identifier present?",
+                "Request rejected",
+                "Request accepted",
+            ],
+        )
+        shared = (
+            "This long shared limitation explains that the available repository evidence does not "
+            "establish ownership outside the current boundary and that another system may determine "
+            "the eventual end-to-end result after this repository completes its local responsibility."
+        )
+        for document in (tech, ba):
+            document.write_text(
+                document.read_text(encoding="utf-8") + "\n## Shared limitation\n\n" + shared + "\n",
+                encoding="utf-8",
+            )
+        errors, _warnings, _metrics = validate_pair(tech, ba, self.repo)
+        self.assertEqual([], errors)
 
     def test_edge_without_claim_ids_is_rejected(self) -> None:
         tech, ba = self.write_pair(

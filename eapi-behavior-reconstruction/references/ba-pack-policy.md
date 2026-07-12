@@ -2,13 +2,13 @@
 
 ## Purpose and evidence boundary
 
-The BA Pack translates verified observable behavior from the Tech Pack into business-readable documentation. It does not reconstruct an unproven historical requirement, business intention, product promise, or policy rationale.
+The BA Pack independently synthesizes business-readable views from passing repository facts. It does not translate Tech prose and does not reconstruct an unproven historical requirement, business intention, product promise, or policy rationale.
 
 - Generate a BA behavior only from a validated Tech Behavior at the same repository commit.
-- Build an independent BA flow/summary model under `.work/flow-models/`; never reuse or mechanically rename the Tech model's summary, nodes, or edges.
+- Build an independent BA flow model under `.work/flow-models/`; never reuse or mechanically rename the Tech model's caption, nodes, or edges. Write the BA document summary independently from the Tech summary.
 - Give every BA edge passing relationship `claim_ids`; do not connect individually valid or Unknown nodes unless evidence establishes their sequence or causality.
 - Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` exactly; do not upgrade confidence during translation.
-- Bind every BA fact to passing Claim IDs; a BA status must never be stronger than its source claims.
+- Ground material BA conclusions in the document's passing Claim set; do not attach Claim markers to every sentence. A BA status must never be stronger than its source Claims.
 - Link to the Tech Behavior for implementation details and source evidence. Do not place raw source citations in BA documents.
 - Exclude purely technical behaviors unless they materially change a business-visible outcome. Describe that relevance in the affected BA behavior instead of creating a technical BA behavior.
 
@@ -44,7 +44,7 @@ Do not invent actors, recipients, owners, purpose, completed outcomes, or busine
 
 ## BA behavior contents
 
-Each BA behavior must state:
+Use these reader questions when they are supported and relevant; do not create empty tables or repeated Unknown rows merely to satisfy a fixed outline:
 
 - The business capability it supports, or `Unknown`.
 - Actors or system participants and their roles.
@@ -57,9 +57,9 @@ Each BA behavior must state:
 - External business interactions, without HTTP mechanics or field-level mappings.
 - Open questions and a link to the corresponding Tech Behavior.
 
-The Mermaid flow must use actor, action, decision, and outcome labels. Do not reproduce internal call chains.
+The Mermaid flow must use actor, action, decision, and outcome labels. Do not reproduce internal call chains. The surrounding narrative may use any clear section names, paragraph lengths, and ordering that help a BA understand the scenario.
 
-Before delivery, run the Tech/BA flow-separation validator. Identical or near-identical summaries, Mermaid nodes, or reused model files are validation errors, not acceptable documentation variants.
+Before delivery, run the Tech/BA flow-separation validator and read both views. Reused model files, fallback, identical Mermaid source, or directly copied prose are errors. Treat lexical similarity and technical jargon as review diagnostics rather than automatic proof of a bad BA view.
 
 ## Repository-wide BA views
 

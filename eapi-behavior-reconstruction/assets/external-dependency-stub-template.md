@@ -9,7 +9,7 @@ overall_status: "Confirmed|Inferred|Conflicting|Unknown"
 dependency_matrix: "../dependency-matrix.md"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind any dynamic H1 and each single-sentence factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind exact dependency operations, inputs, outputs, failures, and guarantees to passing CLM IDs; boundary prose may synthesize naturally. -->
 
 # External dependency contract stub
 

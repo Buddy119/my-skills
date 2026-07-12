@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from runtime_guard import run_guarded
-from validate_claim_ledger import validate_single_document
+from validate_claim_ledger import find_pack_root, pack_format_version, validate_single_document
 from validate_flow_separation import validate_pair
 
 
@@ -48,7 +48,14 @@ REQUIRED_HEADINGS = {
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
 ALLOWED_TYPES = {"business", "integration"}
 RAW_CITATION_RE = re.compile(
-    r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
+    r"(?<![A-Za-z0-9_./-])(?P<path>(?!https?://)(?:[A-Za-z0-9_.-]+/)*"
+    r"[A-Za-z0-9_.-]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?"
+)
+OBVIOUS_SECRET_RE = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+    r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|"
+    r"\baws_secret_access_key\s*[:=]\s*[\"'][A-Za-z0-9/+=]{32,}[\"']",
+    re.I,
 )
 TECH_JARGON_RE = re.compile(
     r"\b(?:Controller|Handler|DTO|Lambda|DynamoDB|EventBridge|Java|TypeScript|class|method)\b",
@@ -102,6 +109,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 1
+    pack = find_pack_root(args.document.resolve())
+    version = pack_format_version(pack) if pack is not None else 1
 
     missing_keys = sorted(REQUIRED_KEYS - top_level_keys(frontmatter))
     if missing_keys:
@@ -116,15 +125,34 @@ def main() -> int:
         errors.append("behavior_type must be business or integration")
 
     headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
-    missing_headings = sorted(REQUIRED_HEADINGS - headings)
-    if missing_headings:
-        errors.append("missing sections: " + ", ".join(missing_headings))
+    if version >= 2:
+        if "Scenario at a glance" not in headings:
+            warnings.append("preferred Scenario at a glance heading is absent; review whether the opening still orients a BA")
+        if "Business journey" not in headings:
+            warnings.append("preferred Business journey heading is absent; Mermaid flow and business explanation are still required")
+        recommended = {
+            "Participants and starting point",
+            "Decisions and business rules",
+            "Information and outcomes",
+            "Exceptions and external participants",
+            "Open business questions",
+            "Related knowledge",
+        }
+        missing_recommended = sorted(recommended - headings)
+        if missing_recommended:
+            warnings.append("reader-oriented section(s) absent: " + ", ".join(missing_recommended))
+    else:
+        missing_headings = sorted(REQUIRED_HEADINGS - headings)
+        if missing_headings:
+            errors.append("missing sections: " + ", ".join(missing_headings))
 
     if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
         errors.append("Business flow must contain a Mermaid flowchart or graph")
 
     if RAW_CITATION_RE.search(body):
         errors.append("BA behavior must not contain raw source citations; link to the Tech behavior")
+    if OBVIOUS_SECRET_RE.search(body):
+        errors.append("BA behavior contains an obvious secret literal; remove the value")
 
     related_documents = (
         "../capability-map.md",

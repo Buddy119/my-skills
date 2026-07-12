@@ -29,22 +29,13 @@ writes: []
 analysis_limitations: []
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind the dynamic H1 and each single-sentence factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction with repository-specific prose. Use claim_ids as the material fact set; do not write one sentence per Claim or leave this comment. Keep the opening orientation and the flow, but rename, reorder, merge, or omit every other section when that produces a clearer explanation. State each material Unknown once instead of filling empty sections. -->
 
 # Behavior title
 
-## Summary
+## At a glance
 
-Render the implementation-focused `summary` from the Tech flow model in two or three sentences. Do not use the BA summary or claim that this is the original historical requirement.
-
-## Trigger and entry point
-
-- Trigger:
-- Entry point:
-- Runtime wiring:
-- Status:
-- Evidence:
-  - `path/to/file.ext:line`
+Orient a developer in natural prose: explain when this behavior starts, its observable implementation responsibility, and the result it produces or attempts. Mention an evidence limitation here only when it materially changes that orientation. Choose the paragraph length that reads well. Do not copy Claim statements or the BA summary.
 
 ## API contracts
 
@@ -52,29 +43,43 @@ Include this section whenever `endpoint_ids` is nonempty; it is mandatory for `e
 
 - `EP-POST-resource` — [View API contract](../endpoints/contracts/EP-POST-resource.api-contract.md)
 
-## BA view
+## Business view
 
 Include this section only for `behavior_category: business|integration`:
 
 [View business behavior](../../ba-pack/behaviors/repository.behavior-name.md)
 
-## Behavior flow
+## Execution story
 
 ```mermaid
 flowchart TD
 ```
 
-Render node labels and edges from the separate Tech flow model. Explain the implementation steps and branches with source evidence. Do not reuse the BA flow model.
+Render the exact nodes and topology from the separate Tech flow model. Follow the diagram with a coherent execution narrative that explains important branches and where execution stops, continues, or crosses a repository boundary. Do not restate every node as a separate bullet.
 
-## Inputs
+## Important decisions and rules
 
-Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
+Explain the validations, conditions, defaults, and branch decisions that materially change the path. Link API-field detail to the endpoint contract and field pack rather than reproducing it.
 
-## External HTTP field mappings
+## Data and external interactions
 
-Include this section only when `external_mapping_ids` is nonempty. Summarize the interaction and link to the canonical [External HTTP mapping matrix](../fields/external-http-mapping-matrix.md). List `HTTP-` and `MAP-` IDs; do not duplicate the full mapping table.
+Explain inputs, significant transformations, reads, writes, local mutations, supported state changes, dependency calls, and emitted results as one data journey. Distinguish an attempted opaque call from a proven external outcome. When outbound HTTP mappings exist, name the relevant `HTTP-` and `MAP-` IDs, summarize their purpose, and link to the [External HTTP mapping matrix](../fields/external-http-mapping-matrix.md).
 
-## Related repository knowledge
+## Outputs, failures, and recovery
+
+Describe outputs and important failure paths in context, including retry, DLQ, rollback, compensation, or partial success only when supported. Link canonical `FAIL-` and dependency records instead of copying their full tables.
+
+## Runtime and operational considerations
+
+Include only configuration or runtime wiring that changes this behavior. Omit this section when it adds no useful understanding.
+
+## Unknowns and change risks
+
+Explain the few unresolved facts that materially affect understanding or future change analysis. Do not fill this section with every missing detail.
+
+## Detailed references
+
+Link only the relevant canonical views. Delete every item that does not apply to this Behavior:
 
 - [Endpoint matrix](../endpoints/endpoint-matrix.md)
 - [Data assets](../data/data-asset-catalog.md), [data lineage](../data/data-lineage.md), and [state transitions](../data/state-transition-matrix.md)
@@ -83,38 +88,6 @@ Include this section only when `external_mapping_ids` is nonempty. Summarize the
 - [External dependencies](../dependencies/dependency-matrix.md)
 - [Failure taxonomy](../reliability/failure-taxonomy.md)
 
-## Preconditions and business rules
+## Technical traceability
 
-Add only rule IDs and behavior supported by passing claims.
-
-## Happy path
-
-Render only ordered steps supported by passing claims.
-
-## Data access and state changes
-
-| Operation | Resource | Key/record | State change | Status | Evidence |
-|---|---|---|---|---|---|
-
-## Outputs and side effects
-
-| Output | Destination | Contract/resource | Condition | Status | Evidence |
-|---|---|---|---|---|---|
-
-## Failures, retries, and partial success
-
-| Failure ID | Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
-|---|---|---|---|---|---|
-
-## External dependency stubs
-
-List relevant `DEP-` IDs, summarize their role, and link to their canonical stubs under `../dependencies/stubs/`. Do not reproduce the full dependency contract here.
-
-## Open questions and conflicts
-
-| Question or conflict | Why it matters | Status | Evidence needed |
-|---|---|---|---|
-
-## Evidence index
-
-List only source ranges owned by this behavior's passing claims.
+Keep concise source ranges for the material behavior facts here. Do not interrupt the main narrative with Evidence columns.

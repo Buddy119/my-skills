@@ -6,7 +6,7 @@ knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind each structured data row and exact value to passing CLM IDs; Reference prose may summarize naturally. -->
 
 # Data asset catalog
 

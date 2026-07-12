@@ -1,3 +1,4 @@
+pack_format_version: 2
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic|targeted"

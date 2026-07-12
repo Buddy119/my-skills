@@ -16,7 +16,7 @@ endpoint_matrix: "../endpoint-matrix.md"
 openapi_document: null
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every instruction and bind the dynamic H1 and each single-sentence factual block to passing CLM IDs. The template supplies no contract facts. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind method, route, request/response rows, validation rules, outcomes, and examples to passing CLM IDs. The consumer summary may synthesize naturally; the template supplies no contract facts. -->
 
 # API operation title
 
@@ -25,6 +25,8 @@ openapi_document: null
 > This document describes only the contract observable at the recorded repository commit; it is not an assumed industry-standard contract.
 
 ## Endpoint summary
+
+Begin with a short consumer-oriented explanation of when this operation is called, the main information the consumer supplies, and the result the consumer can observe. Omit any part the repository does not establish; keep exact method, route, schema, and status values in the structured contract below.
 
 | Property | Contract value | Status |
 |---|---|---|

@@ -6,7 +6,7 @@ knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
+<!-- SCAFFOLD_ONLY: Replace every instruction. Bind each proven HTTP call, mapping row, direction, and exact field value to passing CLM IDs. -->
 
 # External HTTP mapping matrix
 
@@ -17,8 +17,8 @@ coverage_status: "complete|partial|blocked"
 
 ## Request and consumed-response mappings
 
-| Mapping ID | Call ID | Direction | Source boundary and field ID(s) | Target boundary and field path(s) | Transformation | Condition/default | Lossy | Status | Evidence |
-|---|---|---|---|---|---|---|---:|---|---|
+| Mapping ID | Call ID | Direction | Source boundary and field ID(s) | Source type/format | Target boundary and field path(s) | Target type/format | Transformation | Condition/default | Lossy | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---:|---|---|
 
 ## Unmapped and unresolved external fields
 

@@ -29,7 +29,7 @@ MACHINE_REQUIRED_TYPES = {
     "data-write", "state-transition", "configuration", "dependency", "failure",
     "retry", "mapping",
 }
-HIGH_RISK_TYPES = {"state-transition", "retry", "business-rule", "business-outcome"}
+HIGH_RISK_TYPES = {"state-transition", "retry"}
 VERIFICATION_MODES = {"contains-all", "contains-any", "manual"}
 FORBIDDEN_EVIDENCE_NAMES = {
     "knowledge-manifest.yaml", "evidence-index.json", "claim-ledger.json", "claim-audit.json",
@@ -61,7 +61,7 @@ UNKNOWN_SIGNAL_RE = re.compile(
 HIGH_RISK_RE = re.compile(
     r"\b(?:authentication|authorization|monetary|amount|currency|persist(?:ed|ence)?|commit(?:ted)?|"
     r"transaction(?:al)?|deliver(?:ed|y)?|publish(?:ed)?|retry|dlq|dead.?letter|concurren(?:cy|t)|"
-    r"idempoten(?:cy|t)|http\s*[245]\d\d|(?:status(?:\s*code)?\s*)[245]\d\d|"
+    r"idempoten(?:cy|t)|http\s*[1-5]\d\d|(?:status(?:\s*code)?\s*)[1-5]\d\d|"
     r"reject(?:s|ed|ion)?|consumer-visible\s+failure|business\s+exception|http\s+outcome|"
     r"(?:save|send|publish|update)\w*\s+(?:succeed\w*|complete\w*|success\w*))\b|"
     r"认证|授权|金额|货币|持久化|提交|事务|投递|送达|发布成功|重试|死信|并发|幂等|拒绝|消费者可见失败|业务异常",
@@ -112,6 +112,155 @@ SEMANTIC_EVIDENCE_RULES = (
     ),
 )
 
+# These semantics materially change how a reader understands a Narrative
+# document.  Unlike v1 render-term checks, the v2 check is document-level and
+# semantic: wording is free, but an affirmative high-risk conclusion still
+# needs a compatible passing Claim.
+MATERIAL_RULE_CLAIM_TYPES = {
+    "encryption/redaction": {"field", "mapping", "validation", "configuration", "data-write"},
+    "persistence/commit": {"data-write", "state-transition", "side-effect-call"},
+    "delivery/receipt": {"side-effect-call", "output", "failure", "retry", "business-outcome"},
+    "rejection/consumer outcome": {"failure", "output", "endpoint-contract", "validation", "business-outcome"},
+    "retention/deletion": {"data-write", "state-transition", "configuration"},
+    "authorization/authentication": {"validation", "endpoint-contract", "business-rule", "configuration"},
+}
+MATERIAL_RULES_REQUIRING_HIGH_RISK = {
+    "persistence/commit",
+    "delivery/receipt",
+    "rejection/consumer outcome",
+    "authorization/authentication",
+    "monetary behavior",
+    "transaction/rollback",
+    "retry/idempotency/concurrency",
+    "completed external outcome",
+    "consumer-visible HTTP outcome",
+    "business state transition",
+}
+NARRATIVE_MATERIAL_RULES = tuple(
+    (
+        semantic_pattern,
+        semantic_label,
+        MATERIAL_RULE_CLAIM_TYPES[semantic_label],
+        semantic_label in MATERIAL_RULES_REQUIRING_HIGH_RISK,
+    )
+    for semantic_pattern, _evidence_pattern, semantic_label in SEMANTIC_EVIDENCE_RULES
+) + (
+    (
+        re.compile(r"\b(?:amount|money|monetary|currency|fee|balance|payment)\b|金额|货币|费用|余额|支付", re.I),
+        "monetary behavior",
+        {"field", "mapping", "validation", "data-read", "data-write", "business-rule", "business-outcome"},
+        True,
+    ),
+    (
+        re.compile(r"\b(?:transaction(?:al)?|rollback|atomic(?:ity|ally)?)\b|事务|回滚|原子性", re.I),
+        "transaction/rollback",
+        {"data-write", "state-transition", "configuration", "behavior-step"},
+        True,
+    ),
+    (
+        re.compile(r"\b(?:retry|dlq|dead.?letter|idempoten(?:cy|t)|concurren(?:cy|t))\b|重试|死信|幂等|并发", re.I),
+        "retry/idempotency/concurrency",
+        {"retry", "configuration", "failure", "side-effect-call"},
+        True,
+    ),
+    (
+        re.compile(
+            r"\b(?:external|downstream|remote)\b[^.!?。！？]{0,50}\b(?:succeed\w*|complete\w*|updated?|accepted?)\b|"
+            r"(?:外部|下游|远端)[^。！？]{0,30}(?:成功|完成|已更新|已接受)",
+            re.I,
+        ),
+        "completed external outcome",
+        {"side-effect-call", "output", "business-outcome"},
+        True,
+    ),
+    (
+        re.compile(r"\b(?:http\s*)?[1-5]\d\d\b|状态码\s*[1-5]\d\d", re.I),
+        "consumer-visible HTTP outcome",
+        {"endpoint-contract", "failure", "output"},
+        True,
+    ),
+    (
+        re.compile(
+            r"\b(?:(?:business\s+)?state|status)\b[^.!?。！？|]{0,40}"
+            r"\b(?:changes?(?:\s+to)?|transitions?(?:\s+to)?|becomes?|set\s+to)\b|"
+            r"\b(?:sets?|changes?|transitions?)\s+(?:the\s+)?(?:(?:business\s+)?state|status)"
+            r"(?:\s+from\s+[A-Za-z0-9_.-]+)?\s+to\b|"
+            r"(?:业务状态|状态)[^。！？|]{0,20}(?:变更为|转换为|成为|设为)|"
+            r"(?:设置|变更|转换)(?:业务状态|状态)为",
+            re.I,
+        ),
+        "business state transition",
+        {"state-transition", "data-write", "business-outcome"},
+        True,
+    ),
+    (
+        re.compile(r"\b(?:maps?|mapped|mapping|renames?|converts?)\b[^.!?。！？|]{0,60}\b(?:to|into|as)\b|映射|重命名|转换为", re.I),
+        "field mapping",
+        {"mapping"},
+        False,
+    ),
+    (
+        re.compile(r"\b(?:configuration|config(?:uration)?\s+key|environment\s+variable)\b[^.!?。！？|]{0,60}\b(?:controls?|enables?|disables?|changes?|selects?)\b|配置(?:项|键|变量)?[^。！？|]{0,30}(?:控制|启用|禁用|改变|选择)", re.I),
+        "configuration effect",
+        {"configuration"},
+        False,
+    ),
+    (
+        re.compile(
+            r"\b(?:(?:defaults?|falls?\s+back)\s+to|(?:has\s+(?:a\s+)?default|default)\s+(?:of|is|=))\b|"
+            r"默认(?:为|值)|回退为",
+            re.I,
+        ),
+        "default value",
+        {"configuration", "field", "validation", "mapping", "endpoint-contract"},
+        False,
+    ),
+    (
+        re.compile(r"\b(?:required|mandatory|must\s+be\s+present|allowed\s+values?|validated?\s+against)\b|必填|必须存在|允许值|校验为", re.I),
+        "validation rule",
+        {"validation", "field", "endpoint-contract", "business-rule"},
+        False,
+    ),
+    (
+        re.compile(r"\b(?:pii|personally\s+identifiable|personal\s+data|sensitive\s+data|confidential)\b|个人信息|个人数据|敏感数据|机密", re.I),
+        "sensitivity/PII classification",
+        {"field", "mapping", "validation", "configuration"},
+        False,
+    ),
+)
+
+NARRATIVE_ROOT_DOCUMENTS = {
+    "knowledge-map.md",
+    "tech-pack/repository-overview.md",
+    "ba-pack/business-overview.md",
+    "ba-pack/behavior-catalog.md",
+    "ba-pack/capability-map.md",
+    "ba-pack/business-data-lifecycle.md",
+    "ba-pack/business-rule-catalog.md",
+    "ba-pack/business-exception-catalog.md",
+}
+
+# v1 documents were scaffolded with these template-owned headings. Keep them
+# structural even after the v2 Narrative templates adopt a reader-first IA.
+LEGACY_STRUCTURAL_HEADINGS = {
+    "Start here", "Repository at a glance", "Knowledge navigation", "Relationship map",
+    "Coverage and known gaps", "Observable responsibility", "Technology and deployment",
+    "Entry-point inventory", "Behavior summary", "External connections",
+    "Shared rules and components", "Repository-level open questions", "Summary",
+    "Trigger and entry point", "API contracts", "BA view", "Behavior flow", "Inputs",
+    "External HTTP field mappings", "Related repository knowledge",
+    "Preconditions and business rules", "Happy path", "Data access and state changes",
+    "Outputs and side effects", "Failures, retries, and partial success",
+    "External dependency stubs", "Open questions and conflicts", "Evidence index",
+    "BA knowledge navigation", "Business capabilities", "Business actors and participants",
+    "Business behavior landscape", "External business participants",
+    "Cross-behavior business rules", "Business exceptions and dependencies",
+    "Coverage and open questions", "Related BA knowledge", "Business summary",
+    "Business trigger and actors", "Business flow", "Business preconditions",
+    "Business rules", "Business inputs and outputs", "Business outcomes",
+    "Business exceptions", "External business interactions", "Open questions", "Traceability",
+}
+
 
 def _structural_headings() -> set[str]:
     """Load template-owned navigation headings; other headings are factual."""
@@ -127,14 +276,14 @@ def _structural_headings() -> set[str]:
             match = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
             if match:
                 headings.add(match.group(1).strip())
-    return headings
+    return headings | LEGACY_STRUCTURAL_HEADINGS
 
 
 STRUCTURAL_HEADINGS = _structural_headings()
 
 
 def semantic_match_is_qualified(segment: str, match: re.Match[str]) -> bool:
-    """Return True only when uncertainty/negation directly qualifies this semantic term."""
+    """Return True only when negation or an explicit Unknown directly qualifies a term."""
 
     prefix = segment[max(0, match.start() - 60) : match.start()]
     suffix = segment[match.end() : match.end() + 60]
@@ -153,6 +302,281 @@ def semantic_match_is_qualified(segment: str, match: re.Match[str]) -> bool:
     ):
         return True
     return False
+
+
+def semantic_match_is_tentative(segment: str, match: re.Match[str]) -> bool:
+    """Recognize cautious wording without treating it as an established conclusion."""
+
+    prefix = segment[max(0, match.start() - 70) : match.start()]
+    return bool(
+        re.search(
+            r"(?:\bmay\b|\bmight\b|\bcould\b|\bpossibly\b|\bpotentially\b|"
+            r"\bappears?\s+to\b|\bseems?\s+to\b|\blikely\s+to\b|可能|也许|或许|似乎|看起来)[^.;|。；]{0,35}$",
+            prefix,
+            re.I,
+        )
+    )
+
+
+EXACT_IDENTIFIER_RE = re.compile(
+    r"`(?P<quoted>[A-Za-z_][A-Za-z0-9_.\[\]-]*)`|"
+    r"\b(?P<camel>[a-z][A-Za-z0-9]*(?:[A-Z][A-Za-z0-9]*)+)\b|"
+    r"\b(?P<delimited>[A-Za-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)+)\b|"
+    r"\b(?P<path>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\])+)+\b|"
+    r"\b(?P<upper>[A-Z][A-Z0-9_]{2,})\b"
+)
+GENERIC_EXACT_IDENTIFIERS = {
+    "api", "aws", "eapi", "http", "https", "json", "lambda", "null",
+    "sapi", "papi", "true", "false", "unknown", "confirmed", "inferred",
+}
+STATE_LITERAL_PATTERNS = (
+    re.compile(
+        r"\b(?:status|(?:business\s+)?state)\b[^.!?。！？|]{0,35}"
+        r"\b(?:becomes?|changes?(?:\s+to)?|transitions?(?:\s+to)?|(?:is\s+)?set\s+to)\s+"
+        r"[`\"']?(?P<value>[A-Za-z0-9_.-]+)",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:sets?|changes?|transitions?)\s+(?:the\s+)?(?:status|(?:business\s+)?state)"
+        r"(?:\s+from\s+[`\"']?[A-Za-z0-9_.-]+[`\"']?)?\s+to\s+"
+        r"[`\"']?(?P<value>[A-Za-z0-9_.-]+)",
+        re.I,
+    ),
+    re.compile(r"(?:业务状态|状态)[^。！？|]{0,20}(?:变更为|转换为|成为|设为)\s*[`\"']?(?P<value>[A-Za-z0-9_.\u3400-\u9fff-]+)", re.I),
+    re.compile(r"(?:设置|变更|转换)(?:业务状态|状态)为\s*[`\"']?(?P<value>[A-Za-z0-9_.\u3400-\u9fff-]+)", re.I),
+)
+MAPPING_PAIR_RE = re.compile(
+    r"\b(?:maps?|mapped|mapping|renames?|converts?)\s+`?(?P<source>[A-Za-z_][A-Za-z0-9_.\[\]-]*)`?"
+    r"\s+(?:to|into|as|->)\s+`?(?P<target>[A-Za-z_][A-Za-z0-9_.\[\]-]*)`?",
+    re.I,
+)
+DEFAULT_LITERAL_RE = re.compile(
+    r"\b(?:(?:defaults?|falls?\s+back)\s+to|(?:has\s+(?:a\s+)?default|default)\s+(?:of|is|=))\s+"
+    r"(?P<value>`[^`]+`|\"[^\"]+\"|'[^']+'|true|false|null|-?\d+(?:\.\d+)?(?:ms|s|m|h|d)?|[A-Z][A-Z0-9_.-]+)(?=\s|[.,;:!?)]|$)|"
+    r"默认(?:为|值(?:为)?)\s*(?P<zh_value>`[^`]+`|\"[^\"]+\"|'[^']+'|true|false|null|-?\d+(?:\.\d+)?(?:ms|s|m|h|d)?|[A-Za-z0-9_.-]+)",
+    re.I,
+)
+MONEY_TOKEN_RE = re.compile(
+    r"(?:[$€£¥]\s*\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s*(?:USD|EUR|GBP|CNY|RMB|HKD|JPY|SGD|AUD|CAD|CHF|NZD))",
+    re.I,
+)
+BARE_MONEY_RE = re.compile(
+    r"\b(?:amount|fee|balance|payment)\b\s*(?:is|=|of|:)?\s*"
+    r"(?P<value>-?\d[\d,]*(?:\.\d+)?)",
+    re.I,
+)
+CURRENCY_RE = re.compile(r"\b(?:USD|EUR|GBP|CNY|RMB|HKD|JPY|SGD|AUD|CAD|CHF|NZD)\b", re.I)
+PERSIST_OBJECT_RE = re.compile(
+    r"\b(?:persists?|stores?|commits?|writes?)\s+(?:the\s+|an?\s+)?(?P<object>[^.;|。；]{1,60})",
+    re.I,
+)
+GENERIC_OBJECT_WORDS = {
+    "a", "an", "and", "data", "entity", "information", "item", "object", "record",
+    "result", "state", "the", "to", "using", "value", "with", "write", "writes",
+}
+OBJECT_ALIASES = {"client": "customer", "clients": "customer", "customers": "customer"}
+
+
+def claim_fact_corpus(claims: list[dict[str, object]]) -> str:
+    values: list[str] = []
+    for claim in claims:
+        values.append(str(claim.get("statement", "")))
+        render_terms = claim.get("render_terms")
+        if isinstance(render_terms, list):
+            values.extend(str(term) for term in render_terms)
+        verification = claim.get("verification")
+        if isinstance(verification, dict) and isinstance(verification.get("tokens"), list):
+            values.extend(str(token) for token in verification["tokens"])
+    return " ".join(values)
+
+
+def exact_identifiers(value: str) -> set[str]:
+    identifiers: set[str] = set()
+    for match in EXACT_IDENTIFIER_RE.finditer(value):
+        token = next(group for group in match.groups() if group is not None).lower()
+        if token not in GENERIC_EXACT_IDENTIFIERS:
+            identifiers.add(token)
+    return identifiers
+
+
+def state_literals(value: str) -> set[str]:
+    return {
+        match.group("value").strip("`\"'").rstrip(".").lower()
+        for pattern in STATE_LITERAL_PATTERNS
+        for match in pattern.finditer(value)
+    }
+
+
+def default_literals(value: str) -> set[str]:
+    result: set[str] = set()
+    for match in DEFAULT_LITERAL_RE.finditer(value):
+        token = match.group("value") or match.group("zh_value")
+        if token:
+            result.add(token.strip("`\"'").lower())
+    return result
+
+
+def monetary_literals(value: str) -> set[str]:
+    result = {re.sub(r"[\s,]", "", token).lower() for token in MONEY_TOKEN_RE.findall(value)}
+    result.update(
+        re.sub(r",", "", match.group("value")).lower()
+        for match in BARE_MONEY_RE.finditer(value)
+    )
+    return result
+
+
+def mapping_pairs(value: str) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    for match in MAPPING_PAIR_RE.finditer(value):
+        source = match.group("source").rstrip(".")
+        target = match.group("target").rstrip(".")
+        if exact_identifiers(source) and exact_identifiers(target):
+            pairs.add((source.lower(), target.lower()))
+    return pairs
+
+
+def meaningful_object_tokens(value: str) -> set[str]:
+    tokens = {
+        OBJECT_ALIASES.get(token.lower(), token.lower())
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]*|[\u3400-\u9fff]{2,}", value)
+    }
+    return {token for token in tokens if token not in GENERIC_OBJECT_WORDS and len(token) > 2}
+
+
+def persistence_object_tokens(value: str) -> set[str]:
+    result: set[str] = set()
+    for match in PERSIST_OBJECT_RE.finditer(value):
+        object_value = re.split(
+            r"\b(?:to|into|in|after|before|when|using|with|through)\b",
+            match.group("object"),
+            maxsplit=1,
+            flags=re.I,
+        )[0]
+        result.update(meaningful_object_tokens(object_value))
+    return result
+
+
+def exact_material_value_findings(
+    rendered: str,
+    supporting: list[dict[str, object]],
+    semantic_label: str,
+    context: str,
+) -> list[str]:
+    """Protect exact values and objects while leaving ordinary prose wording free."""
+
+    errors: list[str] = []
+    corpus = claim_fact_corpus(supporting)
+
+    def require_subset(rendered_values: set[str], claim_values: set[str], label: str) -> None:
+        missing = sorted(rendered_values - claim_values)
+        if missing:
+            errors.append(
+                f"{context}: material {semantic_label} uses {label} not present in its Claims: "
+                + ", ".join(missing)
+            )
+
+    if semantic_label == "consumer-visible HTTP outcome":
+        require_subset(
+            set(re.findall(r"(?<!\d)[1-5]\d\d(?!\d)", rendered)),
+            set(re.findall(r"(?<!\d)[1-5]\d\d(?!\d)", corpus)),
+            "HTTP status value(s)",
+        )
+    elif semantic_label == "business state transition":
+        require_subset(state_literals(rendered), state_literals(corpus), "state literal(s)")
+    elif semantic_label == "field mapping":
+        rendered_pairs = mapping_pairs(rendered)
+        claim_pairs = mapping_pairs(corpus)
+        claim_ids = exact_identifiers(corpus)
+        missing_pairs = sorted(
+            pair for pair in rendered_pairs
+            if pair not in claim_pairs and not ({pair[0], pair[1]} <= claim_ids)
+        )
+        if missing_pairs:
+            errors.append(
+                f"{context}: material field mapping uses source/target pair(s) not present in its Claims: "
+                + ", ".join(f"{source}->{target}" for source, target in missing_pairs)
+            )
+    elif semantic_label == "default value":
+        require_subset(default_literals(rendered), default_literals(corpus), "default literal(s)")
+    elif semantic_label == "configuration effect":
+        require_subset(exact_identifiers(rendered), exact_identifiers(corpus), "configuration key(s)")
+    elif semantic_label == "validation rule":
+        require_subset(exact_identifiers(rendered), exact_identifiers(corpus), "field/rule identifier(s)")
+    elif semantic_label == "monetary behavior":
+        require_subset(monetary_literals(rendered), monetary_literals(corpus), "monetary literal(s)")
+        require_subset(
+            {token.lower() for token in CURRENCY_RE.findall(rendered)},
+            {token.lower() for token in CURRENCY_RE.findall(corpus)},
+            "currency value(s)",
+        )
+    elif semantic_label == "persistence/commit":
+        rendered_objects = persistence_object_tokens(rendered)
+        claim_objects = persistence_object_tokens(corpus) | meaningful_object_tokens(corpus)
+        if rendered_objects and claim_objects and not (rendered_objects & claim_objects):
+            errors.append(
+                f"{context}: material persistence/commit changes the persisted object from its Claims: "
+                + ", ".join(sorted(rendered_objects))
+            )
+    return errors
+
+
+def material_semantic_findings(
+    value: str,
+    bound_claims: list[dict[str, object]],
+    context: str,
+) -> tuple[list[str], list[str]]:
+    """Check material meaning by subject-scoped Claim category, not literal prose wording."""
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    rendered_exact = CLAIM_MARKER_RE.sub("", value)
+    normalized = rendered_exact.lower()
+    segments = re.split(r"\||(?<=[.!?。！？])\s+|\n+", normalized)
+    for semantic_pattern, semantic_label, compatible_types, needs_high_risk in NARRATIVE_MATERIAL_RULES:
+        matches: list[tuple[str, re.Match[str]]] = []
+        for segment in segments:
+            for semantic_match in semantic_pattern.finditer(segment):
+                if semantic_match_is_qualified(segment, semantic_match):
+                    continue
+                matches.append((segment, semantic_match))
+        if not matches:
+            continue
+
+        supporting = [
+            claim
+            for claim in bound_claims
+            if claim.get("status") != "Unknown"
+            and (
+                claim.get("claim_type") in compatible_types
+                or semantic_pattern.search(str(claim.get("statement", "")))
+            )
+            and (not needs_high_risk or claim.get("risk") == "high")
+        ]
+        if not supporting:
+            errors.append(
+                f"{context}: adds material {semantic_label} semantics without a compatible passing Claim"
+            )
+            continue
+
+        errors.extend(
+            exact_material_value_findings(
+                rendered_exact, supporting, semantic_label, context
+            )
+        )
+
+        has_unqualified = any(
+            not semantic_match_is_tentative(segment, semantic_match)
+            for segment, semantic_match in matches
+        )
+        if has_unqualified and not any(claim.get("status") == "Confirmed" for claim in supporting):
+            errors.append(
+                f"{context}: states material {semantic_label} as established, but its compatible Claims are only Inferred/Conflicting"
+            )
+        elif not has_unqualified and all(claim.get("status") == "Conflicting" for claim in supporting):
+            warnings.append(
+                f"{context}: tentative {semantic_label} language is backed only by Conflicting Claims; review whether the conflict is visible"
+            )
+    return errors, warnings
 
 
 def text_sha256(value: str) -> str:
@@ -212,6 +636,65 @@ def list_values(frontmatter: str, key: str) -> list[str]:
 def scalar_value(frontmatter: str, key: str) -> str | None:
     match = re.search(rf"^{re.escape(key)}:\s*[\"']?([^\"'\n]+)[\"']?\s*$", frontmatter, re.M)
     return match.group(1).strip() if match else None
+
+
+def pack_format_version(pack: Path) -> int:
+    """Return 1 for a legacy manifest without a version, otherwise its integer version."""
+
+    manifest = pack / "knowledge-manifest.yaml"
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError:
+        return 1
+    value = scalar_value(text, "pack_format_version")
+    if value is None:
+        return 1
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
+def document_profile(document: Path, pack: Path) -> str:
+    """Classify a v2 Markdown document without making prose structure a schema."""
+
+    relative = document.resolve().relative_to(pack.resolve()).as_posix()
+    if relative in NARRATIVE_ROOT_DOCUMENTS:
+        return "narrative"
+    if relative.startswith("tech-pack/behaviors/") and relative.endswith(".md"):
+        return "narrative"
+    if relative.startswith("ba-pack/") and relative.endswith(".md"):
+        return "narrative"
+    return "reference"
+
+
+def narrative_semantic_text(body: str) -> str:
+    """Collect Narrative assertions while ignoring template headings and fenced implementation."""
+
+    body = re.sub(r"```.*?```", " ", body, flags=re.S)
+    raw_lines = body.splitlines()
+    lines: list[str] = []
+    for index, line in enumerate(raw_lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        heading = re.match(r"^#{1,6}\s+(.+?)\s*$", stripped)
+        if heading:
+            title = heading.group(1).strip()
+            if title in STRUCTURAL_HEADINGS:
+                continue
+            stripped = title
+        elif stripped.startswith("|"):
+            if TABLE_SEPARATOR_RE.match(stripped):
+                continue
+            next_line = raw_lines[index + 1].strip() if index + 1 < len(raw_lines) else ""
+            if TABLE_SEPARATOR_RE.match(next_line):
+                continue
+            stripped = " ".join(cell.strip() for cell in stripped.strip("|").split("|") if cell.strip())
+        if is_pure_navigation(stripped):
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
 
 
 def marker_ids(value: str) -> list[str]:
@@ -446,8 +929,136 @@ def validate_single_document(
     )
     if artifact_errors:
         return artifact_errors, artifact_warnings
-    document_errors, document_warnings, _used = validate_document_claims(document, pack, claims)
+    if pack_format_version(pack) >= 2:
+        if document_profile(document, pack) == "narrative":
+            document_errors, document_warnings, _used = validate_narrative_document_claims(
+                document, pack, claims
+            )
+        else:
+            document_errors, document_warnings, _used = validate_v2_reference_document_claims(
+                document, pack, claims
+            )
+    else:
+        document_errors, document_warnings, _used = validate_document_claims(document, pack, claims)
     return artifact_errors + document_errors, artifact_warnings + document_warnings
+
+
+def validate_narrative_document_claims(
+    document: Path,
+    pack: Path,
+    claims: dict[str, dict[str, object]],
+) -> tuple[list[str], list[str], set[str]]:
+    """Validate v2 Narrative materiality without prescribing sentence wording."""
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    relative = document.resolve().relative_to(pack.resolve()).as_posix()
+    try:
+        frontmatter, body = split_frontmatter(document.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"{relative}: cannot validate Narrative grounding: {exc}"], [], set()
+
+    declared = list_values(frontmatter, "claim_ids")
+    used = set(declared)
+    if not declared:
+        errors.append(
+            f"{relative}: frontmatter claim_ids must contain the material fact set for Narrative content"
+        )
+    if len(declared) != len(set(declared)):
+        errors.append(f"{relative}: frontmatter claim_ids contains duplicates")
+    bound_claims: list[dict[str, object]] = []
+    behavior_id = scalar_value(frontmatter, "behavior_id")
+    behavior_scoped = relative.startswith(("tech-pack/behaviors/", "ba-pack/behaviors/"))
+    for claim_id in declared:
+        claim = claims.get(claim_id)
+        if claim is None:
+            errors.append(f"{relative}: frontmatter references unknown claim: {claim_id}")
+        else:
+            bound_claims.append(claim)
+            if behavior_scoped and behavior_id:
+                subjects = claim.get("subject_ids")
+                if not isinstance(subjects, list) or behavior_id not in subjects:
+                    errors.append(
+                        f"{relative}: Narrative claim {claim_id} is not bound to behavior {behavior_id}"
+                    )
+
+    # Legacy invisible markers are tolerated in a v2 Narrative during migration,
+    # but they may not introduce undeclared or unknown Claims.
+    for claim_id in marker_ids(body):
+        if claim_id not in claims:
+            errors.append(f"{relative}: body marker references unknown claim: {claim_id}")
+        elif claim_id not in declared:
+            errors.append(
+                f"{relative}: body marker claim is missing from frontmatter claim_ids: {claim_id}"
+            )
+
+    material_errors, material_warnings = material_semantic_findings(
+        narrative_semantic_text(body), bound_claims, f"{relative}: Narrative"
+    )
+    errors.extend(material_errors)
+    warnings.extend(material_warnings)
+
+    if "SCAFFOLD_ONLY" in body:
+        errors.append(f"{relative}: scaffold-only sentinel remains")
+    return errors, warnings, used
+
+
+def validate_v2_reference_document_claims(
+    document: Path,
+    pack: Path,
+    claims: dict[str, dict[str, object]],
+) -> tuple[list[str], list[str], set[str]]:
+    """Keep rows/examples exact while allowing natural Reference summaries."""
+
+    errors, warnings, used = validate_narrative_document_claims(document, pack, claims)
+    relative = document.resolve().relative_to(pack.resolve()).as_posix()
+    try:
+        _frontmatter, body = split_frontmatter(document.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return errors, warnings, used
+
+    for line, kind, block in material_blocks(body):
+        if kind not in {"table row", "code block"}:
+            continue
+        block_claim_ids = marker_ids(block)
+        if not block_claim_ids:
+            preview = " ".join(block.split())[:140]
+            errors.append(f"{relative}:{line}: structured {kind} has no claim marker: {preview}")
+            continue
+        normalized_block = CLAIM_MARKER_RE.sub("", block).lower()
+        bound_claims = [claims[claim_id] for claim_id in block_claim_ids if claim_id in claims]
+        for claim_id in block_claim_ids:
+            claim = claims.get(claim_id)
+            if claim is None:
+                errors.append(f"{relative}:{line}: structured {kind} references unknown claim: {claim_id}")
+                continue
+            render_terms = claim.get("render_terms")
+            if not isinstance(render_terms, list) or not any(
+                isinstance(term, str) and term.lower() in normalized_block for term in render_terms
+            ):
+                errors.append(
+                    f"{relative}:{line}: structured {kind} does not contain a render term for {claim_id}"
+                )
+        semantic_segments = re.split(r"\||(?<=[.!?。！？])\s+", normalized_block)
+        for semantic_pattern, _evidence_pattern, semantic_label in SEMANTIC_EVIDENCE_RULES:
+            unsupported = any(
+                not semantic_match_is_qualified(segment, semantic_match)
+                and not any(
+                    semantic_pattern.search(str(claim.get("statement", "")))
+                    for claim in bound_claims
+                )
+                for segment in semantic_segments
+                for semantic_match in semantic_pattern.finditer(segment)
+            )
+            if unsupported:
+                errors.append(
+                    f"{relative}:{line}: structured {kind} adds {semantic_label} semantics "
+                    "not asserted by its bound claims"
+                )
+
+    if relative == "tech-pack/fields/field-catalog.md":
+        errors.extend(validate_field_catalog_cells(body, relative, claims))
+    return errors, warnings, used
 
 
 def validate_document_claims(
@@ -971,9 +1582,22 @@ def validate_claim_pack(
     if errors:
         return errors, warnings, claims
 
+    version = pack_format_version(pack)
     used: set[str] = set()
     for document in claim_document_paths(pack):
-        document_errors, document_warnings, document_used = validate_document_claims(document, pack, claims)
+        if version >= 2:
+            if document_profile(document, pack) == "narrative":
+                document_errors, document_warnings, document_used = validate_narrative_document_claims(
+                    document, pack, claims
+                )
+            else:
+                document_errors, document_warnings, document_used = validate_v2_reference_document_claims(
+                    document, pack, claims
+                )
+        else:
+            document_errors, document_warnings, document_used = validate_document_claims(
+                document, pack, claims
+            )
         errors.extend(document_errors)
         warnings.extend(document_warnings)
         used.update(document_used)
@@ -990,8 +1614,20 @@ def validate_claim_pack(
             errors.append(f"{relative}: flow model root must be an object")
             continue
         behavior_id = model.get("behavior_id")
-        bound_groups: list[tuple[str, object, str | None, list[str]]] = [
-            ("summary", model.get("summary_claim_ids"), None, []),
+        caption_claims = (
+            model.get("diagram_claim_ids")
+            if version >= 2 and "diagram_claim_ids" in model
+            else model.get("summary_claim_ids")
+        )
+        caption_value = model.get("diagram_caption") if version >= 2 else model.get("summary")
+        bound_groups: list[tuple[str, object, str | None, list[str], str]] = [
+            (
+                "diagram caption" if version >= 2 else "summary",
+                caption_claims,
+                None,
+                [],
+                str(caption_value) if isinstance(caption_value, str) else "",
+            ),
         ]
         nodes = model.get("nodes")
         if isinstance(nodes, list):
@@ -1001,7 +1637,13 @@ def validate_claim_pack(
                         item for item in node.get("evidence", []) if isinstance(item, str)
                     ] if isinstance(node.get("evidence"), list) else []
                     bound_groups.append(
-                        (f"node {index}", node.get("claim_ids"), node.get("status") if isinstance(node.get("status"), str) else None, evidence_refs)
+                        (
+                            f"node {index}",
+                            node.get("claim_ids"),
+                            node.get("status") if isinstance(node.get("status"), str) else None,
+                            evidence_refs,
+                            str(node.get("label", "")),
+                        )
                     )
         edges = model.get("edges")
         edge_labels: set[str] = set()
@@ -1011,8 +1653,17 @@ def validate_claim_pack(
                     continue
                 edge_label = f"edge {index}"
                 edge_labels.add(edge_label)
-                bound_groups.append((edge_label, edge.get("claim_ids"), None, []))
-        for binding_label, raw_ids, rendered_status, evidence_refs in bound_groups:
+                condition = edge.get("condition")
+                bound_groups.append(
+                    (
+                        edge_label,
+                        edge.get("claim_ids"),
+                        None,
+                        [],
+                        str(condition) if isinstance(condition, str) else "",
+                    )
+                )
+        for binding_label, raw_ids, rendered_status, evidence_refs, rendered_text in bound_groups:
             if not isinstance(raw_ids, list) or not raw_ids:
                 errors.append(f"{relative}: {binding_label} has no claim IDs")
                 continue
@@ -1043,14 +1694,23 @@ def validate_claim_pack(
                         errors.append(
                             f"{relative}: {binding_label} evidence is not owned by its bound claims: {evidence_ref}"
                         )
+            if version >= 2 and rendered_text and bound_claims:
+                material_errors, material_warnings = material_semantic_findings(
+                    rendered_text,
+                    bound_claims,
+                    f"{relative}: {binding_label}",
+                )
+                errors.extend(material_errors)
+                warnings.extend(material_warnings)
             if binding_label in edge_labels and bound_claims and all(
                 claim.get("status") == "Unknown" for claim in bound_claims
             ):
                 errors.append(
                     f"{relative}: {binding_label} cannot render order or causality from Unknown claims only"
                 )
-    for claim_id in sorted(set(claims) - used):
-        warnings.append(f"approved claim is not rendered in a claim-bearing Markdown document: {claim_id}")
+    if version < 2:
+        for claim_id in sorted(set(claims) - used):
+            warnings.append(f"approved claim is not rendered in a claim-bearing Markdown document: {claim_id}")
     return errors, warnings, claims
 
 
@@ -1098,7 +1758,9 @@ def main() -> int:
     if args.draft:
         print(f"OK: draft claim schema, evidence ranges, and hashes are valid (claims={len(claims)}); {len(set(warnings))} warning(s)")
     elif args.pack:
-        print(f"OK: claim provenance, audit, and rendering coverage are valid (claims={len(claims)}); {len(set(warnings))} warning(s)")
+        version = pack_format_version(args.pack.expanduser().resolve())
+        scope = "document-level Narrative grounding and structured Reference bindings" if version >= 2 else "rendering coverage"
+        print(f"OK: claim provenance, audit, and {scope} are valid (claims={len(claims)}); {len(set(warnings))} warning(s)")
     else:
         print(f"OK: claim provenance and semantic-audit bindings are valid (claims={len(claims)}); {len(set(warnings))} warning(s)")
     return 0

@@ -12,8 +12,8 @@ coverage_status: "complete|partial|blocked"
 
 ## Boundary and significant fields
 
-| Field ID | Boundary ID | Boundary kind | Observation kind | Field path | Meaning | Type/format | Required | Nullable | Source/default | Validation rule IDs | Lineage/mapping IDs | Status | Evidence |
-|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|
+| Field ID | Boundary ID | Boundary kind | Observation kind | Field path | Meaning | Type/format | Required | Nullable | Source/default | Sensitivity | Validation rule IDs | Lineage/mapping IDs | Status | Evidence |
+|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|
 
 ## Enum and code sets
 

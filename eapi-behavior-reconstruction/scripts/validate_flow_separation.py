@@ -11,6 +11,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from runtime_guard import run_guarded
+from validate_claim_ledger import find_pack_root, pack_format_version
 
 
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
@@ -90,6 +91,49 @@ def section_value(body: str, heading: str) -> str:
     return match.group("content").strip() if match else ""
 
 
+def first_narrative_section(body: str) -> str:
+    """Return the first H2 section containing prose outside a code fence."""
+
+    for match in re.finditer(r"^##\s+.+?\s*$\n(?P<content>.*?)(?=^##\s+|\Z)", body, re.M | re.S):
+        content = match.group("content").strip()
+        candidate_lines = []
+        for line in re.sub(r"```.*?```", "", content, flags=re.S).splitlines():
+            stripped = line.strip()
+            if (
+                not stripped
+                or stripped.startswith(("|", "<!--"))
+                or re.match(r"^(?:[-+*]|\d+\.)\s+", stripped)
+            ):
+                continue
+            candidate_lines.append(stripped)
+        prose = " ".join(candidate_lines)
+        prose = re.sub(r"\[[^\]]+\]\([^)]+\)", "", prose)
+        prose = re.sub(r"[`*_>#|\s-]+", "", prose)
+        if prose:
+            return content
+    return ""
+
+
+def long_narrative_paragraphs(body: str) -> set[str]:
+    """Return exact long prose blocks; short shared phrases remain legitimate."""
+
+    body = re.sub(r"```.*?```", " ", body, flags=re.S)
+    paragraphs: set[str] = set()
+    for raw in re.split(r"\n\s*\n", body):
+        lines = [
+            line.strip()
+            for line in raw.splitlines()
+            if line.strip()
+            and not line.lstrip().startswith(("#", "|", "<!--", "- ", "* ", "+ "))
+        ]
+        value = " ".join(lines)
+        value = re.sub(r"\[[^\]]+\]\([^)]+\)", " ", value)
+        normalized = normalize_text(value)
+        if len(normalized) >= 100:
+            paragraphs.add(normalized)
+    return paragraphs
+
+
 def extract_mermaid(body: str) -> str:
     match = re.search(r"```mermaid\s*\n(?P<code>\s*(?:flowchart|graph)\b.*?)```", body, re.I | re.S)
     return match.group("code").strip() if match else ""
@@ -149,6 +193,22 @@ def extract_mermaid_edges(code: str) -> list[tuple[str, str, str | None]]:
     return edges
 
 
+def _flow_pack_root(document: Path) -> Path | None:
+    """Locate legacy or v2 packs; legacy flow tests may have no manifest."""
+
+    canonical = find_pack_root(document)
+    if canonical is not None:
+        return canonical
+    return next(
+        (
+            candidate
+            for candidate in (document.parent, *document.parents)
+            if (candidate / ".work" / "flow-models").is_dir()
+        ),
+        None,
+    )
+
+
 def _validate_model(
     document: Path,
     frontmatter: str,
@@ -164,6 +224,8 @@ def _validate_model(
         # Normalize macOS /var -> /private/var and other symlinked roots before
         # containment checks so valid evidence is not reported as escaping.
         repo = repo.expanduser().resolve()
+    pack_root = _flow_pack_root(document)
+    version = pack_format_version(pack_root) if pack_root is not None else 1
     behavior_id = scalar_value(frontmatter, "behavior_id")
     repository = scalar_value(frontmatter, "repository")
     source_commit = scalar_value(frontmatter, "source_commit")
@@ -183,7 +245,15 @@ def _validate_model(
     elif expected_perspective == "technical" and len(labels) < 2:
         errors.append("Mermaid flow must contain at least two labeled nodes")
 
+    if version >= 2:
+        summary_heading = "At a glance" if expected_perspective == "technical" else "Scenario at a glance"
     summary = section_value(body, summary_heading)
+    if version >= 2 and not summary:
+        summary = first_narrative_section(body)
+        if summary:
+            warnings.append(
+                f"preferred {summary_heading} heading is absent; using the first Narrative section"
+            )
     if not summary:
         errors.append(f"{summary_heading} section is empty")
 
@@ -194,14 +264,7 @@ def _validate_model(
         errors.append(f"{model_key} must point to the separate {expected_perspective} model")
     else:
         model_path = (document.parent / model_value).resolve()
-        pack_root = next(
-            (
-                candidate
-                for candidate in (document.parent, *document.parents)
-                if (candidate / ".work" / "flow-models").is_dir()
-            ),
-            None,
-        )
+        pack_root = _flow_pack_root(document)
         if pack_root is None:
             errors.append("cannot locate canonical .work/flow-models directory for document")
         else:
@@ -231,9 +294,11 @@ def _validate_model(
     if model is not None:
         if "scaffold_state" in model:
             errors.append("flow model still contains scaffold_state")
+        caption_key = "diagram_caption" if version >= 2 else "summary"
+        caption_claim_key = "diagram_claim_ids" if version >= 2 else "summary_claim_ids"
         required = {
-            "behavior_id", "repository", "source_commit", "perspective", "summary",
-            "summary_claim_ids", "nodes", "edges",
+            "behavior_id", "repository", "source_commit", "perspective", caption_key,
+            caption_claim_key, "nodes", "edges",
         }
         missing = sorted(required - set(model))
         if missing:
@@ -247,18 +312,18 @@ def _validate_model(
             if model.get(key) != expected:
                 errors.append(f"flow model {key} does not match document")
 
-        model_summary = model.get("summary")
+        model_summary = model.get(caption_key)
         if not isinstance(model_summary, str) or not model_summary.strip():
-            errors.append("flow model summary must be a nonempty string")
-        elif normalize_text(model_summary) != normalize_text(summary):
+            errors.append(f"flow model {caption_key} must be a nonempty string")
+        elif version < 2 and normalize_text(model_summary) != normalize_text(summary):
             errors.append(f"{summary_heading} must render the summary from {model_key}")
-        summary_claim_ids = model.get("summary_claim_ids")
+        summary_claim_ids = model.get(caption_claim_key)
         if (
             not isinstance(summary_claim_ids, list)
             or not summary_claim_ids
             or any(not isinstance(item, str) or not CLAIM_ID_RE.fullmatch(item) for item in summary_claim_ids)
         ):
-            errors.append("flow model summary_claim_ids must contain valid CLM- IDs")
+            errors.append(f"flow model {caption_claim_key} must contain valid CLM- IDs")
 
         nodes = model.get("nodes")
         edges = model.get("edges")
@@ -401,6 +466,8 @@ def validate_pair(
         ba_frontmatter, ba_body = split_frontmatter(ba_document.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return [f"cannot read linked Tech/BA pair: {exc}"], [], {}
+    pack_root = _flow_pack_root(tech_document)
+    version = pack_format_version(pack_root) if pack_root is not None else 1
 
     tech_result = _validate_model(
         tech_document, tech_frontmatter, tech_body, "tech_flow_model", "technical", "Summary", repo
@@ -424,8 +491,10 @@ def validate_pair(
     if tech_model_path is not None and ba_model_path is not None and tech_model_path == ba_model_path:
         errors.append("Tech and BA must use different flow model files")
     if tech_model is not None and ba_model is not None:
-        if normalize_text(str(tech_model.get("summary", ""))) == normalize_text(str(ba_model.get("summary", ""))):
-            errors.append("Tech and BA model summaries are identical")
+        tech_caption = tech_model.get("diagram_caption", tech_model.get("summary", ""))
+        ba_caption = ba_model.get("diagram_caption", ba_model.get("summary", ""))
+        if normalize_text(str(tech_caption)) == normalize_text(str(ba_caption)):
+            errors.append("Tech and BA model captions are identical")
         tech_model_labels = [normalize_text(str(node.get("label", ""))) for node in tech_model.get("nodes", []) if isinstance(node, dict)]
         ba_model_labels = [normalize_text(str(node.get("label", ""))) for node in ba_model.get("nodes", []) if isinstance(node, dict)]
         if tech_model_labels == ba_model_labels or set(tech_model_labels) == set(ba_model_labels):
@@ -446,25 +515,41 @@ def validate_pair(
     node_similarity = similarity(joined_tech, joined_ba)
     node_jaccard = token_jaccard(joined_tech, joined_ba)
     summary_similarity = similarity(tech_summary, ba_summary)
-    # Equal node counts plus high lexical similarity is the common signature of
-    # a generator that copied the Tech flow and merely renamed its nodes.  Keep
-    # this threshold deliberately below "almost identical": mechanical rewrites
-    # such as "Return response" -> "Return business response" must fail.
-    if len(tech_labels) == len(ba_labels) and node_similarity >= 0.72:
-        errors.append(f"Tech/BA flow node wording is near-identical ({node_similarity:.2f})")
-    elif node_similarity >= 0.60:
-        warnings.append(f"Tech/BA flow node wording has high overlap ({node_similarity:.2f}); review for mechanical rewriting")
-    if len(tech_labels) == len(ba_labels) and node_jaccard >= 0.65:
-        errors.append(f"Tech/BA flow token overlap is too high ({node_jaccard:.2f})")
-    if summary_similarity >= 0.72:
-        errors.append(f"Tech and BA summaries are near-identical ({summary_similarity:.2f})")
-    elif summary_similarity >= 0.60:
-        warnings.append(f"Tech and BA summaries have high overlap ({summary_similarity:.2f}); review perspective separation")
+    if normalize_text(tech_summary) and normalize_text(tech_summary) == normalize_text(ba_summary):
+        errors.append("Tech and BA document summaries are directly reused")
+    if version >= 2:
+        # Similarity is an editorial signal in v2. Direct reuse remains an
+        # error; near similarity stays a Reader Review prompt.
+        if len(tech_labels) == len(ba_labels) and node_similarity >= 0.72:
+            warnings.append(f"Tech/BA flow node wording is near-identical ({node_similarity:.2f}); review for mechanical rewriting")
+        elif node_similarity >= 0.60:
+            warnings.append(f"Tech/BA flow node wording has high overlap ({node_similarity:.2f}); review for mechanical rewriting")
+        if len(tech_labels) == len(ba_labels) and node_jaccard >= 0.65:
+            warnings.append(f"Tech/BA flow token overlap is high ({node_jaccard:.2f}); review perspective separation")
+        if summary_similarity >= 0.72:
+            warnings.append(f"Tech and BA summaries are near-identical ({summary_similarity:.2f}); review perspective separation")
+        elif summary_similarity >= 0.60:
+            warnings.append(f"Tech and BA summaries have high overlap ({summary_similarity:.2f}); review perspective separation")
+    else:
+        if len(tech_labels) == len(ba_labels) and node_similarity >= 0.72:
+            errors.append(f"Tech/BA flow node wording is near-identical ({node_similarity:.2f})")
+        elif node_similarity >= 0.60:
+            warnings.append(f"Tech/BA flow node wording has high overlap ({node_similarity:.2f}); review for mechanical rewriting")
+        if len(tech_labels) == len(ba_labels) and node_jaccard >= 0.65:
+            errors.append(f"Tech/BA flow token overlap is too high ({node_jaccard:.2f})")
+        if summary_similarity >= 0.72:
+            errors.append(f"Tech and BA summaries are near-identical ({summary_similarity:.2f})")
+        elif summary_similarity >= 0.60:
+            warnings.append(f"Tech and BA summaries have high overlap ({summary_similarity:.2f}); review perspective separation")
+
+    if version >= 2 and long_narrative_paragraphs(tech_body) & long_narrative_paragraphs(ba_body):
+        errors.append("Tech and BA directly reuse a long Narrative paragraph")
 
     ba_perspective_text = ba_summary + " " + joined_ba
     forbidden = sorted({match.group(0) for match in BA_FORBIDDEN_RE.finditer(ba_perspective_text)}, key=str.lower)
     if forbidden:
-        errors.append("BA flow/summary contains implementation terminology: " + ", ".join(forbidden))
+        message = "BA flow/summary contains implementation terminology: " + ", ".join(forbidden)
+        (warnings if version >= 2 else errors).append(message)
     category_hits = sum(1 for pattern in BA_CATEGORY_PATTERNS if pattern.search(ba_perspective_text))
     if ba_model is not None and isinstance(ba_model.get("nodes"), list):
         ba_semantic_types = {
@@ -490,7 +575,10 @@ def validate_pair(
             for node in ba_model["nodes"]
         )
     if ba_labels and category_hits < 2 and not all_ba_unknown:
-        errors.append("BA flow/summary must contain at least two business semantic categories: actor/event, decision/rule, outcome/exception")
+        if version >= 2:
+            warnings.append("BA flow/summary has fewer than two business semantic categories; review whether the evidence supports a richer business view")
+        else:
+            errors.append("BA flow/summary must contain at least two business semantic categories: actor/event, decision/rule, outcome/exception")
 
     tech_perspective_text = tech_summary + " " + joined_tech
     if tech_labels and not TECH_SIGNAL_RE.search(tech_perspective_text):
