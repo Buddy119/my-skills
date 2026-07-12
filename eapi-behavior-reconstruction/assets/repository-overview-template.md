@@ -1,45 +1,47 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-claim_ids: []
 analysis_mode: "automatic|targeted"
 behavior_catalog: "behavior-catalog.yaml"
-knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every instruction with a developer-oriented repository explanation. Use claim_ids for material conclusions; do not leave this comment. The headings below are reader prompts, not a mandatory outline: rename, reorder, merge, or omit sections with no useful supported content, and state each material Unknown once. -->
+# Repository behavior overview
 
-# Technical repository overview
+## Observable responsibility
 
-## Repository purpose and boundary
+Summarize what the repository appears to do from executable evidence. Separate confirmed responsibilities from inferred business purpose.
 
-Explain the repository's observable responsibility, what starts work here, what remains outside the repository, and which apparent purpose is inferred or unknown. Give the reader a coherent orientation rather than a list of Claims.
+## Technology and deployment
 
-## Runtime and architecture context
+| Area | Observed value | Status | Evidence |
+|---|---|---|---|
+| Runtime/framework/IaC | Value | Confirmed | `path/to/file.ext:line` |
 
-Explain the deployment/runtime shape and the path from entry adapter to orchestration, data, and external boundaries. Include a small Mermaid diagram when it improves understanding.
+## Entry-point inventory
 
-## Main execution paths
+| Entry point | Trigger | Behavior ID | Classification | Status | Evidence |
+|---|---|---|---|---|---|
+| Handler or route | API/event/queue/schedule | repository.behavior | Business/integration/technical | Documented | `path/to/file.ext:line` |
 
-Introduce the important Behaviors as a readable index. For each, state why a developer would open it, then link its Tech view and BA view when one exists.
+## Behavior summary
 
-## Data and external boundaries
+| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contract |
+|---|---|---|---|---|---|---|
+| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | [Contract](contracts/repository.behavior.api-contract.md) or N/A |
 
-Summarize the main information journeys, supported state-changing points, external dependencies, and outbound interactions. Link the canonical data, field, mapping, and dependency views for detail.
+## External connections
 
-## Cross-cutting behavior
+List upstream triggers, downstream calls, emitted events, queues, topics, streams, tables, shared libraries, and unresolved external dependencies.
 
-Explain shared validation, authorization, configuration, error handling, retry, or other reusable behavior only when it affects multiple paths.
+## Shared rules and components
 
-## Reliability and change considerations
-
-Explain important failure boundaries, opaque dependencies, partial-success risks, and code/configuration hotspots likely to matter during change analysis.
+Record validation, authorization, mapping, persistence, error-handling, and utility components reused by multiple behaviors.
 
 ## Coverage and limitations
 
-Explain excluded, duplicate, dynamic, unreadable, and environment-owned areas. Link the full coverage report; do not call coverage complete unless every executable entry point has a disposition.
+Account for excluded, duplicate, generated, dynamic, unreadable, and blocked entry points. Do not claim complete coverage unless every discovered executable entry point has a catalog disposition.
 
-## Where to go next
+## Repository-level open questions
 
-Provide role-based links to the endpoint matrix, Behaviors, API contracts, data lifecycle, field rules/mappings, runtime configuration, dependencies, failure taxonomy, BA overview, canonical manifest, and coverage report.
+List unknown responsibilities, conflicting wiring, missing schemas, environment-defined dependencies, and behavior that may live outside the repository.

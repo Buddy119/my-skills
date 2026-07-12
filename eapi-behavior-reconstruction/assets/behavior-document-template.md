@@ -3,91 +3,147 @@ behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-claim_ids: []
 entry_type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
 entry_point: "handler-or-route"
 behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
-flow_perspective: "technical"
-summary_perspective: "technical"
-tech_flow_model: "../../.work/flow-models/repository.behavior-name.tech-flow.json"
+api_contract_document: null
 ba_behavior_document: null
-endpoint_ids: []
-api_contract_documents: []
-data_asset_ids: []
-field_ids: []
-dependency_ids: []
-config_ids: []
-validation_rule_ids: []
-failure_ids: []
-external_http_call_ids: []
-external_mapping_ids: []
-consumes: []
-produces: []
-reads: []
-writes: []
-analysis_limitations: []
+consumes:
+  - type: "http-api|event|queue|topic|stream|schedule|other"
+    name: "stable connection name"
+produces:
+  - type: "http-response|event|queue|topic|other"
+    name: "stable connection name"
+reads:
+  - type: "dynamodb|rds|s3|parameter|secret|other"
+    name: "resource or logical name"
+writes:
+  - type: "dynamodb|rds|s3|other"
+    name: "resource or logical name"
+external_dependencies:
+  - type: "service|lambda|api|library|layer|other"
+    name: "dependency name"
+external_http_calls: []
+field_mappings: []
+analysis_limitations:
+  - "Describe an excluded or unavailable area"
 ---
-
-<!-- SCAFFOLD_ONLY: Replace every instruction with repository-specific prose. Use claim_ids as the material fact set; do not write one sentence per Claim or leave this comment. Keep the opening orientation and the flow, but rename, reorder, merge, or omit every other section when that produces a clearer explanation. State each material Unknown once instead of filling empty sections. -->
 
 # Behavior title
 
-## At a glance
+## Summary
 
-Orient a developer in natural prose: explain when this behavior starts, its observable implementation responsibility, and the result it produces or attempts. Mention an evidence limitation here only when it materially changes that orientation. Choose the paragraph length that reads well. Do not copy Claim statements or the BA summary.
+Describe the observable behavior in two or three sentences. Do not claim that this is the original historical requirement.
 
-## API contracts
+## Trigger and entry point
 
-Include this section whenever `endpoint_ids` is nonempty; it is mandatory for `entry_type: api`. List every endpoint that invokes or routes into this behavior and link to its endpoint-owned contract:
+- Trigger:
+- Entry point:
+- Runtime wiring:
+- Status:
+- Evidence:
+  - `path/to/file.ext:line`
 
-- `EP-POST-resource` — [View API contract](../endpoints/contracts/EP-POST-resource.api-contract.md)
+## API contract
 
-## Business view
+Include this section only for `entry_type: api`. Keep it short and link to the separate contract document:
+
+[View detailed API contract](../contracts/repository.behavior-name.api-contract.md)
+
+## BA view
 
 Include this section only for `behavior_category: business|integration`:
 
 [View business behavior](../../ba-pack/behaviors/repository.behavior-name.md)
 
-## Execution story
+## Behavior flow
 
 ```mermaid
 flowchart TD
+    A[Trigger] --> B[Parse input]
+    B --> C{Valid?}
+    C -- No --> D[Return or route failure]
+    C -- Yes --> E[Execute behavior]
+    E --> F[Observable result]
 ```
 
-Render the exact nodes and topology from the separate Tech flow model. Follow the diagram with a coherent execution narrative that explains important branches and where execution stops, continues, or crosses a repository boundary. Do not restate every node as a separate bullet.
+Explain the important nodes and branches with source evidence.
 
-## Important decisions and rules
+## Inputs
 
-Explain the validations, conditions, defaults, and branch decisions that materially change the path. Link API-field detail to the endpoint contract and field pack rather than reproducing it.
+Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
 
-## Data and external interactions
+## External HTTP field mappings
 
-Explain inputs, significant transformations, reads, writes, local mutations, supported state changes, dependency calls, and emitted results as one data journey. Distinguish an attempted opaque call from a proven external outcome. When outbound HTTP mappings exist, name the relevant `HTTP-` and `MAP-` IDs, summarize their purpose, and link to the [External HTTP mapping matrix](../fields/external-http-mapping-matrix.md).
+Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
 
-## Outputs, failures, and recovery
+Record each proven call in YAML before its mappings:
 
-Describe outputs and important failure paths in context, including retry, DLQ, rollback, compensation, or partial success only when supported. Link canonical `FAIL-` and dependency records instead of copying their full tables.
+```yaml
+external_http_calls:
+  - call_id: "HTTP-001"
+    client_operation: "ExternalCustomerClient.updateCustomer"
+    method: "POST"
+    target: "external-customer-system /customers"
+    evidence:
+      - "src/client.ext:line"
+```
 
-## Runtime and operational considerations
+| ID | HTTP call | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+| FM-001 | HTTP-001 | eapi-to-external | EAPI model: `field.path` | External request: `field.path` | Rename | Always; no default | No | Confirmed | `path/to/file.ext:line` |
 
-Include only configuration or runtime wiring that changes this behavior. Omit this section when it adds no useful understanding.
+### Unmapped, dropped, or unresolved fields
 
-## Unknowns and change risks
+| HTTP call and field | Observed treatment | Status | Evidence or evidence needed |
+|---|---|---|---|
+| HTTP-001 request/response: `field.path` | Dropped/ignored/unresolved | Unknown | `path/to/file.ext:line` or required artifact |
 
-Explain the few unresolved facts that materially affect understanding or future change analysis. Do not fill this section with every missing detail.
+## Preconditions and business rules
 
-## Detailed references
+### BR-001 — Rule title
 
-Link only the relevant canonical views. Delete every item that does not apply to this Behavior:
+- Behavior:
+- Status: Confirmed
+- Evidence:
+  - `path/to/file.ext:line`
+  - `path/to/test.ext:line`
+- Notes:
 
-- [Endpoint matrix](../endpoints/endpoint-matrix.md)
-- [Data assets](../data/data-asset-catalog.md), [data lineage](../data/data-lineage.md), and [state transitions](../data/state-transition-matrix.md)
-- [Field catalog](../fields/field-catalog.md), [validation rules](../fields/validation-rule-matrix.md), and [field lineage](../fields/field-lineage.md)
-- [Runtime configuration](../runtime/runtime-config-matrix.md)
-- [External dependencies](../dependencies/dependency-matrix.md)
-- [Failure taxonomy](../reliability/failure-taxonomy.md)
+## Happy path
 
-## Technical traceability
+1. Describe the ordered executable steps.
+2. Cite important transitions inline or directly below the step.
 
-Keep concise source ranges for the material behavior facts here. Do not interrupt the main narrative with Evidence columns.
+## Data access and state changes
+
+| Operation | Resource | Key/record | State change | Status | Evidence |
+|---|---|---|---|---|---|
+| Read/Write | Resource | Identifier | Description | Confirmed | `path/to/file.ext:line` |
+
+## Outputs and side effects
+
+| Output | Destination | Contract/resource | Condition | Status | Evidence |
+|---|---|---|---|---|---|
+| Event/response/call | Destination | Name | Condition | Confirmed | `path/to/file.ext:line` |
+
+## Failures, retries, and partial success
+
+| Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
+|---|---|---|---|---|
+| Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
+
+## External dependency stubs
+
+For each dependency outside this repository, record the request/event/resource name, invocation evidence, observed contract, and unknown internal behavior.
+
+## Open questions and conflicts
+
+| Question or conflict | Why it matters | Status | Evidence needed |
+|---|---|---|---|
+| Item | Risk or impact | Unknown/Conflicting | Artifact or owner |
+
+## Evidence index
+
+- `path/to/file.ext:line` — what this location proves

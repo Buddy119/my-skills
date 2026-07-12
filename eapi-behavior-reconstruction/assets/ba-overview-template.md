@@ -1,42 +1,42 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-claim_ids: []
 tech_pack: "../tech-pack/repository-overview.md"
-knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every instruction with a BA-oriented repository explanation. Use claim_ids for material conclusions; do not leave this comment. The headings below are reader prompts, not a mandatory outline: rename, reorder, merge, or omit sections with no useful supported content, and state each material Unknown once. -->
-
-# Business repository overview
+# Business behavior overview
 
 [View technical repository overview](../tech-pack/repository-overview.md)
 
-## Business scope and evidence boundary
+## Business capabilities
 
-Explain what business or operational scope the repository can support, and what purpose, ownership, or end-to-end outcome remains outside the available evidence.
+Summarize supported business capabilities. Separate confirmed capabilities from inferred or unknown business purpose.
 
-## Participants and business journeys
+## Business actors and participants
 
-Introduce supported actors or system participants and the main journeys they take through this repository. Omit unsupported actors rather than filling a matrix.
+| Actor or participant | Observed role | Status |
+|---|---|---|
+| Person, channel, team, or system participant | Business-facing role | Confirmed/Inferred/Unknown |
 
-## Capabilities, decisions, and outcomes
+## Business behavior landscape
 
-Explain the supported capabilities, important business decisions or rules, and visible outcomes. Link each relevant BA Behavior and its Tech counterpart.
+| Capability | Behavior | Trigger | Outcome | Status | BA behavior | Tech behavior |
+|---|---|---|---|---|---|---|
+| Capability or Unknown | Business-readable title | Business request/event | Visible outcome | Confirmed/Inferred/Unknown | [BA](behaviors/repository.behavior-name.md) | [Tech](../tech-pack/behaviors/repository.behavior-name.md) |
 
-## Business information journey
+## External business participants
 
-Explain the principal business information, where it starts when known, how its meaning or state changes, and where it is used or sent. Link the business data lifecycle for detail.
+Describe external parties or systems by their business role and the purpose of the interaction. Keep protocols and field mappings in the Tech Pack.
 
-## Exceptions and external dependencies
+## Cross-behavior business rules
 
-Summarize business-visible exceptions, delayed or incomplete outcomes, recovery constraints, and external participants. Keep low-level protocols and component names in the Tech Pack, while preserving the business effect of asynchronous timing, duplicate delivery, and recovery when those facts change the visible outcome.
+Record only rules that are supported across multiple behaviors. Do not promote technical validation into policy.
 
-## Change-impact starting points
+## Business exceptions and dependencies
 
-Explain which Behaviors, rules, information objects, or external dependencies a BA should inspect first when evaluating a change.
+Summarize recurring business-visible exceptions, incomplete outcomes, recovery constraints, and external dependencies.
 
-## Coverage, questions, and navigation
+## Coverage and open questions
 
-Summarize material Unknown/Conflicting business meanings and link the capability map, Behavior catalog, data lifecycle, rule catalog, exception catalog, Tech overview, manifest, and coverage report.
+Explain which business and integration behaviors are represented, which technical behaviors were intentionally omitted, and which business meanings remain unknown or conflicting.

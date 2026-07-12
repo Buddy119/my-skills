@@ -1,146 +1,92 @@
 ---
-endpoint_id: "EP-POST-resource"
-primary_behavior_id: "repository.behavior-name"
-title: "Human-readable API operation title"
+behavior_id: "repository.behavior-name"
+title: "Human-readable API contract title"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-claim_ids: []
 entry_point: "handler-or-route"
-operation_id: "operationName-or-unknown"
 method: "GET|POST|PUT|PATCH|DELETE|other"
 route: "/normalized/route"
 contract_status: "Confirmed|Inferred|Conflicting|Unknown"
-contract_coverage: "complete|partial|blocked"
-behavior_document: "../../behaviors/repository.behavior-name.md"
-endpoint_matrix: "../endpoint-matrix.md"
-openapi_document: null
+behavior_document: "../behaviors/repository.behavior-name.md"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every instruction. Bind method, route, request/response rows, validation rules, outcomes, and examples to passing CLM IDs. The consumer summary may synthesize naturally; the template supplies no contract facts. -->
+# API contract title
 
-# API operation title
-
-[← Back to technical behavior](../../behaviors/repository.behavior-name.md) · [Endpoint matrix](../endpoint-matrix.md)
-
-> This document describes only the contract observable at the recorded repository commit; it is not an assumed industry-standard contract.
+[← Back to behavior](../behaviors/repository.behavior-name.md)
 
 ## Endpoint summary
 
-Begin with a short consumer-oriented explanation of when this operation is called, the main information the consumer supplies, and the result the consumer can observe. Omit any part the repository does not establish; keep exact method, route, schema, and status values in the structured contract below.
-
-| Property | Contract value | Status |
-|---|---|---|
-
-Add only properties backed by passing claims. Do not use common API defaults.
+| Property | Observed value | Status | Evidence |
+|---|---|---|---|
+| Method and route | `METHOD /normalized/path` | Confirmed | `path/to/file.ext:line` |
+| Authentication | Scheme or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
+| Content type | Value or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
 
 ## API input contract
 
-### Headers
+### L1 — Executable input evidence
 
-| Name | Type/format | Required | Example | Rules and meaning | Status |
-|---|---|---:|---|---|---|
+| Location | Field path | Type/format | Required | Nullable | Default | Validation and normalization rules | Status | Evidence |
+|---|---|---|---:|---:|---|---|---|---|
+| Header/path/query/body | `field.path` | Type | Yes/No/Conditional | Yes/No/Unknown | None/value | Length, range, pattern, enum, conversion, or cross-field rule | Confirmed | `path/to/file.ext:line` |
 
-Use a scoped absence claim when no header consumption is observed.
+### L2 — Schema-level input evidence
 
-### Path parameters
+| Model/schema | Field path | Type/format | Declared constraints | Runtime use observed | Status | Evidence |
+|---|---|---|---|---:|---|---|
+| Model or schema | `field.path` | Type | Required/nullable/enum/etc. | Yes/No | Schema-level | `path/to/schema.ext:line` |
 
-| Name | Type/format | Required | Example | Validation and meaning | Status |
-|---|---|---:|---|---|---|
+### L3 — Shared or opaque input transformation
 
-### Query parameters
-
-| Name | Type/format | Required | Default | Allowed values | Meaning and rules | Status |
-|---|---|---:|---|---|---|---|
-
-### Request body schema
-
-| Field path | Type/format | Required | Nullable | Allowed values or constraints | Default | Description | Status |
-|---|---|---:|---:|---|---|---|---|
-
-Use exact evidence-backed paths. Distinguish missing, `null`, blank, zero, and `false` only when their behavior is established.
+| Shared component | Known input/output | Confidence | Limitation | Evidence |
+|---|---|---|---|---|
+| Transformer/controller/mapper | Known fields or None observed | Inferred/Unknown | Unavailable or dynamic implementation | `path/to/file.ext:line` |
 
 ### Request-level rules
 
-| Rule ID | Rule | Applies to | Rejection result | Status |
+| Rule ID | Rule | Failure result | Status | Evidence |
 |---|---|---|---|---|
-
-### Request example
-
-Omit this subsection when no complete or explicitly partial example is supported. Never synthesize a representative payload.
+| API-IN-001 | Content, conditional, or cross-field rule | Status/error | Confirmed | `path/to/file.ext:line` |
 
 ## API output contract
 
 ### Response outcomes
 
-| Scenario | HTTP status | Response body | Relevant headers | Retryable by consumer | Status |
-|---|---:|---|---|---:|---|
+| Condition | HTTP status | Body/schema | Relevant headers | Status | Evidence |
+|---|---:|---|---|---|---|
+| Success or failure condition | 200/400/etc. | Schema or Unknown | Header or None | Confirmed | `path/to/file.ext:line` |
 
-Add only observed outcomes. Do not infer conventional 2xx, 4xx, or 5xx responses.
+### L1 — Executable output evidence
 
-### Success response body schema
-
-| Field path | Type/format | Presence | Nullable | Source/default | Allowed values or output rules | Description | Status |
+| Field path | Type/format | Present when | Nullable | Source/default | Output rules | Status | Evidence |
 |---|---|---|---:|---|---|---|---|
+| `field.path` | Type | Always/condition | Yes/No/Unknown | Source, constant, or computed | Masking, formatting, enum, rounding, or inclusion rule | Confirmed | `path/to/file.ext:line` |
 
-### Success response example
+### L2 — Schema-level output evidence
 
-Omit this subsection when no evidence-backed example exists.
+| Model/schema | Field path | Type/format | Declared constraints | Runtime write observed | Status | Evidence |
+|---|---|---|---|---:|---|---|
+| Model or schema | `field.path` | Type | Nullable/enum/etc. | Yes/No | Schema-level | `path/to/schema.ext:line` |
 
-### Error response schema
+### L3 — Shared or opaque output transformation
 
-| Field path | Type/format | Presence | Nullable | Description | Status |
-|---|---|---|---:|---|---|
+| Shared component | Known output | Confidence | Limitation | Evidence |
+|---|---|---|---|---|
+| Transformer/controller/mapper | Known fields or None observed | Inferred/Unknown | Unavailable or dynamic implementation | `path/to/file.ext:line` |
 
-If serialization is opaque, create an audited `Unknown` claim rather than inventing an envelope.
+### Output and error rules
 
-### Error catalogue
-
-| HTTP status | Error code | Triggering condition | Message rule | Consumer action | Status |
-|---:|---|---|---|---|---|
-
-### Error response example
-
-Omit this subsection when no evidence-backed example exists.
-
-## Contract semantics
-
-| Concern | Observed contract | Status |
-|---|---|---|
-
-Include only semantics relevant to this operation and supported by passing claims.
+| Rule ID | Rule | Applies to | Status | Evidence |
+|---|---|---|---|---|
+| API-OUT-001 | Response or error rule | Status/field | Confirmed | `path/to/file.ext:line` |
 
 ## Open questions and conflicts
 
-| Question or conflict | Contract impact | Status | Evidence needed |
+| Question or conflict | Why it matters | Status | Evidence needed |
 |---|---|---|---|
-
-## Evidence appendix
-
-### Evidence coverage summary
-
-| Contract area | L1 executable evidence | L2 schema evidence | L3 shared/opaque evidence | Final coverage |
-|---|---|---|---|---|
-
-### L1 — Executable evidence
-
-| Contract item | Observed behavior | Status | Evidence |
-|---|---|---|---|
-
-### L2 — Schema-level evidence
-
-| Model/schema | Contract item | Declaration | Runtime use observed | Status | Evidence |
-|---|---|---|---:|---|---|
-
-### L3 — Shared or opaque evidence
-
-| Shared component | Contract area | What is known | Limitation | Status | Evidence |
-|---|---|---|---|---|---|
-
-### Evidence conflicts
-
-| Contract item | Executable observation | Schema/published observation | Resolution | Status |
-|---|---|---|---|---|
+| Item | Contract impact | Unknown/Conflicting | Artifact or owner |
 
 ## Evidence index
 
-List only source ranges owned by this contract's passing claims.
+- `path/to/file.ext:line` — what this location proves
+

@@ -2,68 +2,63 @@
 
 ## Scope
 
-Apply this policy to every discovered inbound endpoint. Reconstruct the consumer-visible contract actually enforced or emitted by the implementation at the recorded commit. Write one endpoint-owned contract at `tech-pack/endpoints/contracts/<endpoint-id>.api-contract.md`. Link it to the endpoint matrix and its primary Tech Behavior. Do not rely on DTO names alone or claim to recover the original published specification.
+Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write it as a separate API contract document, not inline in the behavior document. Link both documents to each other using relative Markdown links. Do not rely on DTO names alone.
 
-## Contract-first organization
+## Evidence layers
 
-Organize the document for an API consumer, not by source-evidence type:
+Keep these layers separate in both input and output contracts:
 
-1. Endpoint identity, purpose, consumer, security, media types, and idempotency.
-2. Request headers, path parameters, query parameters, body schema, validation rules, and example.
-3. Response outcomes by HTTP status, success schema, error schema/catalogue, and examples.
-4. Consumer-visible semantics such as duplicate requests, concurrency, pagination, timestamps, empty collections, unknown fields, and asynchronous completion when applicable.
-5. Open questions and conflicts.
-6. An Evidence Appendix containing L1, L2, and L3 evidence.
+- **L1 — Executable evidence:** Fields directly read, validated, defaulted, transformed, or written by executable implementation. This is the strongest contract evidence.
+- **L2 — Schema-level evidence:** Fields declared by request/response models, OpenAPI, JSON Schema, annotations, or generated types but not directly exercised by the traced implementation. Label them `schema-level`; do not imply runtime enforcement without L1 evidence.
+- **L3 — Shared or opaque transformer evidence:** Fields produced or consumed through shared controllers, common transformers, generated mappers, reflection, or unavailable libraries. Mark exact fields `Inferred` or `Unknown` unless the transformer implementation is inspected.
 
-Remove example rows and irrelevant optional sections from the generated document. Do not present common but unobserved status codes, headers, fields, or error envelopes as supported. Write `None observed`, `N/A`, or `Unknown` where absence or uncertainty matters.
+Do not merge fields from weaker layers into L1. If a layer has no evidence, write `None observed` rather than omitting the layer.
 
 ## Input contract
 
-Enumerate every observed input location separately:
+Enumerate every observed input location:
 
-- Authentication and behaviorally relevant headers.
+- Authentication and relevant headers.
 - Path parameters.
 - Query parameters.
 - Request body fields, including nested objects and arrays.
 
-For each field record the exact dotted path, type/format, requiredness, nullability, allowed values or constraints, default, meaning, and status. Use `[]` for array members. Distinguish missing, null, blank, zero, and false when behavior differs.
+For each field record:
 
-Record request-level rules such as content type, conditional requiredness, mutual exclusion, cross-field conditions, normalization, and conversion. Include a JSON request example only from supported fields and label it `Partial` when the complete shape is unavailable.
+- Exact dotted path and location.
+- Type and format.
+- Requiredness and nullability.
+- Default or fallback behavior.
+- Normalization or conversion.
+- Validation rules, including ranges, lengths, patterns, enum values, and cross-field conditions.
+- Evidence status and source/test/schema citations.
+
+Distinguish missing, null, blank, zero, and false when the code treats them differently. Record request-level rules such as content type, payload size, mutual exclusion, and conditional requiredness.
 
 ## Output contract
 
-Create a response outcome matrix from observed behavior. For every outcome record:
+Record every observed response outcome:
 
-- Triggering condition or scenario.
-- HTTP status.
-- Body/schema.
-- Relevant headers.
-- Consumer retryability when it can be supported.
-- Evidence status.
+- HTTP status code.
+- Triggering condition.
+- Response schema or body shape.
+- Headers when behaviorally relevant.
+- Error code and message rules.
 
-For success fields record exact dotted path, type/format, presence, nullability, source/default, allowed values or output rules, meaning, and status.
+For each success response field record:
 
-Document error body fields and an error catalogue only when the error shape, code, message, or serialization behavior is observable. If an unavailable framework or shared library owns serialization, write `Body shape: Unknown`; never invent a standard error envelope. Include JSON examples only from evidence-supported shapes.
+- Exact dotted path.
+- Type, format, presence, and nullability.
+- Source, computed rule, default, or constant.
+- Conditional inclusion, masking, rounding, date/time, and enum rules.
+- Evidence status and citations.
 
-## Consumer-visible semantics
-
-Document idempotency, duplicate request handling, optimistic concurrency, pagination, date/time format and timezone, empty collection representation, unknown field treatment, and timeout/asynchronous completion only when relevant. Mark unavailable semantics `Unknown` rather than deriving them from industry convention.
-
-## Evidence appendix
-
-Keep evidence confidence separate from the consumer-facing contract:
-
-- **L1 — Executable evidence:** Fields or outcomes directly read, validated, defaulted, transformed, written, or returned by executable implementation. This is the strongest evidence.
-- **L2 — Schema-level evidence:** Fields declared by request/response models, OpenAPI, JSON Schema, annotations, or generated types without observed runtime use. Label them `Schema-level`.
-- **L3 — Shared or opaque evidence:** Fields or errors passing through shared controllers, transformers, generated mappers, reflection, frameworks, or unavailable libraries. Mark exact details `Inferred` or `Unknown` unless inspected.
-
-Provide one coverage table across headers, path, query, request body, success responses, and error responses. Then provide separate L1, L2, and L3 tables. Record executable/schema conflicts explicitly. Do not repeat three evidence layers inside every request and response subsection.
+Do not invent fields for opaque framework-generated errors. Mark the body `Unknown` and identify the missing framework or integration evidence.
 
 ## Evidence and completeness
 
-- Prefer handler/controller, validation, serializer, schema, gateway mapping, and assertion-level test evidence together.
+- Prefer handler/controller, validation, serializer, schema, and test evidence together.
+- Record conflicts between published schemas and executable code.
+- Mark contract coverage partial when dynamic schemas, generated models, shared libraries, or infrastructure response mappings are unavailable.
 - Treat API Gateway or Lambda integration mappings as part of the contract when present.
-- Mark `contract_coverage: partial` when generated models, dynamic schemas, shared libraries, framework errors, or gateway mappings are unavailable.
-- Use `contract_status` for conclusion confidence and `contract_coverage` for analyzed surface completeness.
-- Keep source citations in the Evidence Appendix and Evidence Index; consumer-facing tables use statuses so they remain readable.
-- When multiple endpoints share a handler or behavior, preserve separate endpoint rows. Use `contract_alias_of` only when their complete observable contracts are equivalent; do not collapse endpoints merely because implementation is shared.
+- Cite assertion-level tests when they prove a validation failure, status code, error body, or conditional response field.

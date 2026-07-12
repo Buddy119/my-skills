@@ -1,368 +1,256 @@
 ---
 name: eapi-behavior-reconstruction
-description: "Automatically reconstruct an evidence-grounded, human-readable repository knowledge pack from one unfamiliar EAPI microservice or AWS Lambda repository using only its local path, remaining explicitly partial or Unknown wherever evidence is insufficient. Inventory behavior, inbound endpoints and endpoint-owned API contracts, data assets and lifecycle, state transitions, boundary fields, validation rules, internal field lineage, proven external HTTP mappings, runtime configuration, external dependency contract stubs, and a global failure taxonomy. Produce linked developer Tech Pack and business-readable BA Pack views, a canonical knowledge manifest, navigation map, and coverage report. Use when Codex needs to understand an undocumented repository, onboard BA or developers, recover implementation and business-facing knowledge, or prepare reliable impact-analysis inputs."
+description: "Automatically discover and reconstruct observable business and integration behaviors from a single EAPI microservice or AWS Lambda repository, starting with only a local path. Build a deterministic evidence index, then produce two linked outputs: a developer-oriented Tech Pack with source-backed behavior documents, API contracts, external HTTP mappings, and failure details; and a BA Pack that translates the same verified behavior into business capabilities, actors, triggers, rules, outcomes, and exceptions without inventing intent. Use when Codex needs to understand an unfamiliar EAPI repository, reverse-engineer undocumented behavior, create technical and business-readable documentation, or prepare evidence for later cross-service impact analysis."
 ---
 
-# EAPI Repository Knowledge Pack
+# EAPI Behavior Reconstruction
 
-Build the maximum defensible understanding of one repository at one recorded commit. Treat behavior as the navigation spine, not as the container for all repository knowledge. Keep every material conclusion traceable to code, tests, configuration, IaC, or schema evidence.
+Discover and reconstruct a repository's observable current behaviors without requiring the user to understand its handlers or architecture. Keep every material conclusion traceable to code, tests, configuration, or infrastructure definitions.
 
-## Required input
+## Required inputs
 
-Require only the local repository path.
+Require only the local path of one repository.
 
-Accept an optional analysis selector and output directory. A selector may target one endpoint, handler, event consumer, scheduled job, or behavior, but targeted output must be marked `partial`. Without a selector, discover and document the repository automatically; do not ask the user to explain the repository or choose entry points.
+Accept these optional inputs when supplied:
 
-Default output:
+- A behavior selector to restrict analysis to one Lambda handler, API route, event consumer, scheduled job, or named behavior.
+- An output directory; otherwise default to `behavior-docs/<repository-name>/` beside the working context.
 
-```text
-repository-knowledge-pack/<repository-name>/
-```
+When only the repository path is supplied, enter repository auto-discovery mode. Do not ask the user to identify handlers, choose behaviors, explain the repository, or rank entry points. Perform those tasks from source evidence.
 
-## Session-protected bundled runtime
+## Load the evidence policy
 
-Treat the directory containing this file as `SKILL_ROOT`. During repository analysis, `SKILL.md`, `agents/`, `assets/`, `bin/`, `references/`, `scripts/`, and `integrity/runtime-lock.json` are logically immutable release artifacts. Never edit, patch, chmod, copy-and-modify, replace, or regenerate them. Write only to the selected knowledge-pack output directory.
+Read [references/evidence-policy.md](references/evidence-policy.md) completely before analyzing source code. Apply its status and citation rules to every output.
 
-`SKILL_ROOT` may be a user-owned, writable installation such as `~/.copilot/skills/<skill-name>`. Writability alone is not a failure: do not stop, demand a read-only copy, or test writability by creating a file. The protection boundary is actual content integrity. Preflight validates every release artifact against the shipped lock, every launcher command revalidates afterward, and any observed change is terminal for that run.
+When executable code makes an outbound HTTP call to an external system, also read [references/field-mapping-policy.md](references/field-mapping-policy.md) completely and apply it. Do not load or apply field-mapping requirements to inbound APIs, events, queues, streams, persistence, or purely internal transformations.
 
-The bundled Python tools have no third-party dependencies. Never install packages, create a virtual environment, alter `PYTHONPATH`, or create a fallback script. Resolve `SKILL_ROOT` from the selected Skill path rather than the current working directory, and run tools only through:
+For an API behavior, read [references/api-contract-policy.md](references/api-contract-policy.md) completely and apply it to a separate API contract document.
+
+Before creating BA-facing outputs, read [references/ba-pack-policy.md](references/ba-pack-policy.md) completely and apply its translation and terminology rules.
+
+## Workflow
+
+### 1. Establish the analysis boundary
+
+- Confirm the repository root and record the current Git commit with `git rev-parse HEAD` when available.
+- Treat generated artifacts, vendored dependencies, build output, coverage output, and lockfiles as secondary evidence unless they define deployment behavior.
+- Do not access credentials, secret values, production customer data, or live AWS resources.
+- State excluded or unreadable areas in the final document.
+
+### 2. Inventory the repository
+
+Create a temporary deterministic evidence index before manually tracing files:
 
 ```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" <command> ...
+python3 scripts/build_evidence_index.py \
+  --repo <repository-root> \
+  --output <output-dir>/.work/evidence-index.json
 ```
 
-Before the first operation, run `preflight`. A validation failure means fix the generated pack, never the validator. An invocation failure means correct arguments. Any `FATAL_RUNTIME`, exit `70`, integrity mismatch, missing module, or unexpected traceback is terminal for the current run: report it and stop without repairing the Skill. Never use existing write permission to repair a bundled artifact during repository analysis.
+Use its file line counts, role hints, symbols, endpoint markers, outbound HTTP markers, test declarations, and assertion locations to plan source reads. Treat markers as search hints, not as conclusions.
 
-## Load policies
+Then search with `rg` and `rg --files` as needed. Detect:
 
-Read [references/runtime-integrity-policy.md](references/runtime-integrity-policy.md) completely before invoking any bundled command. Its execution and failure-handling rules are mandatory.
+- Languages, runtimes, frameworks, build files, and module boundaries.
+- Lambda handlers and runtime registration.
+- API Gateway, SAM, CDK, Serverless, Terraform, or CloudFormation definitions.
+- SQS, SNS, EventBridge, DynamoDB Stream, Kinesis, S3, and schedule triggers.
+- Step Functions tasks.
+- Tests, fixtures, schemas, and deployment configuration.
+- Data stores, outbound clients, shared libraries, Lambda Layers, and environment-controlled dependencies.
 
-Read [references/evidence-policy.md](references/evidence-policy.md), [references/claim-first-policy.md](references/claim-first-policy.md), and [references/knowledge-pack-policy.md](references/knowledge-pack-policy.md) completely before analysis. Claims define the fact boundary, not the final writing style.
-
-Read [references/editorial-synthesis-policy.md](references/editorial-synthesis-policy.md) before drafting `knowledge-map.md`, either overview, or any Tech/BA Behavior. Its high-freedom narrative rules are mandatory.
-
-Read [references/flow-perspective-policy.md](references/flow-perspective-policy.md) completely before creating any Tech or BA Behavior. Its separate-model and semantic-comparison requirements are mandatory.
-
-Read these policies when building their corresponding canonical pack:
-
-- [references/api-contract-policy.md](references/api-contract-policy.md) for inbound endpoints.
-- [references/data-lifecycle-policy.md](references/data-lifecycle-policy.md) for data assets, lineage, and state transitions.
-- [references/field-pack-policy.md](references/field-pack-policy.md) for fields, validation, and internal lineage.
-- [references/runtime-config-policy.md](references/runtime-config-policy.md) for environment, IaC, Lambda, and trigger configuration.
-- [references/dependency-contract-policy.md](references/dependency-contract-policy.md) for repository-external dependencies.
-- [references/failure-taxonomy-policy.md](references/failure-taxonomy-policy.md) for global failures.
-- [references/ba-pack-policy.md](references/ba-pack-policy.md) before creating BA views.
-
-Read [references/field-mapping-policy.md](references/field-mapping-policy.md) only after executable code proves an outbound HTTP/HTTPS call. Never create external mappings for inbound APIs, events, queues, streams, persistence, or internal object conversions.
-
-## Output structure
+Group related trigger, handler, and orchestration code into distinct behaviors. Avoid counting the API route, Lambda handler, and service method as three behaviors when they implement one flow. Keep health checks, framework glue, migrations, and deployment-only utilities in the catalog but classify them as technical behaviors.
 
 Create:
 
 ```text
-repository-knowledge-pack/<repository-name>/
-├── knowledge-manifest.yaml
-├── knowledge-map.md
-├── coverage-report.md
+behavior-docs/<repository-name>/
 ├── .work/
-│   ├── evidence-index.json
-│   ├── claim-ledger.json
-│   ├── claim-audit.json
-│   └── flow-models/
-│       ├── <behavior-id>.tech-flow.json
-│       └── <behavior-id>.ba-flow.json
+│   └── evidence-index.json
 ├── tech-pack/
 │   ├── repository-overview.md
 │   ├── behavior-catalog.yaml
 │   ├── behaviors/
-│   ├── endpoints/
-│   │   ├── endpoint-matrix.md
-│   │   └── contracts/
-│   ├── data/
-│   │   ├── data-asset-catalog.md
-│   │   ├── data-lineage.md
-│   │   └── state-transition-matrix.md
-│   ├── fields/
-│   │   ├── field-catalog.md
-│   │   ├── validation-rule-matrix.md
-│   │   ├── field-lineage.md
-│   │   └── external-http-mapping-matrix.md
-│   ├── runtime/
-│   │   └── runtime-config-matrix.md
-│   ├── dependencies/
-│   │   ├── dependency-matrix.md
-│   │   └── stubs/
-│   └── reliability/
-│       └── failure-taxonomy.md
+│   └── contracts/
 └── ba-pack/
     ├── business-overview.md
-    ├── capability-map.md
-    ├── business-data-lifecycle.md
-    ├── business-rule-catalog.md
-    ├── business-exception-catalog.md
     ├── behavior-catalog.md
     └── behaviors/
 ```
 
-Keep `knowledge-manifest.yaml` as the canonical relationship registry and `knowledge-map.md` as the human landing page.
+Copy [assets/repository-overview-template.md](assets/repository-overview-template.md) and [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml) into `tech-pack/`. Populate every discovered behavior with a stable ID, trigger, entry point, category, evidence, and analysis status.
 
-Generate `pack_format_version: 2`. Treat a legacy manifest without this key as v1 only when validating an existing pack; never generate a new v1 pack.
+If a behavior selector was supplied, use the inventory only to locate that behavior and analyze it in targeted mode. Otherwise continue automatically through every discovered business and integration behavior.
 
-## Workflow
+### 3. Plan internal analysis batches
 
-Run the immutable runtime preflight once before step 1:
+Order behaviors by dependency and signal:
+
+1. Public API and synchronous request handlers.
+2. Event, queue, stream, and scheduled consumers.
+3. Shared orchestration behaviors referenced by multiple entry points.
+4. Technical behaviors.
+
+Process at most five behaviors in one internal batch to keep evidence focused. Persist completed documents and update `behavior-catalog.yaml`, then continue with the next batch without asking the user to select it. Stop early only when the repository is inaccessible, required permissions are unavailable, or source ambiguity makes further claims unsafe; record the exact blocker and partial coverage.
+
+### 4. Trace each behavior
+
+Follow the executable path from entry point to observable outcomes:
+
+1. Parse and map the input.
+2. Apply validation and authorization.
+3. Execute domain or orchestration logic.
+4. Read and write data.
+5. Call external services.
+6. Publish events or enqueue messages.
+7. Map the response.
+8. Handle failures, retries, idempotency, compensation, and partial success.
+
+Inspect tests alongside implementation. For each behavior, when relevant tests exist, trace at least one or two concrete assertions that prove core rules or outcomes; prioritize a failure-path assertion. Cite the assertion or expectation lines and their setup/trigger when needed. A test filename, test class, or test method declaration alone is not behavioral evidence.
+
+Inspect IaC and configuration for runtime facts such as trigger filters, timeouts, retries, DLQs, permissions, resource names, and environment-dependent wiring.
+
+Stop at repository boundaries. Represent calls or events owned elsewhere as external dependency stubs; do not infer the other repository's internal behavior.
+
+Create a Mermaid `flowchart` for every behavior. Show the trigger, major internal steps, decisions, data access, external calls, emitted events, success result, and material failure branches. Keep the diagram at behavior level rather than reproducing every method call. Mark inferred nodes with `(Inferred)` and explain their evidence status in the surrounding prose.
+
+### 5. Trace external HTTP field mappings when applicable
+
+First locate a real outbound HTTP/HTTPS invocation in executable code, such as an HTTP client, SDK wrapper that performs HTTP, generated REST client, or framework HTTP adapter. Record it in `external_http_calls` with its client/operation, method, target, and source evidence.
+
+Only after confirming that call, generate mappings for:
+
+- EAPI fields to the external HTTP request path, query, header, or body.
+- External HTTP response fields back to EAPI fields when the response is consumed.
+
+Do not create `field_mappings` for the repository's inbound API request/response, EventBridge, SQS, SNS, streams, DTO-to-domain, domain-to-persistence, or other internal conversions. Document inbound APIs in the API contract and non-HTTP integrations in inputs, outputs, side effects, and dependency stubs.
+
+For applicable external mappings, record direct copies, renames, nested-path changes, type/format conversions, enum translations, defaults, constants, conditional mappings, computed fields, one-to-many or many-to-one transformations, masking, truncation, and intentionally dropped fields. Cite both the source-field read and target-field write when they occur at different locations.
+
+Use stable boundary names that can later connect documents. Do not manufacture an upstream or downstream field name that is unavailable in this repository; create an `Unknown` mapping endpoint or an open question instead.
+
+### 6. Separate observations from interpretation
+
+- Describe what the implementation currently does.
+- Do not claim to recover the original requirement or design rationale.
+- Label each material statement as `Confirmed`, `Inferred`, `Conflicting`, or `Unknown` according to the evidence policy.
+- Record contradictions rather than choosing the most convenient source.
+- Record unanswered transactional, retry, contract, or data-consistency questions explicitly.
+
+### 7. Create the Tech Pack
+
+Copy and complete [assets/behavior-document-template.md](assets/behavior-document-template.md). Preserve the YAML keys even when a list is empty so future aggregation remains deterministic. This is the technical source of truth.
+
+Write each document to `tech-pack/behaviors/<behavior-id>.md`. After validation, update the corresponding catalog entry from `discovered` to `documented` or `blocked`.
+
+For each API behavior:
+
+1. Copy and complete [assets/api-contract-document-template.md](assets/api-contract-document-template.md) as `tech-pack/contracts/<behavior-id>.api-contract.md`.
+2. Keep L1 executable, L2 schema-level, and L3 shared/opaque-transformer evidence separate in that contract.
+3. Set the behavior document's `api_contract_document` to `../contracts/<behavior-id>.api-contract.md`.
+4. Add a short `API contract` section containing a relative Markdown link to the contract; do not duplicate contract tables in the behavior document.
+5. Set the contract's `behavior_document` to `../behaviors/<behavior-id>.md` and include a visible return link.
+
+For non-API behaviors, keep `api_contract_document: null` and omit the `API contract` section.
+
+Classify each behavior as `business`, `integration`, or `technical`. For business and integration behaviors, reserve `ba_behavior_document` for `../../ba-pack/behaviors/<behavior-id>.md` and add a short `BA view` link section. For purely technical behaviors, set `ba_behavior_document: null` and omit that section.
+
+Before deriving the BA document, pre-validate each business or integration Tech Behavior while allowing only the not-yet-created BA target file:
 
 ```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" preflight
+python3 scripts/validate_behavior_doc.py \
+  <tech-behavior-document.md> \
+  --repo <repository-root> \
+  --allow-missing-ba
 ```
 
-### 1. Establish boundary and evidence index
+The BA metadata and visible Markdown link are still required in this mode. Do not use this option for final validation.
 
-- Resolve the repository root and record `git rev-parse HEAD` when available.
-- Exclude generated output, dependencies, coverage, build artifacts, and vendored code unless they define deployment behavior.
-- Never access live AWS resources, credentials, secret values, or production/customer data.
-- Record inaccessible, dynamic, generated, or environment-only areas.
+Use stable connection names when the code provides them:
 
-Scaffold the complete static pack structure first:
+- HTTP method plus normalized route.
+- Event source plus event/detail type or schema name.
+- Queue, topic, event bus, table, state machine, and Lambda logical names.
+- Fully qualified external client or operation names when resource names are indirect.
 
-```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" scaffold \
-  --repo <repository-root> \
-  --pack <pack-root>
-```
-
-The scaffold command populates the repository name and commit, creates all canonical static documents and dynamic output directories, and refuses to overwrite existing static documents unless `--force` is explicitly supplied. It never overwrites the claim ledger/audit or deletes dynamic behavior, contract, flow-model, or dependency-stub documents.
-
-Then build the deterministic evidence index before manual tracing:
+Before writing each citation, preview and range-check it:
 
 ```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" index \
-  --repo <repository-root> \
-  --pack <pack-root>
-```
-
-Use file line counts, roles, symbols, and markers for endpoints, handlers, outbound HTTP, configuration, data access, state, events, failures, retry, tests, and assertions as search hints. Markers are not conclusions.
-
-### 2. Discover candidates and build atomic claims
-
-Group trigger, handler, controller, service, and orchestration code into observable behaviors. Do not count layers in one execution path as separate behaviors. Classify health checks, framework glue, migrations, and deployment-only utilities as technical.
-
-Build one endpoint record per distinct inbound method and route. Do not merge endpoints because they share a handler. When the same observable contract is genuinely shared, use `contract_alias_of` and explain the equivalence.
-
-Trace each executable behavior through:
-
-1. Input parsing and boundary mapping.
-2. Authentication, authorization, validation, normalization, and defaults.
-3. Domain/orchestration decisions.
-4. Data reads, writes, state changes, and transaction boundaries.
-5. External dependencies and emitted messages/events.
-6. Response/result mapping.
-7. Failures, retries, DLQs, compensation, and partial success.
-
-Inspect relevant tests alongside implementation. Extract one or two concrete assertions for core outcomes when available; prioritize a failure path. A test name alone is not behavioral evidence.
-
-Work in manageable behavior batches based on repository complexity. For every potential Claim, open the exact source range before recording it. Capture its canonical hash and ledger entry:
-
-```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" show-evidence \
-  --repo <repository-root> \
-  --json \
-  --source-kind implementation \
-  --relation supports \
-  --support-level direct \
-  path/to/file.ext:start-end
-```
-
-Populate [assets/claim-ledger-template.json](assets/claim-ledger-template.json) at `.work/claim-ledger.json`. Keep each claim atomic and single-sentence. Split observed local mutation, opaque method invocation, external outcome, and business meaning into separate claims; never promote the latter three from a method name or template. For Confirmed/Inferred technical claims, choose non-generic verification tokens that occur in both the statement and the supporting source excerpt.
-
-Validate the draft ledger, then re-read every cited range in a separate semantic audit and populate [assets/claim-audit-template.json](assets/claim-audit-template.json):
-
-```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-claims \
-  --repo <repository-root> \
-  --pack <pack-root> \
-  --draft
-
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" prepare-audit \
-  --repo <repository-root> \
-  --pack <pack-root>
-
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-claims \
-  --repo <repository-root> \
-  --pack <pack-root>
-```
-
-Only audit verdict `Pass` may feed the manifest, flow models, or documents. Persist completed claim batches and continue automatically.
-
-Before accepting the audit, replace `review.mode`, `author_id`, and `reviewer_id`. The reviewer must be a different agent/context from the claim author. Reviewer metadata is an accountability control, not proof by itself; retain the separate semantic-review pass.
-
-### 3. Create the canonical inventory from passing claims
-
-Populate the scaffolded [assets/knowledge-manifest-template.yaml](assets/knowledge-manifest-template.yaml), [assets/knowledge-map-template.md](assets/knowledge-map-template.md), and [assets/coverage-report-template.md](assets/coverage-report-template.md).
-
-Assign stable IDs to behaviors, endpoints, data assets, fields, rules, dependencies, configurations, failures, proven outbound HTTP calls, and mappings. Use the ID conventions in the knowledge-pack policy; never use discovery-order numbering.
-
-Treat the manifest as a relationship registry, never as evidence. Every entity must reference passing `claim_ids`, and each referenced claim must list that entity in `subject_ids`. The entity must also have a compatible claim type: for example, `FAIL-` requires `claim_type: failure`, an endpoint requires `endpoint-contract`, and a field mapping requires `mapping`. Build relationships from claims rather than turning behavior metadata into facts.
-
-Bind machine-readable values, not only entity IDs: endpoint method/route, field path, configuration key, concrete dependency type, failure category, and mapping direction must occur in the bound Claim statement, verification tokens, or render terms. Keep `tech-pack/behavior-catalog.yaml` an exact manifest projection for repository/commit, analysis mode, behavior identity/status/paths/relationships/claims, and summary counts.
-
-Replace every scaffold example, instruction, and `SCAFFOLD_ONLY` sentinel. For an empty entity set, use `section: []`. A statement such as `None observed` requires a scoped `absence` or `coverage-gap` claim; never infer global absence from an empty metadata list.
-
-### 4. Build endpoint-owned API contracts
-
-Complete the scaffolded [assets/endpoint-matrix-template.md](assets/endpoint-matrix-template.md) at `tech-pack/endpoints/endpoint-matrix.md`.
-
-For every inbound endpoint, copy [assets/api-contract-document-template.md](assets/api-contract-document-template.md) to `tech-pack/endpoints/contracts/<endpoint-id>.api-contract.md`.
-
-- Organize the contract for the API consumer: endpoint/security, request, response outcomes, errors, examples, and applicable semantics.
-- Put L1 executable, L2 schema, and L3 shared/opaque evidence in the Evidence Appendix.
-- Link the contract to the endpoint matrix and its primary Tech Behavior.
-- Link every API entry behavior and shared behavior reached from an endpoint to each relevant endpoint and contract.
-- Keep unobserved route, gateway, authorization, status, or error behavior `Unknown`; do not fill industry-standard defaults.
-- Bind every structured contract row, machine-readable value, and example to passing Claim IDs. Contract frontmatter values such as method, route, operation ID, and status are facts too and must be covered. Let the short consumer-oriented summary synthesize those facts naturally without sentence-level markers.
-
-### 5. Build the Tech Behavior view
-
-Use [assets/repository-overview-template.md](assets/repository-overview-template.md) as an editorial guide and complete the machine-readable [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml). Copy [assets/behavior-document-template.md](assets/behavior-document-template.md) for each behavior, then adapt its Narrative outline: keep the required orientation and flow, but rename, reorder, merge, or omit other sections when the supported material reads better that way. Never generate filler or repeat the same Unknown to satisfy template headings.
-
-Before writing a Tech Behavior, copy [assets/tech-flow-model-template.json](assets/tech-flow-model-template.json) to `.work/flow-models/<behavior-id>.tech-flow.json`. Populate the diagram caption Claim IDs, every node's `claim_ids`, and every edge's `claim_ids` from passing claims. An edge needs evidence for its sequence or branch; direct executable control flow is sufficient for ordinary technical order, while business causality and high-risk guarantees need an explicit relationship Claim. Raw evidence on a Tech node must belong to those claims.
-
-Write behaviors to `tech-pack/behaviors/<behavior-id>.md`. Render Mermaid node labels from the Tech model, then write the Summary and execution story independently for a developer. Use the document-level `claim_ids` as the material fact set; do not attach Claim markers to every sentence or require Claim wording in prose.
-
-Keep the model at the canonical `.work/flow-models/<behavior-id>.tech-flow.json` path and render its exact edge source, target, and condition topology. Do not substitute another in-pack or out-of-pack model with the same node count.
-
-Behaviors summarize repository-wide knowledge; do not duplicate full API contracts, field matrices, runtime matrices, dependency stubs, or failure definitions.
-
-For `business` and `integration` behaviors, reserve `ba_behavior_document: ../../ba-pack/behaviors/<behavior-id>.md`. Technical behaviors use `null`.
-
-### 6. Build the Data Pack
-
-Complete the scaffolded documents based on:
-
-- [assets/data-asset-catalog-template.md](assets/data-asset-catalog-template.md)
-- [assets/data-lineage-template.md](assets/data-lineage-template.md)
-- [assets/state-transition-matrix-template.md](assets/state-transition-matrix-template.md)
-
-Account for every behaviorally relevant read, write, response, message, event, and external call. Distinguish local mutation, opaque persistence invocation, proven storage mutation, and supported business state transition as separate claims. Record transaction, idempotency, concurrency, rollback, and partial state only when directly supported.
-
-### 7. Build the Field Pack
-
-Complete the scaffolded documents based on:
-
-- [assets/field-catalog-template.md](assets/field-catalog-template.md)
-- [assets/validation-rule-matrix-template.md](assets/validation-rule-matrix-template.md)
-- [assets/field-lineage-template.md](assets/field-lineage-template.md)
-- [assets/external-http-mapping-matrix-template.md](assets/external-http-mapping-matrix-template.md)
-
-Catalog boundary-visible or behaviorally significant fields, not every local variable. Give every manifest field a `boundary_kind` and `observation_kind`. A `.get("status")` or equivalent lookup on an opaque value is a `local-lookup` / `local-lookup-key`, not a Confirmed external response field. A Confirmed outbound-HTTP response field requires direct schema evidence. Separate executable validation from schema declaration. Use Field Lineage for internal API/domain/storage/event transformations.
-
-In the Field Catalog, bind type/format, requiredness, nullability, ownership/meaning, source/default, and sensitivity cells to claims. When a cell has no supporting claim, write `Unknown` or `—`; do not fill standard-looking values for presentation completeness.
-
-Only after a real outbound HTTP call is proven, register an `HTTP-` call and `MAP-` records in the manifest and external mapping matrix. Behavior documents reference those IDs.
-
-### 8. Build Runtime, Dependency, and Failure Packs
-
-Complete the scaffolded runtime, dependency-matrix, and failure documents; copy the dynamic dependency-stub template as needed:
-
-- [assets/runtime-config-matrix-template.md](assets/runtime-config-matrix-template.md)
-- [assets/dependency-matrix-template.md](assets/dependency-matrix-template.md)
-- [assets/external-dependency-stub-template.md](assets/external-dependency-stub-template.md) for each material external dependency
-- [assets/failure-taxonomy-template.md](assets/failure-taxonomy-template.md)
-
-Record configuration definitions and reads, defaults, Lambda/trigger settings, behavior effects, and missing/invalid outcomes. Record secret names only.
-
-Treat repository-external systems and unavailable behaviorally material components as black-box stubs. A client invocation proves the attempted call and observed arguments, not remote success, delivery, persistence, receipt, or downstream behavior.
-
-Assign every material failure one `FAIL-` ID backed by a passing `claim_type: failure`. Behavior failure tables reference this global taxonomy. A locally returned `statusCode`/`code` literal remains a local result unless deployment or consumer-contract evidence establishes failure semantics. Distinguish exception, consumer-visible outcome, retry cause, configured retry, rollback, and partial success.
-
-### 9. Derive the BA Pack
-
-Generate BA views only from passing claims at the same commit. BA claim status must never be stronger than the underlying Tech claim. Use the repository-wide BA templates as reader-question guides and copy the dynamic behavior template as needed. Adapt, merge, reorder, or omit Narrative sections when evidence is sparse; the templates are not fixed copy-and-fill schemas:
-
-- [assets/ba-overview-template.md](assets/ba-overview-template.md)
-- [assets/ba-capability-map-template.md](assets/ba-capability-map-template.md)
-- [assets/ba-business-data-lifecycle-template.md](assets/ba-business-data-lifecycle-template.md)
-- [assets/ba-business-rule-catalog-template.md](assets/ba-business-rule-catalog-template.md)
-- [assets/ba-business-exception-catalog-template.md](assets/ba-business-exception-catalog-template.md)
-- [assets/ba-behavior-catalog-template.md](assets/ba-behavior-catalog-template.md)
-- [assets/ba-behavior-document-template.md](assets/ba-behavior-document-template.md) for business/integration behaviors
-
-For each business/integration behavior, copy [assets/ba-flow-model-template.json](assets/ba-flow-model-template.json) to `.work/flow-models/<behavior-id>.ba-flow.json`. Build it independently from passing business-meaning claims, and bind the diagram caption, nodes, and edges to passing Claims. Do not infer actors, recipients, purpose, ownership, rules, or business state from component names or technical literals. Do not connect Unknown business facts without supporting evidence. When business meaning is unavailable, produce a shorter or single-node BA flow with an audited `Unknown` claim rather than mirroring Tech.
-
-Keep the BA model at that canonical path and render its exact edge topology and conditions; manifest, BA frontmatter, and resolved model path must agree.
-
-If you create temporary generation code, use separate Tech and BA inputs and separate render functions. The Tech renderer may load only the Tech model and the BA renderer only the BA model. Never use a common `meta["flow"]`/`meta["summary"]`, never fall back from a missing BA model to Tech content, and fail generation if the required perspective model is absent. The implementation technique is otherwise flexible; judge the generated prose by material accuracy and reader usefulness.
-
-Render Mermaid labels from the BA model, but write the BA Summary independently around the business event, decision, information, visible outcome, and important unknowns. The Tech and BA models must remain separate files with different perspectives and node ID namespaces.
-
-Use business capabilities, actors, information, decisions, outcomes, and visible exceptions. Do not include source citations, classes, methods, AWS identifiers, API field paths, configuration keys, or exception classes. Link to canonical Tech documents for details. Preserve evidence confidence.
-
-### 10. Preview evidence and validate
-
-Before drafting any citation, range-check it:
-
-```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" show-evidence \
+python3 scripts/show_evidence.py \
   --repo <repository-root> \
   path/to/file.ext:start-end
 ```
 
-Run individual validation:
+Use the displayed line numbers to narrow the citation to the smallest range that proves the claim. Never draft a range from memory or search-output offsets. Use repository-relative POSIX citations as `path/to/file.ext:line` or `path/to/file.ext:start-end`.
+
+### 8. Derive the BA Pack
+
+Generate the BA Pack only after the related Tech Pack documents pass pre-validation and any applicable API contract passes full validation.
+
+1. Copy [assets/ba-overview-template.md](assets/ba-overview-template.md) to `ba-pack/business-overview.md`.
+2. Copy [assets/ba-behavior-catalog-template.md](assets/ba-behavior-catalog-template.md) to `ba-pack/behavior-catalog.md`.
+3. For every `business` or `integration` behavior, copy [assets/ba-behavior-document-template.md](assets/ba-behavior-document-template.md) to `ba-pack/behaviors/<behavior-id>.md`.
+4. Translate the verified behavior into business language: business capability, actors, trigger, preconditions, rules, business flow, inputs/outputs, outcomes, exceptions, and external business interactions.
+5. Do not repeat classes, handlers, methods, AWS resources, source paths, field-level mappings, retry implementation, or API schemas in the BA narrative. Link to the Tech Behavior for those details.
+6. Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown`. Never convert a technical inference into a confirmed business purpose.
+7. Link BA documents back to `../../tech-pack/behaviors/<behavior-id>.md` and ensure the Tech Behavior links to the BA document.
+8. Exclude purely technical behaviors from BA behavior documents, but summarize their business relevance only when they materially affect a business outcome.
+
+### 9. Validate both packs
+
+Run:
 
 ```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-tech --document <tech-behavior.md> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-contract --document <endpoint-contract.md> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-ba --document <ba-behavior.md> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-flow --tech <tech-behavior.md> --ba <ba-behavior.md> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-readability --document <narrative-document.md> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-index --pack <pack-root> --repo <repository-root>
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-claims --pack <pack-root> --repo <repository-root>
+python3 scripts/validate_behavior_doc.py <behavior-document.md> --repo <repository-root>
 ```
 
-For a business/integration Tech Behavior whose BA target is not created yet, pre-validate with `--allow-missing-ba`; never use that flag for final validation.
-
-Finally validate the entire relationship graph, coverage, links, IDs, commit consistency, BA citation boundary, and source citation bounds:
+For API behaviors, also run:
 
 ```bash
-python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" validate-pack \
-  --pack <pack-root> \
-  --repo <repository-root>
+python3 scripts/validate_api_contract.py <api-contract.md> --repo <repository-root>
 ```
 
-Rebuild the evidence index if any candidate repository file changed, appeared, or disappeared after indexing. Resolve all Core Fact errors. Treat readability diagnostics as prompts for Reader Review; revise when the document is hard to understand rather than writing to a numeric threshold.
+For each BA behavior, run:
 
-Validator success is necessary but not sufficient. Before delivery, read each Narrative document as a reader and compare every linked Tech/BA pair side by side. Rewrite Claim Dump, template-shaped prose, or a BA flow that is still the Tech execution sequence with renamed nouns. Review material conclusions—trigger, decision, state/data change, external interaction, visible outcome, failure, contract, and business meaning—against the document Claim set. Do not audit ordinary phrasing, connective language, sentence count, or paragraph length word by word.
+```bash
+python3 scripts/validate_ba_behavior.py <ba-behavior.md>
+```
 
-## Delivery
+Resolve validation errors before delivering. Treat warnings as review items and mention any warning that remains intentional.
 
-Report pack path, pack format version, repository, commit, evidence-index repository fingerprint (especially when commit is `unknown`), immutable runtime bundle fingerprint, analysis mode, coverage status, entity/claim counts, strongest confirmed findings, important unknown/conflicting/blocked areas, Core Fact result, and Reader Review notes. Do not modify application source code unless separately requested.
+### 10. Deliver
+
+Report:
+
+- The Tech Pack and BA Pack directories, generated behavior paths, and API contract paths.
+- The analyzed repository and commit.
+- The number of discovered, documented, technical, and blocked behaviors.
+- The strongest confirmed findings.
+- The important inferred, conflicting, or unknown items.
+- Validation results for every behavior document.
+
+Do not modify application source code unless the user separately requests an implementation change.
 
 ## Quality bar
 
-Before completion, verify:
+Before completing, verify that:
 
-- `knowledge-manifest.yaml` accounts for every discovered entity and relationship.
-- Every repository assertion exists first as one atomic claim with current source-range hashes.
-- Every `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` claim satisfies its evidence invariant and has a passing semantic audit.
-- Every manifest entity, structured Reference fact, flow caption/node/edge, and material Narrative conclusion is supported by passing Claim IDs.
-- No template example, evidence-index marker, manifest value, flow metadata, or temporary generator is used as evidence.
-- No opaque `save`, client, queue, or publisher invocation is described as a completed external side effect without direct evidence.
-- `knowledge-map.md` lets BA and developers reach every canonical view.
-- Every executable entry point has a documented disposition.
-- Every endpoint has a matrix row, endpoint-owned contract, and linked behavior.
-- Data lineage accounts for repository-visible origins, transformations, reads/writes, and destinations.
-- State transitions are evidence-backed and distinguish business state from storage mutation.
-- Field validation, internal lineage, and external HTTP mappings are separate canonical views.
-- External HTTP mappings exist only for proven outbound HTTP calls.
-- Every behaviorally relevant configuration read or IaC setting has a `CFG-` record.
-- Every material external dependency has a matrix disposition and contract stub when applicable.
-- Every material failure has one canonical `FAIL-` record referenced by behaviors.
-- BA views contain business language, no raw source citations, and no unsupported business intent.
-- Every Tech Behavior renders a separate `technical` flow model; every BA Behavior renders a separate `business` flow model.
-- Tech and BA never share one flow model, generic flow object, or fallback. Treat lexical similarity as a review signal unless the content is directly reused.
-- BA flow nodes contain business semantics and no implementation terms; Tech flow nodes describe implementation execution.
-- Final validation compares every linked Tech/BA pair; individual document validation alone is insufficient.
-- All documents use the same repository commit and all relative links resolve.
-- Coverage is never called complete while entry points, schemas, shared components, dynamic configuration, or repository signals remain undisposed.
-- No credential, secret value, production payload, or customer data is reproduced.
-- The final command completed through the immutable launcher, the post-command integrity check passed, and no release artifact or lock was changed during analysis.
+- The document covers the happy path and failure paths.
+- The `Behavior flow` section contains a readable Mermaid flowchart with decisions and material failure branches.
+- Business rules cite source or test evidence.
+- Matching tests contribute one or two assertion-level citations per behavior when available, with failure paths prioritized.
+- Data reads, writes, events, and external calls appear in both YAML metadata and prose.
+- `external_http_calls` and `field_mappings` are empty when no outbound HTTP call exists in executable code.
+- When an outbound HTTP call exists, record it in `external_http_calls`; include `field_mappings` only for its request and consumed response fields.
+- Every external HTTP mapping appears in metadata and the `External HTTP field mappings` section with call ID, transformation, condition, default, lossiness, confidence, and evidence.
+- Every API behavior document links to a separate API contract, and the contract links back to the behavior document.
+- Every API contract separates L1 executable, L2 schema-level, and L3 shared/opaque-transformer evidence for both input and output; absent layers are explicitly marked as not observed.
+- Every business or integration Tech Behavior links to one BA Behavior, and every BA Behavior links back.
+- BA documents use business actors, events, rules, outcomes, and exceptions; technical identifiers remain behind Tech Pack links.
+- BA documents contain no raw source citations and derive from a Tech Behavior at the same repository commit.
+- AWS behavior comes from IaC/configuration evidence when available.
+- External dependencies are named but not over-interpreted.
+- The document records the Git commit and analysis limitations.
+- No secret value or customer data is reproduced.
+- The catalog accounts for every discovered executable entry point as documented, technical, duplicate, excluded, or blocked.
+- Every citation was previewed with `show_evidence.py` before drafting and passes final validation.

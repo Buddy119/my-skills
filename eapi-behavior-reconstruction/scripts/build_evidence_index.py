@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -12,16 +11,13 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from runtime_guard import atomic_write_text, reject_descendant, resolve_outside_skill, run_guarded
-
 
 TEXT_EXTENSIONS = {
     ".java", ".kt", ".kts", ".groovy", ".scala", ".cs",
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
     ".py", ".go", ".rs", ".rb", ".php",
     ".yaml", ".yml", ".json", ".xml", ".toml", ".tf",
-    ".properties", ".conf", ".env", ".graphql", ".proto", ".sql",
-    ".sh", ".bash", ".hcl", ".ini", ".cfg", ".md",
+    ".properties", ".conf", ".env", ".graphql", ".proto",
 }
 
 SPECIAL_FILES = {
@@ -34,7 +30,6 @@ IGNORED_DIRS = {
     ".git", ".idea", ".vscode", "node_modules", "vendor", "dist",
     "build", "target", "out", "coverage", ".gradle", ".terraform",
     ".serverless", ".aws-sam", "__pycache__", ".pytest_cache",
-    ".work", "repository-knowledge-pack",
 }
 
 ROLE_PATH_RULES = {
@@ -47,8 +42,6 @@ ROLE_PATH_RULES = {
     "repository": re.compile(r"repository|dao|persistence", re.I),
     "transformer": re.compile(r"mapper|transformer|converter|assembler|serializer", re.I),
     "model-schema": re.compile(r"model|dto|schema|contract|entity|request|response", re.I),
-    "configuration": re.compile(r"config|configuration|properties|environment|setting|parameter|secret", re.I),
-    "reliability": re.compile(r"error|exception|failure|retry|dead.?letter|dlq|fallback", re.I),
     "infrastructure": re.compile(r"terraform|cloudformation|serverless|template|infrastructure|infra|cdk|sam", re.I),
 }
 
@@ -68,43 +61,6 @@ MARKER_RULES = {
     "external-http-call": re.compile(
         r"\b(?:fetch|axios\.(?:get|post|put|delete|patch)|requests\.(?:get|post|put|delete|patch))\s*\(|"
         r"\b(?:restTemplate|webClient|httpClient|client)\s*\.\s*(?:get|post|put|delete|patch|exchange|send|execute)\s*\(",
-        re.I,
-    ),
-    "config-read": re.compile(
-        r"\bos\.(?:environ|getenv)\b|\bprocess\.env\b|\bSystem\.getenv\s*\(|"
-        r"\bEnvironment\.GetEnvironmentVariable\s*\(|@Value\s*\(|"
-        r"\b(?:config|configuration|environment)\.(?:get|getProperty)\s*\(|"
-        r"\b(?:Ref|Fn::Sub|Fn::FindInMap):|\b(?:ssm|secretsmanager|parameterStore)\b",
-        re.I,
-    ),
-    "data-access": re.compile(
-        r"\b(?:dynamodb|documentClient|entityManager|jdbcTemplate|repository|dao)\b|"
-        r"\.(?:find|findById|query|scan|getItem|putItem|updateItem|deleteItem|save|insert|upsert)\s*\(|"
-        r"\b(?:SELECT|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b",
-        re.I,
-    ),
-    "event-publish": re.compile(
-        r"\b(?:publish|sendMessage|sendBatch|putEvents|putRecord|emit|enqueue)\s*\(|"
-        r"\b(?:sns|sqs|eventbridge|kinesis)\b.*\.(?:publish|send|put)",
-        re.I,
-    ),
-    "failure-branch": re.compile(
-        r"\b(?:throw|raise)\b|\b(?:catch|except)\b|\bstatusCode\s*[:=]\s*[45]\d\d\b|"
-        r"\b(?:deadLetter|dead-letter|DLQ|onFailure|fallback)\b",
-        re.I,
-    ),
-    "retry-resilience": re.compile(
-        r"\b(?:retry|retries|backoff|circuit.?breaker|visibilityTimeout|deadLetter|DLQ|RedrivePolicy|MaximumRetryAttempts)\b",
-        re.I,
-    ),
-    "state-mutation": re.compile(
-        r"\b(?:setStatus|updateStatus|transitionTo)\s*\(|\.status\s*=|"
-        r"\bUpdateExpression\b|\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|putItem|updateItem|save)\b",
-        re.I,
-    ),
-    "auth": re.compile(
-        r"\b(?:authorizer|authentication|authorization|authenticate|authorize|jwt|oauth|scope|permission)\b|"
-        r"\bAuthorization\b",
         re.I,
     ),
     "test-declaration": re.compile(
@@ -145,14 +101,6 @@ def is_candidate(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTENSIONS or path.name in SPECIAL_FILES
 
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def role_hints(relative_path: str, content: str) -> list[str]:
     roles = [role for role, pattern in ROLE_PATH_RULES.items() if pattern.search(relative_path)]
     if "test" in roles:
@@ -184,9 +132,7 @@ def collect_markers(lines: list[str], limit_per_kind: int) -> dict[str, list[dic
         for kind, pattern in MARKER_RULES.items():
             if len(markers[kind]) >= limit_per_kind or not pattern.search(line):
                 continue
-            # Store locations only. Raw line text can leak values and tempts a
-            # generator to treat search markers as behavioral evidence.
-            markers[kind].append({"line": line_number})
+            markers[kind].append({"line": line_number, "text": line.strip()[:240]})
     return {kind: values for kind, values in markers.items() if values}
 
 
@@ -198,11 +144,6 @@ def main() -> int:
     parser.add_argument("--max-symbols-per-file", type=int, default=300)
     parser.add_argument("--max-markers-per-kind", type=int, default=300)
     args = parser.parse_args()
-
-    for name in ("max_file_bytes", "max_symbols_per_file", "max_markers_per_kind"):
-        if getattr(args, name) <= 0:
-            print(f"ERROR: --{name.replace('_', '-')} must be a positive integer", file=sys.stderr)
-            return 2
 
     repo = args.repo.expanduser().resolve()
     if not repo.is_dir():
@@ -221,16 +162,9 @@ def main() -> int:
         relative = path.relative_to(repo).as_posix()
         try:
             if path.stat().st_size > args.max_file_bytes:
-                skipped.append(
-                    {
-                        "path": relative,
-                        "reason": "file exceeds max-file-bytes",
-                        "sha256": file_sha256(path),
-                    }
-                )
+                skipped.append({"path": relative, "reason": "file exceeds max-file-bytes"})
                 continue
-            raw = path.read_bytes()
-            content = raw.decode("utf-8", errors="replace")
+            content = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
             skipped.append({"path": relative, "reason": str(exc)})
             continue
@@ -243,7 +177,6 @@ def main() -> int:
         files.append(
             {
                 "path": relative,
-                "sha256": hashlib.sha256(raw).hexdigest(),
                 "extension": path.suffix.lower(),
                 "line_count": len(lines),
                 "roles": roles,
@@ -257,20 +190,9 @@ def main() -> int:
         for kind, markers in item["markers"].items():
             marker_counts[kind] += len(markers)
 
-    fingerprint_input = "\n".join(
-        f"{item['path']}:{item['sha256']}" for item in files
-    ) + "\n" + "\n".join(
-        f"SKIPPED:{item['path']}:{item.get('sha256', '')}" for item in skipped
-    )
     output = {
         "repository": repo.name,
         "source_commit": git_commit(repo),
-        "repository_fingerprint": "sha256:" + hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest(),
-        "settings": {
-            "max_file_bytes": args.max_file_bytes,
-            "max_symbols_per_file": args.max_symbols_per_file,
-            "max_markers_per_kind": args.max_markers_per_kind,
-        },
         "summary": {
             "indexed_files": len(files),
             "skipped_files": len(skipped),
@@ -284,24 +206,8 @@ def main() -> int:
     destination = args.output.expanduser()
     if not destination.is_absolute():
         destination = Path.cwd() / destination
-    resolve_outside_skill(destination, label="evidence-index output")
-    reject_descendant(
-        destination,
-        repo,
-        label="evidence-index output",
-        protected_label="the analyzed repository",
-    )
-    output_root = (
-        destination.parents[1]
-        if destination.name == "evidence-index.json" and destination.parent.name == ".work"
-        else destination.parent
-    )
-    atomic_write_text(
-        destination,
-        json.dumps(output, indent=2, sort_keys=True) + "\n",
-        output_root=output_root,
-        label="evidence-index output",
-    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(
         f"OK: indexed {len(files)} file(s), found {sum(marker_counts.values())} marker(s), "
         f"wrote {destination}"
@@ -310,4 +216,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_guarded(main))
+    sys.exit(main())

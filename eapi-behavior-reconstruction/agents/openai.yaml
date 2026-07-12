@@ -1,4 +1,4 @@
 interface:
-  display_name: "EAPI Repository Knowledge Pack"
-  short_description: "从代码证据重建可读、可追溯的 BA/Tech 仓库知识包"
-  default_prompt: "Use $eapi-behavior-reconstruction to build an evidence-grounded, human-readable BA and Tech repository knowledge pack from this codebase."
+  display_name: "EAPI Behavior Reconstruction"
+  short_description: "只需仓库路径，自动生成相互链接的 Tech Pack 与 BA Pack"
+  default_prompt: "Use $eapi-behavior-reconstruction to analyze this repository automatically and produce two linked, evidence-grounded outputs: a developer-oriented Tech Pack and a business-readable BA Pack."

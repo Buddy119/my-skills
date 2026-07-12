@@ -8,32 +8,20 @@ import re
 import sys
 from pathlib import Path
 
-from runtime_guard import run_guarded
-from validate_claim_ledger import find_pack_root, pack_format_version, validate_single_document
-from validate_flow_separation import validate_pair
-
 
 REQUIRED_KEYS = {
     "behavior_id",
     "title",
     "repository",
     "source_commit",
-    "claim_ids",
     "business_capability",
     "behavior_type",
     "overall_status",
-    "flow_perspective",
-    "summary_perspective",
-    "ba_flow_model",
     "actors",
-    "business_data_object_ids",
-    "business_rule_ids",
-    "business_exception_ids",
     "tech_behavior_document",
 }
 REQUIRED_HEADINGS = {
     "Business summary",
-    "Related BA knowledge",
     "Business trigger and actors",
     "Business flow",
     "Business preconditions",
@@ -48,14 +36,7 @@ REQUIRED_HEADINGS = {
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
 ALLOWED_TYPES = {"business", "integration"}
 RAW_CITATION_RE = re.compile(
-    r"(?<![A-Za-z0-9_./-])(?P<path>(?!https?://)(?:[A-Za-z0-9_.-]+/)*"
-    r"[A-Za-z0-9_.-]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?"
-)
-OBVIOUS_SECRET_RE = re.compile(
-    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
-    r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|"
-    r"\baws_secret_access_key\s*[:=]\s*[\"'][A-Za-z0-9/+=]{32,}[\"']",
-    re.I,
+    r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
 )
 TECH_JARGON_RE = re.compile(
     r"\b(?:Controller|Handler|DTO|Lambda|DynamoDB|EventBridge|Java|TypeScript|class|method)\b",
@@ -90,7 +71,6 @@ def scalar_value(frontmatter: str, key: str) -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
-    parser.add_argument("--repo", type=Path, required=True)
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -99,9 +79,6 @@ def main() -> int:
     if not args.document.is_file():
         print(f"ERROR: document does not exist: {args.document}")
         return 2
-    if not args.repo.is_dir():
-        print(f"ERROR: repository directory does not exist: {args.repo}")
-        return 2
 
     text = args.document.read_text(encoding="utf-8")
     try:
@@ -109,8 +86,6 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 1
-    pack = find_pack_root(args.document.resolve())
-    version = pack_format_version(pack) if pack is not None else 1
 
     missing_keys = sorted(REQUIRED_KEYS - top_level_keys(frontmatter))
     if missing_keys:
@@ -125,46 +100,15 @@ def main() -> int:
         errors.append("behavior_type must be business or integration")
 
     headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
-    if version >= 2:
-        if "Scenario at a glance" not in headings:
-            warnings.append("preferred Scenario at a glance heading is absent; review whether the opening still orients a BA")
-        if "Business journey" not in headings:
-            warnings.append("preferred Business journey heading is absent; Mermaid flow and business explanation are still required")
-        recommended = {
-            "Participants and starting point",
-            "Decisions and business rules",
-            "Information and outcomes",
-            "Exceptions and external participants",
-            "Open business questions",
-            "Related knowledge",
-        }
-        missing_recommended = sorted(recommended - headings)
-        if missing_recommended:
-            warnings.append("reader-oriented section(s) absent: " + ", ".join(missing_recommended))
-    else:
-        missing_headings = sorted(REQUIRED_HEADINGS - headings)
-        if missing_headings:
-            errors.append("missing sections: " + ", ".join(missing_headings))
+    missing_headings = sorted(REQUIRED_HEADINGS - headings)
+    if missing_headings:
+        errors.append("missing sections: " + ", ".join(missing_headings))
 
     if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
         errors.append("Business flow must contain a Mermaid flowchart or graph")
 
     if RAW_CITATION_RE.search(body):
         errors.append("BA behavior must not contain raw source citations; link to the Tech behavior")
-    if OBVIOUS_SECRET_RE.search(body):
-        errors.append("BA behavior contains an obvious secret literal; remove the value")
-
-    related_documents = (
-        "../capability-map.md",
-        "../business-data-lifecycle.md",
-        "../business-rule-catalog.md",
-        "../business-exception-catalog.md",
-    )
-    for related in related_documents:
-        if not (args.document.parent / related).resolve().is_file():
-            errors.append(f"linked BA knowledge document does not exist: {related}")
-        if not re.search(rf"\]\({re.escape(related)}\)", body):
-            errors.append(f"BA behavior must link related knowledge document: {related}")
 
     tech_document = scalar_value(frontmatter, "tech_behavior_document")
     tech_frontmatter = ""
@@ -192,9 +136,6 @@ def main() -> int:
                     )
                 if not re.search(rf"\]\({re.escape(expected_ba_link.as_posix())}\)", tech_body):
                     errors.append("linked Tech behavior body must contain the return link to this BA behavior")
-                flow_errors, flow_warnings, _metrics = validate_pair(tech_path, args.document.resolve())
-                errors.extend(flow_errors)
-                warnings.extend(flow_warnings)
         if not re.search(rf"\]\({re.escape(tech_document)}\)", body):
             errors.append("BA behavior body must contain a Markdown link matching tech_behavior_document")
 
@@ -206,10 +147,6 @@ def main() -> int:
         warnings.append("document contains no Unknown or Conflicting review items")
     if "TODO" in text or "path/to/" in text or "repository.behavior-name" in text:
         errors.append("template placeholders remain in the document")
-
-    claim_errors, claim_warnings = validate_single_document(args.document.resolve(), args.repo.resolve())
-    errors.extend("claim provenance: " + error for error in claim_errors)
-    warnings.extend("claim provenance: " + warning for warning in claim_warnings)
 
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -224,4 +161,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_guarded(main))
+    sys.exit(main())

@@ -1,18 +1,16 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-claim_ids: []
 tech_catalog: "../tech-pack/behavior-catalog.yaml"
-knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-<!-- SCAFFOLD_ONLY: Replace every instruction with a browsable BA index. Use claim_ids for material conclusions; do not leave this comment. -->
-
 # BA behavior catalog
 
-Group Behaviors by supported capability or business scenario. Prefer compact headings and paragraphs over one very wide table.
+[View technical behavior catalog](../tech-pack/behavior-catalog.yaml)
 
-A recommended entry contains the Behavior name and status, a short synopsis, what starts it, its visible outcome or material Unknown, and links to both BA and Tech views. This is a scanning aid rather than a fixed record schema: merge labels or omit unsupported elements when the meaning remains clear.
+| Capability | Behavior | Actors | Business trigger | Business outcome | Status | BA behavior | Tech behavior |
+|---|---|---|---|---|---|---|---|
+| Capability or Unknown | Business-readable title | Actors or participants | Request, event, or schedule | Observable outcome | Confirmed/Inferred/Unknown | [BA](behaviors/repository.behavior-name.md) | [Tech](../tech-pack/behaviors/repository.behavior-name.md) |
 
-Purely technical Behaviors are intentionally omitted. Link the [technical behavior catalog](../tech-pack/behavior-catalog.yaml) for the complete executable inventory.
+Purely technical behaviors are intentionally omitted. Refer to the linked Tech catalog for the complete executable entry-point inventory.
