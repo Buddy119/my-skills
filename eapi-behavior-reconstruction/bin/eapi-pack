@@ -433,7 +433,7 @@ def _run_child(command_name: str, child: list[str]) -> int:
         print(f"OUTPUT_PERMISSION_ERROR: {detail}", file=sys.stderr)
         print(
             "INVOCATION_ERROR: correct access only for the selected repository or pack output; "
-            "never request write access to SKILL_ROOT.",
+            "never modify or repair bundled runtime artifacts.",
             file=sys.stderr,
         )
         return 2

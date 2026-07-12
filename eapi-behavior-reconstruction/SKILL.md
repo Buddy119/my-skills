@@ -19,11 +19,11 @@ Default output:
 repository-knowledge-pack/<repository-name>/
 ```
 
-## Immutable bundled runtime
+## Session-protected bundled runtime
 
-Treat the directory containing this file as `SKILL_ROOT`. During repository analysis, `SKILL.md`, `agents/`, `assets/`, `bin/`, `references/`, `scripts/`, and `integrity/runtime-lock.json` are immutable release artifacts. Never request write permission for `SKILL_ROOT`; never edit, patch, chmod, copy-and-modify, replace, or regenerate them. Write only to the selected knowledge-pack output directory.
+Treat the directory containing this file as `SKILL_ROOT`. During repository analysis, `SKILL.md`, `agents/`, `assets/`, `bin/`, `references/`, `scripts/`, and `integrity/runtime-lock.json` are logically immutable release artifacts. Never edit, patch, chmod, copy-and-modify, replace, or regenerate them. Write only to the selected knowledge-pack output directory.
 
-The hash lock detects change; the host's read-only sandbox is the prevention boundary. Keep `SKILL_ROOT` outside writable workspace roots. If it is writable in the current execution environment, stop and use a read-only installed copy rather than continuing.
+`SKILL_ROOT` may be a user-owned, writable installation such as `~/.copilot/skills/<skill-name>`. Writability alone is not a failure: do not stop, demand a read-only copy, or test writability by creating a file. The protection boundary is actual content integrity. Preflight validates every release artifact against the shipped lock, every launcher command revalidates afterward, and any observed change is terminal for that run.
 
 The bundled Python tools have no third-party dependencies. Never install packages, create a virtual environment, alter `PYTHONPATH`, or create a fallback script. Resolve `SKILL_ROOT` from the selected Skill path rather than the current working directory, and run tools only through:
 
@@ -31,7 +31,7 @@ The bundled Python tools have no third-party dependencies. Never install package
 python3 -E -S -B -X utf8 "$SKILL_ROOT/bin/eapi-pack" <command> ...
 ```
 
-Before the first operation, run `preflight`. A validation failure means fix the generated pack, never the validator. An invocation failure means correct arguments. Any `FATAL_RUNTIME`, exit `70`, integrity mismatch, missing module, or unexpected traceback is terminal for the current run: report it and stop without repairing the Skill.
+Before the first operation, run `preflight`. A validation failure means fix the generated pack, never the validator. An invocation failure means correct arguments. Any `FATAL_RUNTIME`, exit `70`, integrity mismatch, missing module, or unexpected traceback is terminal for the current run: report it and stop without repairing the Skill. Never use existing write permission to repair a bundled artifact during repository analysis.
 
 ## Load policies
 

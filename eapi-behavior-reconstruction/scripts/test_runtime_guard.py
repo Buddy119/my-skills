@@ -232,7 +232,7 @@ class RuntimeGuardTests(unittest.TestCase):
                 readonly.chmod(0o700)
         self.assertEqual(2, result.returncode, result.stdout + result.stderr)
         self.assertIn("OUTPUT_PERMISSION_ERROR", result.stderr)
-        self.assertIn("never request write access to SKILL_ROOT", result.stderr)
+        self.assertIn("never modify or repair bundled runtime artifacts", result.stderr)
 
     def test_scaffold_rejects_internal_symlink_before_skill_write(self) -> None:
         protected = ROOT / "references/evidence-policy.md"
@@ -256,29 +256,40 @@ class RuntimeGuardTests(unittest.TestCase):
         self.assertIn("symbolic link", result.stderr)
         self.assertEqual(before, sha256_file(protected))
 
-    def test_copied_release_tamper_stops_launcher_preflight(self) -> None:
+    def test_writable_copied_release_runs_then_tamper_stops_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             copied = Path(temporary) / "skill"
             shutil.copytree(ROOT, copied)
-            target = copied / "scripts/show_evidence.py"
-            target.write_text(target.read_text(encoding="utf-8") + "# tampered\n", encoding="utf-8")
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-E",
-                    "-S",
-                    "-B",
-                    "-X",
-                    "utf8",
-                    str(copied / "bin/eapi-pack"),
-                    "preflight",
-                ],
+            for path in copied.rglob("*"):
+                path.chmod(0o755 if path.is_dir() else 0o644)
+            copied.chmod(0o755)
+            command = [
+                sys.executable,
+                "-E",
+                "-S",
+                "-B",
+                "-X",
+                "utf8",
+                str(copied / "bin/eapi-pack"),
+                "preflight",
+            ]
+            clean = subprocess.run(
+                command,
                 cwd=copied,
                 capture_output=True,
                 text=True,
             )
-        self.assertEqual(70, result.returncode)
-        self.assertIn("artifact digest mismatch", result.stderr)
+            self.assertEqual(0, clean.returncode, clean.stdout + clean.stderr)
+            target = copied / "scripts/show_evidence.py"
+            target.write_text(target.read_text(encoding="utf-8") + "# tampered\n", encoding="utf-8")
+            tampered = subprocess.run(
+                command,
+                cwd=copied,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(70, tampered.returncode)
+        self.assertIn("artifact digest mismatch", tampered.stderr)
 
     def test_compiled_python_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
