@@ -1,0 +1,520 @@
+#!/usr/bin/env python3
+"""Single immutable entry point for EAPI knowledge-pack tooling."""
+
+from __future__ import annotations
+
+import sys
+
+# A script directory normally precedes the standard library on sys.path. Remove
+# bin/ before importing stdlib modules so an unexpected release file cannot
+# shadow argparse/json/os during bootstrap.
+if sys.path:
+    del sys.path[0]
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+from pathlib import Path
+
+
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_ERROR_EXIT = 70
+CHILD_PYTHON = [sys.executable, "-E", "-S", "-B", "-X", "utf8"]
+
+
+class LauncherInvocationError(RuntimeError):
+    """The selected repository, pack, document, or command is invalid."""
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _bootstrap_runtime_guard() -> None:
+    """Verify the verifier and launcher before importing bundled Python code."""
+
+    lock_path = SKILL_ROOT / "integrity/runtime-lock.json"
+    try:
+        linked_release_directories = [
+            directory
+            for directory in (SKILL_ROOT / "bin", SKILL_ROOT / "scripts", SKILL_ROOT / "integrity")
+            if directory.is_symlink()
+        ]
+        if linked_release_directories or lock_path.is_symlink():
+            raise ValueError(
+                f"release directory or lock is a symbolic link: "
+                f"{(linked_release_directories or [lock_path])[0]}"
+            )
+        compiled = [
+            path
+            for directory in (SKILL_ROOT / "bin", SKILL_ROOT / "scripts")
+            for path in directory.rglob("*")
+            if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
+        ]
+        if compiled:
+            raise ValueError(f"compiled Python artifact is forbidden: {compiled[0]}")
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        locked_files = lock["files"]
+        checks = {
+            "scripts/runtime_guard.py": SKILL_ROOT / "scripts/runtime_guard.py",
+            "bin/eapi-pack": Path(__file__).resolve(),
+        }
+        for relative, path in checks.items():
+            if locked_files.get(relative) != _sha256(path):
+                raise ValueError(f"artifact digest mismatch: {relative}")
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        print(
+            "FATAL_RUNTIME: immutable runtime bootstrap verification failed: "
+            f"{exc}. Do not edit bundled files or regenerate the lock during repository analysis.",
+            file=sys.stderr,
+        )
+        raise SystemExit(RUNTIME_ERROR_EXIT)
+
+
+_bootstrap_runtime_guard()
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+
+from runtime_guard import (  # noqa: E402
+    RuntimeGuardError,
+    reject_descendant,
+    reject_tree_overlap,
+    resolve_outside_skill,
+    verify_integrity,
+    verify_runtime,
+)
+
+
+VALIDATION_COMMANDS = {
+    "validate-tech",
+    "validate-contract",
+    "validate-ba",
+    "validate-flow",
+    "validate-index",
+    "validate-claims",
+    "validate-pack",
+}
+RUNTIME_FAILURE_PREFIXES = (
+    "Traceback (most recent call last):",
+    "ModuleNotFoundError:",
+    "ImportError:",
+    "FATAL_RUNTIME:",
+)
+PERMISSION_FAILURE_MARKERS = (
+    "PermissionError:",
+    "Permission denied",
+    "Read-only file system",
+)
+
+
+def add_repo(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--repo", type=Path, required=True)
+
+
+def add_repo_pack(parser: argparse.ArgumentParser) -> None:
+    add_repo(parser)
+    parser.add_argument("--pack", type=Path, required=True)
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="eapi-pack",
+        description="Run the immutable EAPI repository knowledge-pack toolchain.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("preflight", help="verify Python isolation and every bundled artifact")
+    subparsers.add_parser("self-test", help="run bundled regression tests without writing bytecode")
+
+    scaffold = subparsers.add_parser("scaffold", help="create the canonical pack skeleton")
+    add_repo_pack(scaffold)
+    scaffold.add_argument("--force", action="store_true")
+
+    index = subparsers.add_parser("index", help="build .work/evidence-index.json")
+    add_repo_pack(index)
+    index.add_argument("--max-file-bytes", type=positive_int, default=2_000_000)
+    index.add_argument("--max-symbols-per-file", type=positive_int, default=300)
+    index.add_argument("--max-markers-per-kind", type=positive_int, default=300)
+
+    evidence = subparsers.add_parser("show-evidence", help="range-check and render source evidence")
+    add_repo(evidence)
+    evidence.add_argument("references", nargs="+")
+    evidence.add_argument("--max-lines", type=int, default=120)
+    evidence.add_argument("--json", action="store_true")
+    evidence.add_argument(
+        "--source-kind",
+        choices=("implementation", "test", "schema", "configuration", "iac", "comment", "naming"),
+    )
+    evidence.add_argument("--relation", choices=("supports", "contradicts", "context"))
+    evidence.add_argument("--support-level", choices=("direct", "indirect", "context"))
+
+    prepare = subparsers.add_parser("prepare-audit", help="prepare a non-passing semantic audit skeleton")
+    add_repo_pack(prepare)
+    prepare.add_argument("--force", action="store_true")
+
+    claims = subparsers.add_parser("validate-claims", help="validate the fixed ledger/audit paths in a pack")
+    add_repo_pack(claims)
+    claims.add_argument("--draft", action="store_true")
+
+    tech = subparsers.add_parser("validate-tech", help="validate one Tech Behavior")
+    add_repo(tech)
+    tech.add_argument("--document", type=Path, required=True)
+    tech.add_argument("--allow-missing-ba", action="store_true")
+
+    contract = subparsers.add_parser("validate-contract", help="validate one endpoint-owned API contract")
+    add_repo(contract)
+    contract.add_argument("--document", type=Path, required=True)
+
+    ba = subparsers.add_parser("validate-ba", help="validate one BA Behavior")
+    add_repo(ba)
+    ba.add_argument("--document", type=Path, required=True)
+
+    flow = subparsers.add_parser("validate-flow", help="validate a linked Tech/BA flow pair")
+    add_repo(flow)
+    flow.add_argument("--tech", type=Path, required=True)
+    flow.add_argument("--ba", type=Path, required=True)
+
+    index_validation = subparsers.add_parser("validate-index", help="validate the fixed evidence-index path")
+    add_repo_pack(index_validation)
+
+    pack_validation = subparsers.add_parser("validate-pack", help="validate the complete knowledge pack")
+    add_repo_pack(pack_validation)
+    return parser
+
+
+def _resolved_repo(repo: Path) -> Path:
+    candidate = repo.expanduser().resolve()
+    if not candidate.is_dir():
+        raise LauncherInvocationError(f"repository directory does not exist: {candidate}")
+    return candidate
+
+
+def _resolved_pack(pack: Path, repo: Path) -> Path:
+    candidate = resolve_outside_skill(pack, label="pack root")
+    try:
+        return reject_tree_overlap(
+            candidate,
+            repo,
+            label="pack root",
+            protected_label="the analyzed repository",
+        )
+    except RuntimeGuardError as exc:
+        raise LauncherInvocationError(str(exc)) from exc
+
+
+def _resolved_document(document: Path, repo: Path, label: str) -> Path:
+    candidate = resolve_outside_skill(document, label=label)
+    try:
+        candidate = reject_descendant(
+            candidate,
+            repo,
+            label=label,
+            protected_label="the analyzed repository",
+        )
+    except RuntimeGuardError as exc:
+        raise LauncherInvocationError(str(exc)) from exc
+    if not candidate.is_file():
+        raise LauncherInvocationError(f"{label} does not exist: {candidate}")
+    return candidate
+
+
+def _top_manifest_scalar(text: str, key: str) -> str | None:
+    prefix = key + ":"
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            value = line[len(prefix):].strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            return value or None
+    return None
+
+
+def _manifest_identity(pack: Path) -> tuple[str, str]:
+    manifest = pack / "knowledge-manifest.yaml"
+    if not manifest.is_file():
+        raise LauncherInvocationError(f"knowledge-manifest.yaml does not exist under pack: {pack}")
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise LauncherInvocationError(f"cannot read knowledge-manifest.yaml: {exc}") from exc
+    repository = _top_manifest_scalar(text, "repository")
+    source_commit = _top_manifest_scalar(text, "source_commit")
+    if not repository or not source_commit:
+        raise LauncherInvocationError(
+            "knowledge-manifest.yaml must define repository and source_commit before standalone validation"
+        )
+    return repository, source_commit
+
+
+def _script(name: str) -> str:
+    return str(SKILL_ROOT / "scripts" / name)
+
+
+def _command_for(args: argparse.Namespace) -> list[str]:
+    command = args.command
+    if command == "self-test":
+        return [*CHILD_PYTHON, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py"]
+
+    repo = _resolved_repo(args.repo)
+    repo_args = ["--repo", str(repo)]
+
+    if command == "show-evidence":
+        child = [*CHILD_PYTHON, _script("show_evidence.py"), *repo_args]
+        child.extend(["--max-lines", str(args.max_lines)])
+        if args.json:
+            child.append("--json")
+        for option in ("source_kind", "relation", "support_level"):
+            value = getattr(args, option)
+            if value:
+                child.extend(["--" + option.replace("_", "-"), value])
+        child.extend(args.references)
+        return child
+
+    if command in {"validate-tech", "validate-contract", "validate-ba"}:
+        document = _resolved_document(args.document, repo, "document")
+        script_name = {
+            "validate-tech": "validate_behavior_doc.py",
+            "validate-contract": "validate_api_contract.py",
+            "validate-ba": "validate_ba_behavior.py",
+        }[command]
+        child = [*CHILD_PYTHON, _script(script_name), str(document), *repo_args]
+        if command == "validate-tech" and args.allow_missing_ba:
+            child.append("--allow-missing-ba")
+        return child
+
+    if command == "validate-flow":
+        tech = _resolved_document(args.tech, repo, "Tech document")
+        ba = _resolved_document(args.ba, repo, "BA document")
+        return [
+            *CHILD_PYTHON,
+            _script("validate_flow_separation.py"),
+            str(tech),
+            str(ba),
+            *repo_args,
+        ]
+
+    pack = _resolved_pack(args.pack, repo)
+    if command != "scaffold" and not pack.is_dir():
+        raise LauncherInvocationError(f"pack directory does not exist: {pack}")
+    pack_args = ["--pack", str(pack)]
+    if command == "scaffold":
+        child = [*CHILD_PYTHON, _script("scaffold_knowledge_pack.py"), *repo_args, "--output", str(pack)]
+        if args.force:
+            child.append("--force")
+        return child
+    if command == "index":
+        return [
+            *CHILD_PYTHON,
+            _script("build_evidence_index.py"),
+            *repo_args,
+            "--output",
+            str(pack / ".work/evidence-index.json"),
+            "--max-file-bytes",
+            str(args.max_file_bytes),
+            "--max-symbols-per-file",
+            str(args.max_symbols_per_file),
+            "--max-markers-per-kind",
+            str(args.max_markers_per_kind),
+        ]
+    if command == "prepare-audit":
+        child = [
+            *CHILD_PYTHON,
+            _script("prepare_claim_audit.py"),
+            *repo_args,
+            "--ledger",
+            str(pack / ".work/claim-ledger.json"),
+            "--output",
+            str(pack / ".work/claim-audit.json"),
+        ]
+        if args.force:
+            child.append("--force")
+        return child
+    if command == "validate-claims":
+        repository, source_commit = _manifest_identity(pack)
+        child = [
+            *CHILD_PYTHON,
+            _script("validate_claim_ledger.py"),
+            *repo_args,
+            "--repository",
+            repository,
+            "--source-commit",
+            source_commit,
+        ]
+        if args.draft:
+            child.extend(
+                [
+                    "--ledger",
+                    str(pack / ".work/claim-ledger.json"),
+                    "--audit",
+                    str(pack / ".work/claim-audit.json"),
+                    "--draft",
+                ]
+            )
+        else:
+            child.extend(pack_args)
+        return child
+    if command == "validate-index":
+        repository, source_commit = _manifest_identity(pack)
+        return [
+            *CHILD_PYTHON,
+            _script("validate_evidence_index.py"),
+            *repo_args,
+            "--index",
+            str(pack / ".work/evidence-index.json"),
+            "--repository",
+            repository,
+            "--source-commit",
+            source_commit,
+        ]
+    if command == "validate-pack":
+        return [*CHILD_PYTHON, _script("validate_knowledge_pack.py"), str(pack), *repo_args]
+    raise RuntimeGuardError(f"unsupported launcher command: {command}")
+
+
+def _sanitized_environment() -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("PYTHON")
+    }
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    return environment
+
+
+def _emit(text: str, *, stream: object) -> None:
+    if text:
+        print(text, file=stream, end="" if text.endswith("\n") else "\n")
+
+
+def _run_child(command_name: str, child: list[str]) -> int:
+    try:
+        result = subprocess.run(
+            child,
+            cwd=SKILL_ROOT,
+            env=_sanitized_environment(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        print(
+            f"FATAL_RUNTIME: could not start bundled command: {exc}. "
+            "Do not install dependencies or modify bundled files.",
+            file=sys.stderr,
+        )
+        return RUNTIME_ERROR_EXIT
+
+    if result.returncode == 0:
+        _emit(result.stdout, stream=sys.stdout)
+        _emit(result.stderr, stream=sys.stderr)
+        return 0
+
+    permission_lines = [
+        line.strip()
+        for line in result.stderr.splitlines()
+        if any(marker in line for marker in PERMISSION_FAILURE_MARKERS)
+    ]
+    if permission_lines and str(SKILL_ROOT) not in permission_lines[-1]:
+        _emit(result.stdout, stream=sys.stdout)
+        detail = permission_lines[-1]
+        print(f"OUTPUT_PERMISSION_ERROR: {detail}", file=sys.stderr)
+        print(
+            "INVOCATION_ERROR: correct access only for the selected repository or pack output; "
+            "never request write access to SKILL_ROOT.",
+            file=sys.stderr,
+        )
+        return 2
+
+    _emit(result.stdout, stream=sys.stdout)
+    _emit(result.stderr, stream=sys.stderr)
+    stderr_lines = [line.strip() for line in result.stderr.splitlines() if line.strip()]
+    runtime_failure = any(
+        line.startswith(prefix)
+        for line in stderr_lines
+        for prefix in RUNTIME_FAILURE_PREFIXES
+    )
+    if result.returncode == RUNTIME_ERROR_EXIT or runtime_failure:
+        print(
+            "FATAL_RUNTIME: bundled command reported a runtime or integrity defect. "
+            "Stop this run; do not patch scripts, install packages, bypass validation, or regenerate the lock.",
+            file=sys.stderr,
+        )
+        return RUNTIME_ERROR_EXIT
+    if command_name == "self-test":
+        print(
+            "FATAL_RUNTIME: bundled regression tests failed. Stop this run and report the Skill defect; "
+            "do not patch release artifacts during repository analysis.",
+            file=sys.stderr,
+        )
+        return RUNTIME_ERROR_EXIT
+    if result.returncode == 1 and command_name in VALIDATION_COMMANDS:
+        print(
+            "VALIDATION_FAILED: correct the generated knowledge-pack artifacts; the validator is immutable.",
+            file=sys.stderr,
+        )
+    elif result.returncode == 1:
+        print(
+            "COMMAND_REFUSED: correct the generated pack state or choose a safe documented option; "
+            "bundled runtime files remain immutable.",
+            file=sys.stderr,
+        )
+    elif result.returncode == 2:
+        print(
+            "INVOCATION_ERROR: correct repository, pack, document, or command arguments; bundled files are immutable.",
+            file=sys.stderr,
+        )
+    elif result.returncode not in {1, 2}:
+        print(
+            f"FATAL_RUNTIME: bundled command returned unexpected exit code {result.returncode}. "
+            "Stop this run and report the Skill defect.",
+            file=sys.stderr,
+        )
+        return RUNTIME_ERROR_EXIT
+    return result.returncode
+
+
+def main() -> int:
+    try:
+        report = verify_runtime(SKILL_ROOT)
+        args = build_parser().parse_args()
+        if args.command == "preflight":
+            version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            print(
+                "OK: immutable runtime verified "
+                f"(python={version}, files={report['file_count']}, bundle={report['bundle_sha256']}, "
+                f"lock={report['lock_sha256']})"
+            )
+            return 0
+        result = _run_child(args.command, _command_for(args))
+        verify_integrity(SKILL_ROOT)
+        return result
+    except LauncherInvocationError as exc:
+        print(f"INVOCATION_ERROR: {exc}; bundled files are immutable.", file=sys.stderr)
+        return 2
+    except RuntimeGuardError as exc:
+        print(f"FATAL_RUNTIME: {exc}", file=sys.stderr)
+        return RUNTIME_ERROR_EXIT
+    except Exception as exc:  # pragma: no cover - defensive terminal boundary
+        print(
+            f"FATAL_RUNTIME: unexpected launcher defect ({type(exc).__name__}: {exc}). "
+            "Stop this run and report the Skill defect; do not modify bundled files.",
+            file=sys.stderr,
+        )
+        return RUNTIME_ERROR_EXIT
+
+
+if __name__ == "__main__":
+    sys.exit(main())

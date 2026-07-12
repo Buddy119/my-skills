@@ -1,9 +1,12 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
 
 # Endpoint matrix
 
@@ -11,13 +14,11 @@ coverage_status: "complete|partial|blocked"
 
 | Endpoint ID | Method | Route | Consumer | Entry point | AuthN/AuthZ | Primary behavior | API contract | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|---|
-| EP-POST-resource | POST | `/resource` | Caller or Unknown | Handler | Scheme or Unknown | repository.behavior-name | [Contract](contracts/EP-POST-resource.api-contract.md) | Confirmed/Inferred/Unknown | `path/to/file.ext:line` |
 
 ## Shared handlers and aliases
 
 | Endpoint ID | Shares implementation with | Contract alias of | Difference | Status | Evidence |
 |---|---|---|---|---|---|
-| EP-POST-resource | Endpoint/handler or None | Endpoint ID or None | Route/auth/schema difference | Confirmed/Unknown | `path/to/file.ext:line` |
 
 ## Endpoint coverage gaps
 

@@ -34,6 +34,8 @@ Create a state transition only when code, tests, schema, or persistence logic id
 
 Do not turn any database update into a business state transition. When only storage mutation is known, describe it as a persistence change and leave business meaning `Unknown`.
 
+An in-memory assignment followed by an opaque `save`, repository, ORM, or client call proves the local assignment and attempted invocation only. Do not mark the value persisted, committed, externally visible, or business-final unless inspected implementation, contract, or executed tests directly establish that outcome.
+
 ## Completeness
 
 Account for every read, write, emitted event, and external call found during behavior tracing. If no state machine exists, keep the state transition matrix and state `None observed`; do not invent states.

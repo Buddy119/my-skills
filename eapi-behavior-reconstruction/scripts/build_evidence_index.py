@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -11,13 +12,16 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from runtime_guard import atomic_write_text, reject_descendant, resolve_outside_skill, run_guarded
+
 
 TEXT_EXTENSIONS = {
     ".java", ".kt", ".kts", ".groovy", ".scala", ".cs",
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
     ".py", ".go", ".rs", ".rb", ".php",
     ".yaml", ".yml", ".json", ".xml", ".toml", ".tf",
-    ".properties", ".conf", ".env", ".graphql", ".proto",
+    ".properties", ".conf", ".env", ".graphql", ".proto", ".sql",
+    ".sh", ".bash", ".hcl", ".ini", ".cfg", ".md",
 }
 
 SPECIAL_FILES = {
@@ -30,6 +34,7 @@ IGNORED_DIRS = {
     ".git", ".idea", ".vscode", "node_modules", "vendor", "dist",
     "build", "target", "out", "coverage", ".gradle", ".terraform",
     ".serverless", ".aws-sam", "__pycache__", ".pytest_cache",
+    ".work", "repository-knowledge-pack",
 }
 
 ROLE_PATH_RULES = {
@@ -140,6 +145,14 @@ def is_candidate(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTENSIONS or path.name in SPECIAL_FILES
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def role_hints(relative_path: str, content: str) -> list[str]:
     roles = [role for role, pattern in ROLE_PATH_RULES.items() if pattern.search(relative_path)]
     if "test" in roles:
@@ -171,7 +184,9 @@ def collect_markers(lines: list[str], limit_per_kind: int) -> dict[str, list[dic
         for kind, pattern in MARKER_RULES.items():
             if len(markers[kind]) >= limit_per_kind or not pattern.search(line):
                 continue
-            markers[kind].append({"line": line_number, "text": line.strip()[:240]})
+            # Store locations only. Raw line text can leak values and tempts a
+            # generator to treat search markers as behavioral evidence.
+            markers[kind].append({"line": line_number})
     return {kind: values for kind, values in markers.items() if values}
 
 
@@ -183,6 +198,11 @@ def main() -> int:
     parser.add_argument("--max-symbols-per-file", type=int, default=300)
     parser.add_argument("--max-markers-per-kind", type=int, default=300)
     args = parser.parse_args()
+
+    for name in ("max_file_bytes", "max_symbols_per_file", "max_markers_per_kind"):
+        if getattr(args, name) <= 0:
+            print(f"ERROR: --{name.replace('_', '-')} must be a positive integer", file=sys.stderr)
+            return 2
 
     repo = args.repo.expanduser().resolve()
     if not repo.is_dir():
@@ -201,9 +221,16 @@ def main() -> int:
         relative = path.relative_to(repo).as_posix()
         try:
             if path.stat().st_size > args.max_file_bytes:
-                skipped.append({"path": relative, "reason": "file exceeds max-file-bytes"})
+                skipped.append(
+                    {
+                        "path": relative,
+                        "reason": "file exceeds max-file-bytes",
+                        "sha256": file_sha256(path),
+                    }
+                )
                 continue
-            content = path.read_text(encoding="utf-8", errors="replace")
+            raw = path.read_bytes()
+            content = raw.decode("utf-8", errors="replace")
         except OSError as exc:
             skipped.append({"path": relative, "reason": str(exc)})
             continue
@@ -216,6 +243,7 @@ def main() -> int:
         files.append(
             {
                 "path": relative,
+                "sha256": hashlib.sha256(raw).hexdigest(),
                 "extension": path.suffix.lower(),
                 "line_count": len(lines),
                 "roles": roles,
@@ -229,9 +257,20 @@ def main() -> int:
         for kind, markers in item["markers"].items():
             marker_counts[kind] += len(markers)
 
+    fingerprint_input = "\n".join(
+        f"{item['path']}:{item['sha256']}" for item in files
+    ) + "\n" + "\n".join(
+        f"SKIPPED:{item['path']}:{item.get('sha256', '')}" for item in skipped
+    )
     output = {
         "repository": repo.name,
         "source_commit": git_commit(repo),
+        "repository_fingerprint": "sha256:" + hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest(),
+        "settings": {
+            "max_file_bytes": args.max_file_bytes,
+            "max_symbols_per_file": args.max_symbols_per_file,
+            "max_markers_per_kind": args.max_markers_per_kind,
+        },
         "summary": {
             "indexed_files": len(files),
             "skipped_files": len(skipped),
@@ -245,8 +284,24 @@ def main() -> int:
     destination = args.output.expanduser()
     if not destination.is_absolute():
         destination = Path.cwd() / destination
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    resolve_outside_skill(destination, label="evidence-index output")
+    reject_descendant(
+        destination,
+        repo,
+        label="evidence-index output",
+        protected_label="the analyzed repository",
+    )
+    output_root = (
+        destination.parents[1]
+        if destination.name == "evidence-index.json" and destination.parent.name == ".work"
+        else destination.parent
+    )
+    atomic_write_text(
+        destination,
+        json.dumps(output, indent=2, sort_keys=True) + "\n",
+        output_root=output_root,
+        label="evidence-index output",
+    )
     print(
         f"OK: indexed {len(files)} file(s), found {sum(marker_counts.values())} marker(s), "
         f"wrote {destination}"
@@ -255,4 +310,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_guarded(main))

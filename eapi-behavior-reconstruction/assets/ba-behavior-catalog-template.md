@@ -1,10 +1,13 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 tech_catalog: "../tech-pack/behavior-catalog.yaml"
 knowledge_manifest: "../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
 
 # BA behavior catalog
 
@@ -12,6 +15,5 @@ coverage_status: "complete|partial|blocked"
 
 | Capability | Behavior | Actors | Business trigger | Business outcome | Status | BA behavior | Tech behavior |
 |---|---|---|---|---|---|---|---|
-| Capability or Unknown | Business-readable title | Actors or participants | Request, event, or schedule | Observable outcome | Confirmed/Inferred/Unknown | [BA](behaviors/repository.behavior-name.md) | [Tech](../tech-pack/behaviors/repository.behavior-name.md) |
 
 Purely technical behaviors are intentionally omitted. Refer to the linked Tech catalog for the complete executable entry-point inventory.

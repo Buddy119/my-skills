@@ -1,10 +1,13 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 knowledge_manifest: "../knowledge-manifest.yaml"
 tech_overview: "../tech-pack/repository-overview.md"
 coverage_status: "complete|partial|blocked"
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
 
 # Business capability map
 
@@ -12,15 +15,11 @@ coverage_status: "complete|partial|blocked"
 
 | Capability | Business purpose | Actors/participants | Behavior IDs | Trigger | Business outcome | External participant | Status |
 |---|---|---|---|---|---|---|---|
-| Capability or Unknown | Supported purpose without invented intent | Actors | Behavior IDs | Request/event/schedule | Outcome | Participant or None | Confirmed/Inferred/Unknown |
 
 ## Capability relationships
 
 ```mermaid
-flowchart LR
-    A[Actor or participant] --> C[Business capability]
-    C --> O[Business outcome]
-    C --> X[External participant]
+flowchart TD
 ```
 
 ## Capability gaps

@@ -6,6 +6,8 @@ Treat anything behaviorally material outside the repository as an external depen
 
 Do not infer the dependency's internal behavior. Document only the request, event, resource, response, error, and operational semantics visible from this repository.
 
+For an opaque call, distinguish payload or argument construction, invocation attempt, returned value observed by this repository, and remote side effect. Words such as `save`, `send`, `publish`, or `update` do not prove persistence, delivery, receipt, retry, or downstream processing.
+
 ## Dependency matrix and stubs
 
 List all dependencies in `dependency-matrix.md` and mark each `Material: Yes|No`. Create one stub for every material dependency whose contract, availability, or failure can affect a repository outcome. A non-material build or utility dependency may omit a stub when its disposition and reason are recorded.

@@ -1,9 +1,12 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
 
 # Data asset catalog
 
@@ -11,7 +14,6 @@ coverage_status: "complete|partial|blocked"
 
 | Data asset ID | Kind | Logical name | Ownership boundary | Identity/key | Lifecycle role | Read by | Written by | Retention/TTL | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|---|---|
-| DATA-dynamodb-resource | Store/message/event/parameter/secret/other | Resource | This repo/external/Unknown | Key or Unknown | Source/state/output/reference | Behavior IDs | Behavior IDs | Value or Unknown | Confirmed/Inferred/Unknown | `path/to/file.ext:line` |
 
 ## Data ownership and consistency
 

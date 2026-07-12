@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
 from pathlib import Path
+
+from runtime_guard import run_guarded
 
 
 REFERENCE_RE = re.compile(r"^(?P<path>.+):(?P<start>\d+)(?:-(?P<end>\d+))?$")
@@ -26,6 +30,13 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("references", nargs="+")
     parser.add_argument("--max-lines", type=int, default=120)
+    parser.add_argument("--json", action="store_true", help="emit claim-ledger evidence objects")
+    parser.add_argument(
+        "--source-kind",
+        choices=("implementation", "test", "schema", "configuration", "iac", "comment", "naming"),
+    )
+    parser.add_argument("--relation", choices=("supports", "contradicts", "context"))
+    parser.add_argument("--support-level", choices=("direct", "indirect", "context"))
     args = parser.parse_args()
 
     repo = args.repo.expanduser().resolve()
@@ -35,6 +46,13 @@ def main() -> int:
 
     errors: list[str] = []
     rendered: list[str] = []
+    evidence_objects: list[dict[str, str]] = []
+    if args.json and not all((args.source_kind, args.relation, args.support_level)):
+        print(
+            "ERROR: --json requires --source-kind, --relation, and --support-level",
+            file=sys.stderr,
+        )
+        return 2
 
     for reference in args.references:
         match = REFERENCE_RE.match(reference)
@@ -70,7 +88,19 @@ def main() -> int:
             errors.append(f"range outside file bounds ({len(lines)} lines): {reference}")
             continue
 
-        rendered.append(f"### {relative}:{start}" + (f"-{end}" if end != start else ""))
+        normalized_reference = f"{relative}:{start}" + (f"-{end}" if end != start else "")
+        excerpt = "\n".join(lines[start - 1 : end]) + "\n"
+        evidence_objects.append(
+            {
+                "source": normalized_reference,
+                "source_kind": args.source_kind or "",
+                "relation": args.relation or "",
+                "support_level": args.support_level or "",
+                "excerpt_sha256": "sha256:" + hashlib.sha256(excerpt.encode("utf-8")).hexdigest(),
+                "rationale": "REPLACE_WITH_EXACT_EVIDENCE_TO_CLAIM_REASONING",
+            }
+        )
+        rendered.append(f"### {normalized_reference}")
         for line_number in range(start, end + 1):
             rendered.append(f"{line_number:6} | {lines[line_number - 1]}")
 
@@ -79,10 +109,12 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("\n".join(rendered))
+    if args.json:
+        print(json.dumps(evidence_objects, indent=2, ensure_ascii=False))
+    else:
+        print("\n".join(rendered))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
-
+    sys.exit(run_guarded(main))

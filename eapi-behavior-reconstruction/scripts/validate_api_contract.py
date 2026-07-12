@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+from runtime_guard import run_guarded
+from validate_claim_ledger import validate_single_document
 
 REQUIRED_KEYS = {
     "endpoint_id",
@@ -16,6 +18,7 @@ REQUIRED_KEYS = {
     "title",
     "repository",
     "source_commit",
+    "claim_ids",
     "entry_point",
     "operation_id",
     "method",
@@ -132,6 +135,7 @@ def main() -> int:
     args = parser.parse_args()
 
     errors: list[str] = []
+    warnings: list[str] = []
     if not args.document.is_file():
         print(f"ERROR: document does not exist: {args.document}")
         return 2
@@ -258,7 +262,8 @@ def main() -> int:
             errors.append(f"invalid line range: {relative}:{start}-{end}")
             continue
         try:
-            line_count = sum(1 for _ in source.open(encoding="utf-8", errors="replace"))
+            with source.open(encoding="utf-8", errors="replace") as handle:
+                line_count = sum(1 for _ in handle)
         except OSError as exc:
             errors.append(f"cannot read cited file {relative}: {exc}")
             continue
@@ -271,14 +276,20 @@ def main() -> int:
     if any(item in text for item in ("TODO", "path/to/", "repository.behavior-name")):
         errors.append("template placeholders remain in the document")
 
+    claim_errors, claim_warnings = validate_single_document(args.document.resolve(), args.repo.resolve())
+    errors.extend("claim provenance: " + error for error in claim_errors)
+    warnings.extend("claim provenance: " + warning for warning in claim_warnings)
+
+    for warning in warnings:
+        print(f"WARNING: {warning}")
     for error in errors:
         print(f"ERROR: {error}")
     if errors:
-        print(f"FAILED: {len(errors)} error(s)")
+        print(f"FAILED: {len(errors)} error(s), {len(warnings)} warning(s)")
         return 1
-    print(f"OK: {len(citations)} citation occurrence(s)")
+    print(f"OK: {len(citations)} citation occurrence(s), {len(warnings)} warning(s)")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_guarded(main))

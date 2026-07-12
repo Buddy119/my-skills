@@ -8,15 +8,23 @@ import re
 import sys
 from pathlib import Path
 
+from runtime_guard import run_guarded
+from validate_claim_ledger import validate_single_document
+from validate_flow_separation import validate_pair
+
 
 REQUIRED_KEYS = {
     "behavior_id",
     "title",
     "repository",
     "source_commit",
+    "claim_ids",
     "business_capability",
     "behavior_type",
     "overall_status",
+    "flow_perspective",
+    "summary_perspective",
+    "ba_flow_model",
     "actors",
     "business_data_object_ids",
     "business_rule_ids",
@@ -75,6 +83,7 @@ def scalar_value(frontmatter: str, key: str) -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
+    parser.add_argument("--repo", type=Path, required=True)
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -82,6 +91,9 @@ def main() -> int:
 
     if not args.document.is_file():
         print(f"ERROR: document does not exist: {args.document}")
+        return 2
+    if not args.repo.is_dir():
+        print(f"ERROR: repository directory does not exist: {args.repo}")
         return 2
 
     text = args.document.read_text(encoding="utf-8")
@@ -152,6 +164,9 @@ def main() -> int:
                     )
                 if not re.search(rf"\]\({re.escape(expected_ba_link.as_posix())}\)", tech_body):
                     errors.append("linked Tech behavior body must contain the return link to this BA behavior")
+                flow_errors, flow_warnings, _metrics = validate_pair(tech_path, args.document.resolve())
+                errors.extend(flow_errors)
+                warnings.extend(flow_warnings)
         if not re.search(rf"\]\({re.escape(tech_document)}\)", body):
             errors.append("BA behavior body must contain a Markdown link matching tech_behavior_document")
 
@@ -163,6 +178,10 @@ def main() -> int:
         warnings.append("document contains no Unknown or Conflicting review items")
     if "TODO" in text or "path/to/" in text or "repository.behavior-name" in text:
         errors.append("template placeholders remain in the document")
+
+    claim_errors, claim_warnings = validate_single_document(args.document.resolve(), args.repo.resolve())
+    errors.extend("claim provenance: " + error for error in claim_errors)
+    warnings.extend("claim provenance: " + warning for warning in claim_warnings)
 
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -177,4 +196,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_guarded(main))

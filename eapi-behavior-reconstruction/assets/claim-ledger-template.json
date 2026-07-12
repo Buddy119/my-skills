@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "repository": "repository-name",
+  "source_commit": "git-commit-or-unknown",
+  "claims": [],
+  "scaffold_state": "SCAFFOLD_ONLY_REMOVE_AFTER_POPULATION"
+}

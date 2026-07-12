@@ -8,7 +8,11 @@ Use `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` from the evidence poli
 
 ## Canonical manifest
 
-Create `knowledge-manifest.yaml` before drafting final documents. Treat it as the canonical relationship registry, not as evidence. Every entity must have one stable ID and one status.
+Create and audit `.work/claim-ledger.json` before populating `knowledge-manifest.yaml` or drafting final documents. Treat the claim ledger as the repository-fact registry and the manifest as the canonical relationship registry, never as evidence. Every entity must have one stable ID, one status, and one or more passing `claim_ids` that bind the entity to supported facts or scoped uncertainty.
+
+At least one bound claim must have an entity-compatible type. In particular, endpoints require `endpoint-contract`, failures require `failure`, configurations require `configuration`, and external mappings require `mapping`. A field also records `boundary_kind` and `observation_kind`; keep local lookup keys separate from declared external fields.
+
+Machine-readable values are facts too. Endpoint `method`/`route`, field `path`, configuration `key`, concrete dependency `type`, failure `category`, and mapping `direction` must be present in the statement, verification tokens, or render terms of their bound claims. Two generated files that repeat the same unsupported value do not corroborate one another.
 
 The behavior catalog may temporarily use `discovered` and its `pending` count during analysis. Before final pack validation, resolve every manifest behavior to `documented`, `technical`, `duplicate`, `excluded`, or `blocked`.
 
@@ -37,12 +41,15 @@ Prefer semantic IDs that survive discovery-order changes. Never renumber existin
 - Runtime configuration is owned by the Runtime Pack.
 - External dependency details are owned by dependency stubs.
 - Failures are owned by the global failure taxonomy; behavior tables reference failure IDs.
+- Tech and BA summaries/flows are owned by separate `.work/flow-models/*.tech-flow.json` and `*.ba-flow.json` models. Never store one generic flow for both views.
+- Flow models, behavior metadata, catalogs, and manifest relationships must reference passing claims. Every flow edge needs its own relationship `claim_ids`. They may organize facts but cannot create them.
+- `tech-pack/behavior-catalog.yaml` is a strict projection of manifest behavior identity, status, paths, relationships, claims, repository/commit, analysis mode, and counts; it may not drift independently.
 
 Behavior documents summarize and link to these canonical records. Do not duplicate full contracts, mappings, configuration matrices, dependency stubs, or failure definitions inside behaviors.
 
 ## Required navigation and coverage
 
-Create `knowledge-map.md` as the human entry point and `coverage-report.md` as the completeness statement. The coverage report must account for discovered, documented, excluded, blocked, and unknown items across behaviors, endpoints, data assets, fields, validation rules, dependencies, configurations, failures, HTTP calls, and mappings.
+Create `knowledge-map.md` as the claim-bearing human entry point and `coverage-report.md` as the claim-bearing completeness statement. The coverage report must account for discovered, documented, excluded, blocked, and unknown items across behaviors, endpoints, data assets, fields, validation rules, dependencies, configurations, failures, HTTP calls, and mappings. Bind inventory counts and coverage notes to the entity, absence, or coverage-gap Claims that justify them.
 
 Targeted analysis is always `partial` unless a prior complete manifest is being refreshed. Complete coverage requires every discovered executable entry point and every indexed repository signal to have an explicit disposition.
 

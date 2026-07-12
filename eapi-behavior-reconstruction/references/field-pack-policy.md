@@ -6,9 +6,11 @@ Create a repository-wide field catalog for boundary-visible or behaviorally sign
 
 Identify a field by boundary plus exact path, not by its bare name. Use dotted paths and `[]` for array elements.
 
+Classify every manifest field with `boundary_kind` and `observation_kind`. Use `local-lookup` plus `local-lookup-key` when code merely evaluates `.get("x")`, `obj["x"]`, or an equivalent lookup on an opaque value. That proves the local literal key and result propagation only; it does not prove that an external response contains the field, that the field is required, or that it belongs to a remote schema. A Confirmed `outbound-http-response` field requires direct schema evidence and a `declared-contract-field` or `schema-field` observation.
+
 ## Field catalog
 
-For each field record its stable field ID, boundary ID/type, path, semantic meaning, type/format, requiredness, nullability, source/default, sensitivity classification only when directly established, related validation rules, related lineage/mapping IDs, status, and evidence.
+For each field record its stable field ID, boundary ID, boundary kind, observation kind, path, semantic meaning, type/format, requiredness, nullability, source/default, sensitivity classification only when directly established, related validation rules, related lineage/mapping IDs, status, and evidence.
 
 Do not infer that two same-named fields have the same meaning. Do not reproduce customer data or secret values.
 

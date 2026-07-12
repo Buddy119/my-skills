@@ -4,6 +4,8 @@
 
 Describe observable implementation behavior without presenting reconstructed intent as historical fact.
 
+Apply this policy through the atomic claim ledger defined in `claim-first-policy.md`. A citation attached somewhere in a document does not support unrelated statements elsewhere in that document.
+
 ## Evidence statuses
 
 ### Confirmed
@@ -58,6 +60,10 @@ When higher-ranked evidence conflicts with lower-ranked evidence, record the con
 - When relevant tests exist for a behavior, extract one or two assertions that prove a core outcome; prioritize a failure-path assertion.
 - Do not cite generated build output when a source definition is available.
 - Never reproduce secrets, tokens, customer identifiers, or production payloads.
+- Capture the exact range hash before accepting a claim; a stale hash invalidates the claim.
+- Explain why each cited range supports, contradicts, or only contextualizes the exact atomic statement.
+- Do not use the evidence index, manifest, generated pack, flow model, template, or temporary generator as evidence.
+- Treat comments and names as indirect evidence unless executable/schema/configuration evidence establishes the same fact.
 
 ## Scope rules
 

@@ -3,6 +3,8 @@ source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic|targeted"
 coverage_status: "complete|partial|blocked"
 documents:
+  claim_ledger: ".work/claim-ledger.json"
+  claim_audit: ".work/claim-audit.json"
   knowledge_map: "knowledge-map.md"
   coverage_report: "coverage-report.md"
   tech_overview: "tech-pack/repository-overview.md"
@@ -25,111 +27,48 @@ documents:
   ba_exception_catalog: "ba-pack/business-exception-catalog.md"
   ba_behavior_catalog: "ba-pack/behavior-catalog.md"
 
-behaviors:
-  - behavior_id: "repository.behavior-name"
-    category: "business|integration|technical"
-    status: "documented|technical|duplicate|excluded|blocked"
-    document: "tech-pack/behaviors/repository.behavior-name.md"
-    ba_document: null
-    duplicate_of: null
-    endpoint_ids:
-      - "EP-POST-resource"
-    data_asset_ids: []
-    field_ids: []
-    dependency_ids: []
-    config_ids: []
-    failure_ids: []
+# Required behavior keys: behavior_id, category, status, document, ba_document,
+# tech_flow_model, ba_flow_model, duplicate_of, claim_ids, endpoint_ids,
+# data_asset_ids, field_ids, dependency_ids, config_ids, failure_ids.
+behaviors: []
 
-endpoints:
-  - endpoint_id: "EP-POST-resource"
-    method: "POST"
-    route: "/resource"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    primary_behavior_id: "repository.behavior-name"
-    behavior_ids:
-      - "repository.behavior-name"
-    contract_document: "tech-pack/endpoints/contracts/EP-POST-resource.api-contract.md"
-    contract_alias_of: null
+# Required endpoint keys: endpoint_id, method, route, status,
+# primary_behavior_id, behavior_ids, contract_document, contract_alias_of, claim_ids.
+endpoints: []
 
-data_assets:
-  - data_asset_id: "DATA-dynamodb-resource"
-    kind: "dynamodb|rds|s3|cache|message|event|parameter|secret|other"
-    name: "logical resource name"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    behavior_ids:
-      - "repository.behavior-name"
+# Required data-asset keys: data_asset_id, kind, name, status, behavior_ids, claim_ids.
+data_assets: []
 
-fields:
-  - field_id: "FIELD-EP-POST-resource-body-id"
-    boundary_id: "EP-POST-resource"
-    path: "body.id"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    validation_rule_ids:
-      - "VR-resource-id-required"
+# Required field keys: field_id, boundary_id, boundary_kind, observation_kind,
+# path, status, validation_rule_ids, claim_ids. A local lookup key is not an
+# external response-contract field.
+# boundary_kind: inbound-api|outbound-http-request|outbound-http-response|event|
+# persistence|dependency-call|local-input|local-result|local-lookup|unknown.
+# observation_kind: declared-contract-field|schema-field|executable-boundary-read|
+# executable-boundary-write|local-lookup-key|local-result|inferred-field|unknown.
+fields: []
 
-validation_rules:
-  - rule_id: "VR-resource-id-required"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    behavior_ids:
-      - "repository.behavior-name"
-    field_ids:
-      - "FIELD-EP-POST-resource-body-id"
-    failure_ids: []
+# Required validation-rule keys: rule_id, status, behavior_ids, field_ids, failure_ids, claim_ids.
+validation_rules: []
 
-dependencies:
-  - dependency_id: "DEP-external-resource-system"
-    type: "http-api|lambda|queue|topic|event-bus|stream|database|object-store|library|layer|other"
-    material: "Yes|No"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    stub_document: "tech-pack/dependencies/stubs/DEP-external-resource-system.contract-stub.md"
-    behavior_ids:
-      - "repository.behavior-name"
-    endpoint_ids:
-      - "EP-POST-resource"
-    config_ids:
-      - "CFG-resource-endpoint"
-    failure_ids: []
+# Required dependency keys: dependency_id, type, material, status, stub_document,
+# behavior_ids, endpoint_ids, config_ids, failure_ids, claim_ids.
+dependencies: []
 
-configs:
-  - config_id: "CFG-resource-endpoint"
-    key: "RESOURCE_ENDPOINT"
-    category: "environment|feature-flag|lambda-runtime|trigger|resource|other"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    behavior_ids:
-      - "repository.behavior-name"
-    endpoint_ids: []
-    dependency_ids:
-      - "DEP-external-resource-system"
-    failure_ids: []
+# Required config keys: config_id, key, category, status, behavior_ids,
+# endpoint_ids, dependency_ids, failure_ids, claim_ids.
+configs: []
 
-failures:
-  - failure_id: "FAIL-resource-id-required"
-    category: "Validation"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    behavior_ids:
-      - "repository.behavior-name"
-    endpoint_ids:
-      - "EP-POST-resource"
-    dependency_ids: []
-    config_ids: []
+# Required failure keys: failure_id, category, status, behavior_ids,
+# endpoint_ids, dependency_ids, config_ids, claim_ids.
+failures: []
 
-external_http_calls:
-  - call_id: "HTTP-external-resource-create"
-    dependency_id: "DEP-external-resource-system"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    behavior_ids:
-      - "repository.behavior-name"
-    config_ids:
-      - "CFG-resource-endpoint"
-    failure_ids: []
+# Required HTTP-call keys: call_id, dependency_id, status, behavior_ids,
+# config_ids, failure_ids, claim_ids.
+external_http_calls: []
 
-field_mappings:
-  - mapping_id: "MAP-external-resource-create-eapi-to-external-id"
-    call_id: "HTTP-external-resource-create"
-    direction: "eapi-to-external|external-to-eapi"
-    status: "Confirmed|Inferred|Conflicting|Unknown"
-    field_ids:
-      - "FIELD-EP-POST-resource-body-id"
+# Required mapping keys: mapping_id, call_id, direction, status, field_ids, claim_ids.
+field_mappings: []
 
 summary:
   behaviors: 0

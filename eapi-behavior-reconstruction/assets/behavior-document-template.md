@@ -3,10 +3,14 @@ behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 entry_type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
 entry_point: "handler-or-route"
 behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
+flow_perspective: "technical"
+summary_perspective: "technical"
+tech_flow_model: "../../.work/flow-models/repository.behavior-name.tech-flow.json"
 ba_behavior_document: null
 endpoint_ids: []
 api_contract_documents: []
@@ -18,27 +22,20 @@ validation_rule_ids: []
 failure_ids: []
 external_http_call_ids: []
 external_mapping_ids: []
-consumes:
-  - type: "http-api|event|queue|topic|stream|schedule|other"
-    name: "stable connection name"
-produces:
-  - type: "http-response|event|queue|topic|other"
-    name: "stable connection name"
-reads:
-  - type: "dynamodb|rds|s3|parameter|secret|other"
-    name: "resource or logical name"
-writes:
-  - type: "dynamodb|rds|s3|other"
-    name: "resource or logical name"
-analysis_limitations:
-  - "Describe an excluded or unavailable area"
+consumes: []
+produces: []
+reads: []
+writes: []
+analysis_limitations: []
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind the dynamic H1 and each single-sentence factual block to passing CLM IDs. -->
 
 # Behavior title
 
 ## Summary
 
-Describe the observable behavior in two or three sentences. Do not claim that this is the original historical requirement.
+Render the implementation-focused `summary` from the Tech flow model in two or three sentences. Do not use the BA summary or claim that this is the original historical requirement.
 
 ## Trigger and entry point
 
@@ -65,14 +62,9 @@ Include this section only for `behavior_category: business|integration`:
 
 ```mermaid
 flowchart TD
-    A[Trigger] --> B[Parse input]
-    B --> C{Valid?}
-    C -- No --> D[Return or route failure]
-    C -- Yes --> E[Execute behavior]
-    E --> F[Observable result]
 ```
 
-Explain the important nodes and branches with source evidence.
+Render node labels and edges from the separate Tech flow model. Explain the implementation steps and branches with source evidence. Do not reuse the BA flow model.
 
 ## Inputs
 
@@ -93,37 +85,26 @@ Include this section only when `external_mapping_ids` is nonempty. Summarize the
 
 ## Preconditions and business rules
 
-### VR-rule-id — Rule title
-
-- Behavior:
-- Status: Confirmed
-- Evidence:
-  - `path/to/file.ext:line`
-  - `path/to/test.ext:line`
-- Notes:
+Add only rule IDs and behavior supported by passing claims.
 
 ## Happy path
 
-1. Describe the ordered executable steps.
-2. Cite important transitions inline or directly below the step.
+Render only ordered steps supported by passing claims.
 
 ## Data access and state changes
 
 | Operation | Resource | Key/record | State change | Status | Evidence |
 |---|---|---|---|---|---|
-| Read/Write | DATA- ID / resource | Identifier | Description | Confirmed | `path/to/file.ext:line` |
 
 ## Outputs and side effects
 
 | Output | Destination | Contract/resource | Condition | Status | Evidence |
 |---|---|---|---|---|---|
-| Event/response/call | Destination | Name | Condition | Confirmed | `path/to/file.ext:line` |
 
 ## Failures, retries, and partial success
 
 | Failure ID | Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
 |---|---|---|---|---|---|
-| FAIL- ID | Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
 
 ## External dependency stubs
 
@@ -133,8 +114,7 @@ List relevant `DEP-` IDs, summarize their role, and link to their canonical stub
 
 | Question or conflict | Why it matters | Status | Evidence needed |
 |---|---|---|---|
-| Item | Risk or impact | Unknown/Conflicting | Artifact or owner |
 
 ## Evidence index
 
-- `path/to/file.ext:line` — what this location proves
+List only source ranges owned by this behavior's passing claims.

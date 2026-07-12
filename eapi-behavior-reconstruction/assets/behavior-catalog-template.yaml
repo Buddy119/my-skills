@@ -1,29 +1,10 @@
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic|targeted"
-behaviors:
-  - behavior_id: "repository.behavior-name"
-    title: "Human-readable title"
-    category: "business|integration|technical"
-    triggers:
-      - type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
-        name: "stable trigger name"
-    entry_points:
-      - "repository-relative-file:line"
-    status: "discovered|documented|technical|duplicate|excluded|blocked"
-    duplicate_of: null
-    document: "behaviors/repository.behavior-name.md"
-    ba_document: null
-    endpoint_ids:
-      - "EP-POST-resource"
-    api_contracts:
-      - "endpoints/contracts/EP-POST-resource.api-contract.md"
-    data_asset_ids: []
-    field_ids: []
-    dependency_ids: []
-    config_ids: []
-    failure_ids: []
-    notes: "Short evidence-based note"
+# This file is a strict manifest projection: repository, commit, analysis mode,
+# identity, category, disposition, paths, relationships, passing claim_ids, and
+# summary counts must match. Do not store independent prose facts here.
+behaviors: []
 summary:
   total_inventory: 0
   pending: 0

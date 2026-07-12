@@ -1,0 +1,16 @@
+{
+  "behavior_id": "repository.behavior-name",
+  "repository": "repository-name",
+  "source_commit": "git-commit-or-unknown",
+  "scaffold_state": "SCAFFOLD_ONLY_REMOVE_AFTER_POPULATION",
+  "perspective": "business",
+  "summary": "",
+  "summary_claim_ids": [],
+  "nodes": [],
+  "edges": [],
+  "derived_from": {
+    "behavior_ids": [],
+    "business_rule_ids": [],
+    "business_exception_ids": []
+  }
+}

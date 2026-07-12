@@ -1,9 +1,12 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+claim_ids: []
 knowledge_manifest: "../../knowledge-manifest.yaml"
 coverage_status: "complete|partial|blocked"
 ---
+
+<!-- SCAFFOLD_ONLY: Replace every example and instruction. Bind each factual block to passing CLM IDs. -->
 
 # State transition matrix
 
@@ -11,13 +14,11 @@ coverage_status: "complete|partial|blocked"
 
 | Transition ID | Data object/asset | State field | From state | Triggering behavior | Rule/condition | To state | Persisted/emitted effect | Failure/partial state | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|---|---|
-| STATE-resource-created | DATA- ID | `status` or Unknown | Absent/Any/Unknown | Behavior ID | VR- ID or condition | New state | Write/event | FAIL- ID or None | Confirmed/Inferred/Unknown | `path/to/file.ext:line` |
 
 ## Transition guards and concurrency
 
 | Transition ID | Idempotency | Duplicate handling | Concurrency/version rule | Transaction/rollback | Status | Evidence |
 |---|---|---|---|---|---|---|
-| STATE-resource-created | Mechanism or Unknown | Outcome or Unknown | Rule or Unknown | Boundary or Unknown | Confirmed/Inferred/Unknown | `path/to/file.ext:line` |
 
 ## No-state and unresolved cases
 

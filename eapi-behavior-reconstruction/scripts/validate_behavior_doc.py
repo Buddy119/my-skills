@@ -8,16 +8,24 @@ import re
 import sys
 from pathlib import Path
 
+from runtime_guard import run_guarded
+from validate_claim_ledger import validate_single_document
+from validate_flow_separation import validate_tech_document
+
 
 REQUIRED_KEYS = {
     "behavior_id",
     "title",
     "repository",
     "source_commit",
+    "claim_ids",
     "entry_type",
     "entry_point",
     "behavior_category",
     "overall_status",
+    "flow_perspective",
+    "summary_perspective",
+    "tech_flow_model",
     "ba_behavior_document",
     "endpoint_ids",
     "api_contract_documents",
@@ -154,6 +162,13 @@ def main() -> int:
     if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
         errors.append("Behavior flow must contain a Mermaid flowchart or graph")
 
+    flow_errors, flow_warnings = validate_tech_document(args.document.resolve(), args.repo.resolve())
+    errors.extend(flow_errors)
+    warnings.extend(flow_warnings)
+    claim_errors, claim_warnings = validate_single_document(args.document.resolve(), args.repo.resolve())
+    errors.extend("claim provenance: " + error for error in claim_errors)
+    warnings.extend("claim provenance: " + warning for warning in claim_warnings)
+
     entry_type = scalar_value(frontmatter, "entry_type")
     if entry_type not in ALLOWED_ENTRY_TYPES:
         errors.append("entry_type must be api, sqs, sns, eventbridge, schedule, stream, step-function, or other")
@@ -240,7 +255,8 @@ def main() -> int:
             errors.append(f"invalid line range: {rel}:{start}-{end}")
             continue
         try:
-            line_count = sum(1 for _ in source.open(encoding="utf-8", errors="replace"))
+            with source.open(encoding="utf-8", errors="replace") as handle:
+                line_count = sum(1 for _ in handle)
         except OSError as exc:
             errors.append(f"cannot read cited file {rel}: {exc}")
             continue
@@ -267,4 +283,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_guarded(main))

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "repository": "repository-name",
+  "source_commit": "git-commit-or-unknown",
+  "review": {
+    "mode": "ReviewRequired",
+    "author_id": "REPLACE_AUTHOR_CONTEXT",
+    "reviewer_id": "REPLACE_INDEPENDENT_REVIEWER_CONTEXT"
+  },
+  "audits": [],
+  "scaffold_state": "SCAFFOLD_ONLY_REMOVE_AFTER_REVIEW"
+}

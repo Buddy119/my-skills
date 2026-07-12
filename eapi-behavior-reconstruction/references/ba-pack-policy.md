@@ -5,7 +5,10 @@
 The BA Pack translates verified observable behavior from the Tech Pack into business-readable documentation. It does not reconstruct an unproven historical requirement, business intention, product promise, or policy rationale.
 
 - Generate a BA behavior only from a validated Tech Behavior at the same repository commit.
+- Build an independent BA flow/summary model under `.work/flow-models/`; never reuse or mechanically rename the Tech model's summary, nodes, or edges.
+- Give every BA edge passing relationship `claim_ids`; do not connect individually valid or Unknown nodes unless evidence establishes their sequence or causality.
 - Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` exactly; do not upgrade confidence during translation.
+- Bind every BA fact to passing Claim IDs; a BA status must never be stronger than its source claims.
 - Link to the Tech Behavior for implementation details and source evidence. Do not place raw source citations in BA documents.
 - Exclude purely technical behaviors unless they materially change a business-visible outcome. Describe that relevance in the affected BA behavior instead of creating a technical BA behavior.
 
@@ -13,12 +16,12 @@ The BA Pack translates verified observable behavior from the Tech Pack into busi
 
 Write for a business analyst who understands the banking domain but may not know the repository, framework, AWS service, class structure, or code terminology.
 
-Prefer business actors, business objects, decisions, events, rules, and outcomes:
+Prefer business actors, business objects, decisions, events, rules, and outcomes only when those meanings are supported:
 
 - Write “The customer update request is checked for required information” rather than “The handler validates the DTO.”
-- Write “The customer record is updated” rather than “The service writes to DynamoDB.”
-- Write “The external customer system is asked to update the profile” rather than “The Lambda makes a POST request.”
-- Write “The request is rejected and the caller is informed” rather than naming an exception class or HTTP adapter.
+- Write “The customer record is updated” only when persistence and the business object are proven; otherwise keep the business outcome `Unknown`.
+- Write “The external customer system is asked to update the profile” only when the participant and purpose are supported; an opaque call alone is insufficient.
+- Write “The request is rejected and the caller is informed” only when the visible result is observable; a thrown exception alone is insufficient.
 
 Do not repeat class names, handler names, method names, AWS resource names, source paths, field-level mapping tables, retry implementation, or full API schemas. Use the linked Tech Pack for those details.
 
@@ -37,6 +40,8 @@ Translate only what is supported:
 
 Do not turn null checks, serialization constraints, framework behavior, or infrastructure wiring into business rules unless the business meaning is evident from code, tests, schema names, or other repository evidence.
 
+Do not invent actors, recipients, owners, purpose, completed outcomes, or business rules from injected collaborator names, method names, status literals, or message construction. When only implementation activity is known, omit it from BA flow or record the business meaning as an audited `Unknown` claim.
+
 ## BA behavior contents
 
 Each BA behavior must state:
@@ -53,6 +58,8 @@ Each BA behavior must state:
 - Open questions and a link to the corresponding Tech Behavior.
 
 The Mermaid flow must use actor, action, decision, and outcome labels. Do not reproduce internal call chains.
+
+Before delivery, run the Tech/BA flow-separation validator. Identical or near-identical summaries, Mermaid nodes, or reused model files are validation errors, not acceptable documentation variants.
 
 ## Repository-wide BA views
 

@@ -38,6 +38,10 @@ Distinguish:
 - Full rollback from partial state.
 - A business rejection from a technical failure.
 
+Do not split a generic `catch` or rethrow region into confirmed lookup, persistence, delivery, or remote failures unless dependency contracts, explicit branches, or tests establish those failure modes. Confirm the observed catch boundary and keep candidate origins inferred or unknown.
+
+A local result containing `statusCode`, `code`, `error`, or a similar literal is not automatically a failure, rejection, HTTP outcome, or business exception. Without deployment/framework integration or a consumer contract, document only the local returned value. Every `FAIL-` manifest entity must bind to a passing `claim_type: failure`; an `output` or `validation` claim alone cannot create a failure entity.
+
 ## BA projection
 
 Project only business-visible failures into `ba-pack/business-exception-catalog.md`. Translate them into business condition, impact, visible result, and recovery. Do not expose exception classes, stack details, AWS resource IDs, or unsupported operational intent.
