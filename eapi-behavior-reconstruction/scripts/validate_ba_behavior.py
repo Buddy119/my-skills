@@ -68,6 +68,13 @@ def scalar_value(frontmatter: str, key: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def mermaid_flow(body: str) -> str | None:
+    match = re.search(r"```mermaid\s*\n(?P<flow>.*?)(?:\n```)", body, re.I | re.S)
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group("flow")).strip().lower()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
@@ -136,6 +143,13 @@ def main() -> int:
                     )
                 if not re.search(rf"\]\({re.escape(expected_ba_link.as_posix())}\)", tech_body):
                     errors.append("linked Tech behavior body must contain the return link to this BA behavior")
+                tech_flow = mermaid_flow(tech_body)
+                ba_flow = mermaid_flow(body)
+                if tech_flow and ba_flow and tech_flow == ba_flow:
+                    warnings.append(
+                        "HIGH: BA and Tech Mermaid flows are identical; rebuild the BA flow from business "
+                        "events, decisions, affected objects, and outcomes"
+                    )
         if not re.search(rf"\]\({re.escape(tech_document)}\)", body):
             errors.append("BA behavior body must contain a Markdown link matching tech_behavior_document")
 

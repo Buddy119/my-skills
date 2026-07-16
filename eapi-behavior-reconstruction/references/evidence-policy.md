@@ -53,11 +53,14 @@ When higher-ranked evidence conflicts with lower-ranked evidence, record the con
 - Use repository-relative POSIX paths.
 - Include a line or tight line range: `src/handler.ts:42-48`.
 - Cite the definition or executable branch, not only a search result or import.
+- Attach citations to a coherent paragraph, meaningful rule, flow explanation, or table row. Do not turn each sentence into an atomic claim merely to attach a citation.
 - Cite tests separately from production code.
 - Cite concrete assertions or expectations, not only test filenames, classes, or method declarations.
 - When relevant tests exist for a behavior, extract one or two assertions that prove a core outcome; prioritize a failure-path assertion.
 - Do not cite generated build output when a source definition is available.
 - Never reproduce secrets, tokens, customer identifiers, or production payloads.
+
+Evidence statuses apply to material conclusions and uncertainty, not to every connective sentence in readable prose.
 
 ## Scope rules
 

@@ -4,7 +4,8 @@
 
 The BA Pack translates verified observable behavior from the Tech Pack into business-readable documentation. It does not reconstruct an unproven historical requirement, business intention, product promise, or policy rationale.
 
-- Generate a BA behavior only from a validated Tech Behavior at the same repository commit.
+- Generate the BA Pack only after full-repository synthesis is complete and the related Tech documents exist at the same repository commit.
+- Derive each BA behavior from its completed dossier, repository synthesis, and verified Tech Behavior; do not use a shared metadata flow as the source for both views.
 - Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` exactly; do not upgrade confidence during translation.
 - Link to the Tech Behavior for implementation details and source evidence. Do not place raw source citations in BA documents.
 - Exclude purely technical behaviors unless they materially change a business-visible outcome. Describe that relevance in the affected BA behavior instead of creating a technical BA behavior.
@@ -52,7 +53,7 @@ Each BA behavior must state:
 - External business interactions, without HTTP mechanics or field-level mappings.
 - Open questions and a link to the corresponding Tech Behavior.
 
-The Mermaid flow must use actor, action, decision, and outcome labels. Do not reproduce internal call chains.
+The Mermaid flow must use actor, action, decision, affected business object, and outcome labels. Create it independently from the synthesized business model. Do not copy the Tech Mermaid, mechanically rename its nodes, or reproduce internal call chains.
 
 ## Traceability and links
 
@@ -62,3 +63,4 @@ The Mermaid flow must use actor, action, decision, and outcome labels. Do not re
 - From a BA Behavior, link to `../../tech-pack/behaviors/<behavior-id>.md`.
 - The two documents must have the same `behavior_id`, `repository`, and `source_commit`.
 - BA overview and catalog entries must link to both views.
+- Before delivery, compare Tech and BA Mermaid content. Identical diagrams are a defect; similar topology is acceptable only when the labels and surrounding explanation answer different audience questions.

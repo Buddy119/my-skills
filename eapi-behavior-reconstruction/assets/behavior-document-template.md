@@ -7,7 +7,7 @@ entry_type: "api|sqs|sns|eventbridge|schedule|stream|step-function|other"
 entry_point: "handler-or-route"
 behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
-api_contract_document: null
+api_contracts: []
 ba_behavior_document: null
 consumes:
   - type: "http-api|event|queue|topic|stream|schedule|other"
@@ -45,11 +45,11 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 - Evidence:
   - `path/to/file.ext:line`
 
-## API contract
+## API contracts
 
-Include this section only for `entry_type: api`. Keep it short and link to the separate contract document:
+Include this section only for `entry_type: api`. Keep it short and link to every endpoint contract implemented by this behavior:
 
-[View detailed API contract](../contracts/repository.behavior-name.api-contract.md)
+- [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
 
 ## BA view
 
@@ -78,27 +78,13 @@ Describe non-API input messages, events, records, schedules, or invocation conte
 
 Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
 
-Record each proven call in YAML before its mappings:
+Summarize why the call matters to this behavior and the material transformations. Keep exact field-by-field tables in the repository field document.
 
-```yaml
-external_http_calls:
-  - call_id: "HTTP-001"
-    client_operation: "ExternalCustomerClient.updateCustomer"
-    method: "POST"
-    target: "external-customer-system /customers"
-    evidence:
-      - "src/client.ext:line"
-```
+| Call and mapping IDs | External interaction | Behavior-relevant transformation or limitation | Status | Evidence |
+|---|---|---|---|---|
+| HTTP-001; FM-001 | Client operation and target | Key rename/default/conversion or unresolved field | Confirmed | `path/to/file.ext:line` |
 
-| ID | HTTP call | Direction | Source boundary and field(s) | Target boundary and field(s) | Transformation | Condition/default | Lossy | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|---|
-| FM-001 | HTTP-001 | eapi-to-external | EAPI model: `field.path` | External request: `field.path` | Rename | Always; no default | No | Confirmed | `path/to/file.ext:line` |
-
-### Unmapped, dropped, or unresolved fields
-
-| HTTP call and field | Observed treatment | Status | Evidence or evidence needed |
-|---|---|---|---|
-| HTTP-001 request/response: `field.path` | Dropped/ignored/unresolved | Unknown | `path/to/file.ext:line` or required artifact |
+[View detailed field validation and HTTP mappings](../field-validation-and-mapping.md)
 
 ## Preconditions and business rules
 
@@ -137,6 +123,10 @@ external_http_calls:
 ## External dependency stubs
 
 For each dependency outside this repository, record the request/event/resource name, invocation evidence, observed contract, and unknown internal behavior.
+
+## Related repository knowledge
+
+Include only relevant links, such as the data lifecycle, field rules and external HTTP mappings, runtime configuration, dependency contracts, or failure taxonomy. Remove this optional section when no repository-level reference applies.
 
 ## Open questions and conflicts
 

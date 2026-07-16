@@ -27,6 +27,8 @@ Explain the business event, action, and visible outcome in two or three sentence
 
 ## Business flow
 
+Build this diagram from business events, decisions, affected objects, and visible outcomes. Do not copy or mechanically rename the Tech flow.
+
 ```mermaid
 flowchart TD
     A[Business request or event] --> B[Check required business information]

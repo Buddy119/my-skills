@@ -1,0 +1,12 @@
+repository: "repository-name"
+source_commit: "git-commit-or-unknown"
+analysis_mode: "automatic"
+phase: "inventory|tracing|synthesis|publishing|completed"
+synthesis_status: "pending|complete|partial"
+publication_status: "pending|in-progress|complete"
+output_directory: "behavior-docs/repository-name"
+behaviors:
+  - behavior_id: "repository.behavior-name"
+    status: "discovered|tracing|understood|blocked"
+    dossier: null
+    notes: "Short progress or blocker note"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the minimum structure and source evidence of a behavior document."""
+"""Validate mechanical structure, links, and source citations of a Tech behavior."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ REQUIRED_KEYS = {
     "entry_point",
     "behavior_category",
     "overall_status",
-    "api_contract_document",
+    "api_contracts",
     "ba_behavior_document",
     "consumes",
     "produces",
@@ -76,6 +76,28 @@ def scalar_value(frontmatter: str, key: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def yaml_block(frontmatter: str, key: str) -> tuple[str, str]:
+    match = re.search(
+        rf"^{re.escape(key)}:[ \t]*(?P<inline>[^\n]*)\n(?P<body>(?:[ \t]+[^\n]*(?:\n|$))*)",
+        frontmatter,
+        re.M,
+    )
+    if not match:
+        return "", ""
+    return match.group("inline").strip(), match.group("body")
+
+
+def api_contract_entries(frontmatter: str) -> list[tuple[str, str]]:
+    inline, block = yaml_block(frontmatter, "api_contracts")
+    if inline == "[]":
+        return []
+    endpoint_ids = re.findall(
+        r"^\s*-\s+endpoint_id:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M
+    )
+    documents = re.findall(r"^\s+document:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M)
+    return list(zip((item.strip() for item in endpoint_ids), (item.strip() for item in documents)))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
@@ -125,20 +147,29 @@ def main() -> int:
         errors.append("Behavior flow must contain a Mermaid flowchart or graph")
 
     entry_type = scalar_value(frontmatter, "entry_type")
-    api_contract_document = scalar_value(frontmatter, "api_contract_document")
+    api_inline, api_block = yaml_block(frontmatter, "api_contracts")
+    contracts = api_contract_entries(frontmatter)
+    endpoint_count = len(re.findall(r"^\s*-\s+endpoint_id:", api_block, re.M))
+    document_count = len(re.findall(r"^\s+document:", api_block, re.M))
+    if endpoint_count != document_count:
+        errors.append("every api_contracts entry must contain endpoint_id and document")
+
     if entry_type == "api":
-        if "API contract" not in headings:
-            errors.append("API behavior is missing the API contract link section")
-        if not api_contract_document or api_contract_document.lower() in {"null", "none"}:
-            errors.append("API behavior must set api_contract_document")
-        else:
-            contract_path = (args.document.parent / api_contract_document).resolve()
+        if "API contracts" not in headings:
+            errors.append("API behavior is missing the API contracts link section")
+        if not contracts:
+            errors.append("API behavior must list at least one endpoint contract in api_contracts")
+        for endpoint_id, document in contracts:
+            contract_path = (args.document.parent / document).resolve()
             if not contract_path.is_file():
-                errors.append(f"linked API contract does not exist: {api_contract_document}")
-            if not re.search(rf"\]\({re.escape(api_contract_document)}\)", body):
-                errors.append("API behavior body must contain a Markdown link matching api_contract_document")
-    elif api_contract_document and api_contract_document.lower() not in {"null", "none"}:
-        errors.append("non-API behavior must set api_contract_document to null")
+                errors.append(f"linked API contract does not exist: {document}")
+            if not re.search(rf"\]\({re.escape(document)}\)", body):
+                errors.append(f"API behavior body must link endpoint {endpoint_id}: {document}")
+    else:
+        if contracts or api_inline != "[]":
+            errors.append("non-API behavior must set api_contracts: []")
+        if "API contracts" in headings:
+            errors.append("non-API behavior must omit the API contracts section")
 
     ba_behavior_document = scalar_value(frontmatter, "ba_behavior_document")
     if behavior_category in {"business", "integration"}:
@@ -159,7 +190,9 @@ def main() -> int:
             errors.append("technical behavior must omit the BA view section")
 
     has_structured_mappings = bool(re.search(r"^field_mappings:\s*\n\s+-\s+mapping_id:", frontmatter, re.M))
-    has_external_http_calls = bool(re.search(r"^external_http_calls:\s*\n\s+-\s+call_id:", frontmatter, re.M))
+    has_external_http_calls = bool(
+        re.search(r"^external_http_calls:\s*\n\s+-\s+call_id:", frontmatter, re.M)
+    )
     if has_structured_mappings:
         if not has_external_http_calls:
             errors.append("field_mappings require a proven outbound call in external_http_calls")
@@ -204,7 +237,8 @@ def main() -> int:
 
     if "Unknown" not in body and "Conflicting" not in body:
         warnings.append("document contains no Unknown or Conflicting review items")
-    if "TODO" in text or "path/to/" in text or "repository.behavior-name" in text:
+    placeholders = ("TODO", "path/to/", "repository.behavior-name", "repository.method-route")
+    if any(placeholder in text for placeholder in placeholders):
         errors.append("template placeholders remain in the document")
 
     for warning in warnings:
@@ -215,7 +249,7 @@ def main() -> int:
     if errors:
         print(f"FAILED: {len(errors)} error(s), {len(warnings)} warning(s)")
         return 1
-    print(f"OK: {len(citations)} citation occurrence(s), {len(warnings)} warning(s)")
+    print(f"OK: {len(contracts)} endpoint contract(s), {len(citations)} citation occurrence(s), {len(warnings)} warning(s)")
     return 0
 
 

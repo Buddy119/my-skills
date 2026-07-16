@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a standalone API contract, its evidence, and its behavior backlink."""
+"""Validate an endpoint-level API contract, evidence, and behavior backlink."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 
 REQUIRED_KEYS = {
     "behavior_id",
+    "endpoint_id",
     "title",
     "repository",
     "source_commit",
@@ -58,6 +59,17 @@ def scalar_value(frontmatter: str, key: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def yaml_block(frontmatter: str, key: str) -> tuple[str, str]:
+    match = re.search(
+        rf"^{re.escape(key)}:[ \t]*(?P<inline>[^\n]*)\n(?P<body>(?:[ \t]+[^\n]*(?:\n|$))*)",
+        frontmatter,
+        re.M,
+    )
+    if not match:
+        return "", ""
+    return match.group("inline").strip(), match.group("body")
+
+
 def section_value(body: str, heading: str) -> str:
     match = re.search(
         rf"^##\s+{re.escape(heading)}\s*$\n(?P<content>.*?)(?=^##\s+|\Z)",
@@ -96,6 +108,12 @@ def main() -> int:
     if status not in ALLOWED_STATUSES:
         errors.append("contract_status must be Confirmed, Inferred, Conflicting, or Unknown")
 
+    endpoint_id = scalar_value(frontmatter, "endpoint_id")
+    if endpoint_id:
+        expected_name = f"{endpoint_id}.api-contract.md"
+        if args.document.name != expected_name:
+            errors.append(f"contract filename must match endpoint_id: {expected_name}")
+
     headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
     missing_headings = sorted(REQUIRED_HEADINGS - headings)
     if missing_headings:
@@ -114,6 +132,28 @@ def main() -> int:
         behavior_path = (args.document.parent / behavior_document).resolve()
         if not behavior_path.is_file():
             errors.append(f"linked behavior document does not exist: {behavior_document}")
+        else:
+            try:
+                behavior_frontmatter, _ = split_frontmatter(behavior_path.read_text(encoding="utf-8"))
+            except ValueError as exc:
+                errors.append(f"linked behavior document is invalid: {exc}")
+            else:
+                if scalar_value(frontmatter, "behavior_id") != scalar_value(behavior_frontmatter, "behavior_id"):
+                    errors.append("contract and behavior document must have the same behavior_id")
+                _, api_block = yaml_block(behavior_frontmatter, "api_contracts")
+                expected_document = (Path("../contracts") / args.document.name).as_posix()
+                if not endpoint_id or not re.search(
+                    rf"^\s*-\s+endpoint_id:\s*[\"']?{re.escape(endpoint_id)}[\"']?\s*$",
+                    api_block,
+                    re.M,
+                ):
+                    errors.append("linked behavior api_contracts must contain this endpoint_id")
+                if not re.search(
+                    rf"^\s+document:\s*[\"']?{re.escape(expected_document)}[\"']?\s*$",
+                    api_block,
+                    re.M,
+                ):
+                    errors.append("linked behavior api_contracts must point to this contract document")
         if not re.search(rf"\]\({re.escape(behavior_document)}\)", body):
             errors.append("contract body must contain a Markdown link matching behavior_document")
 
@@ -148,7 +188,8 @@ def main() -> int:
                 f"citation outside file bounds: {relative}:{start}" + (f"-{end}" if end else "")
             )
 
-    if "TODO" in text or "path/to/" in text or "repository.behavior-name" in text:
+    placeholders = ("TODO", "path/to/", "repository.behavior-name", "repository.method-route")
+    if any(placeholder in text for placeholder in placeholders):
         errors.append("template placeholders remain in the document")
 
     for error in errors:
@@ -156,10 +197,9 @@ def main() -> int:
     if errors:
         print(f"FAILED: {len(errors)} error(s)")
         return 1
-    print(f"OK: {len(citations)} citation occurrence(s)")
+    print(f"OK: endpoint {endpoint_id}, {len(citations)} citation occurrence(s)")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -9,7 +9,7 @@ Create mappings only after locating a real outbound HTTP/HTTPS call in executabl
 - An SDK or repository wrapper whose implementation performs an external HTTP request.
 - A framework adapter that invokes an external HTTP endpoint.
 
-Record the confirmed call in `external_http_calls`. Then map EAPI fields to the external request and, when consumed, external response fields back to EAPI.
+Record the confirmed call in `external_http_calls`, the behavior dossier, and the repository register. Then map EAPI fields to the external request and, when consumed, external response fields back to EAPI. Publish the detailed reconciled mapping in `tech-pack/field-validation-and-mapping.md`; keep only a behavior-relevant summary and link in the Tech Behavior.
 
 Do not create mappings for:
 
@@ -35,7 +35,7 @@ Do not use vague labels such as `input`, `output`, `request DTO`, or `downstream
 
 Record each mapping with:
 
-- A stable ID local to the behavior document, such as `FM-001`.
+- A stable ID scoped to the behavior and reused consistently in its dossier, Tech metadata, repository register, and field document, such as `FM-001`.
 - The related `external_http_calls.call_id`, such as `HTTP-001`.
 - Direction: `eapi-to-external` or `external-to-eapi`.
 - Source boundary and one or more exact source field paths.

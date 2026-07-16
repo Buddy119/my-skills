@@ -2,7 +2,21 @@
 
 ## Scope
 
-Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write it as a separate API contract document, not inline in the behavior document. Link both documents to each other using relative Markdown links. Do not rely on DTO names alone.
+Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write one separate API contract per runtime endpoint, not one contract per grouped behavior and not inline in the behavior document. Link every contract to its behavior and list every endpoint in the repository Endpoint Matrix. Do not rely on DTO names alone.
+
+## Endpoint identity and links
+
+Write each contract to:
+
+```text
+tech-pack/contracts/<endpoint-id>.api-contract.md
+```
+
+Generate a stable endpoint ID from repository name, lower-case method, and normalized route. Preserve route parameter names, replace route punctuation and slashes with hyphens, and add a stable suffix only to resolve a collision.
+
+Include both `behavior_id` and `endpoint_id` in contract frontmatter. The behavior document must list every endpoint contract in `api_contracts` and link to it using `../contracts/<endpoint-id>.api-contract.md`. Use `api_contracts: []` for non-API behaviors. Each contract must link back using `../behaviors/<behavior-id>.md`.
+
+Add one `endpoint-matrix.md` row per method and route, including endpoints that share the same behavior.
 
 ## Evidence layers
 

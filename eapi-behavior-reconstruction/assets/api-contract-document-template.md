@@ -1,5 +1,6 @@
 ---
 behavior_id: "repository.behavior-name"
+endpoint_id: "repository.method-route"
 title: "Human-readable API contract title"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
@@ -18,6 +19,7 @@ behavior_document: "../behaviors/repository.behavior-name.md"
 
 | Property | Observed value | Status | Evidence |
 |---|---|---|---|
+| Endpoint ID | `repository.method-route` | Confirmed | `path/to/file.ext:line` |
 | Method and route | `METHOD /normalized/path` | Confirmed | `path/to/file.ext:line` |
 | Authentication | Scheme or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
 | Content type | Value or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
@@ -89,4 +91,3 @@ behavior_document: "../behaviors/repository.behavior-name.md"
 ## Evidence index
 
 - `path/to/file.ext:line` — what this location proves
-

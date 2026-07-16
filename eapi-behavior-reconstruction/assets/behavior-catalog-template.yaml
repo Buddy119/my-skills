@@ -1,6 +1,6 @@
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-analysis_mode: "automatic|targeted"
+analysis_mode: "automatic"
 behaviors:
   - behavior_id: "repository.behavior-name"
     title: "Human-readable title"
@@ -14,7 +14,9 @@ behaviors:
     duplicate_of: null
     document: "behaviors/repository.behavior-name.md"
     ba_document: null
-    api_contract: null
+    api_contracts:
+      - endpoint_id: "repository.method-route"
+        document: "contracts/repository.method-route.api-contract.md"
     notes: "Short evidence-based note"
 summary:
   discovered: 0

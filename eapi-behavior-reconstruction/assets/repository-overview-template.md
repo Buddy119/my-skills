@@ -1,12 +1,12 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-analysis_mode: "automatic|targeted"
+analysis_mode: "automatic"
 behavior_catalog: "behavior-catalog.yaml"
 coverage_status: "complete|partial|blocked"
 ---
 
-# Repository behavior overview
+# Repository knowledge overview
 
 ## Observable responsibility
 
@@ -26,9 +26,22 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 ## Behavior summary
 
-| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contract |
+| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contracts |
 |---|---|---|---|---|---|---|
-| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | [Contract](contracts/repository.behavior.api-contract.md) or N/A |
+| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | [BA](../ba-pack/behaviors/repository.behavior.md) or N/A | Endpoint contract links or N/A |
+
+## Knowledge pack index
+
+| Knowledge area | Document | Availability | What it explains |
+|---|---|---|---|
+| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Available/Not observed/Not applicable | Runtime routes and endpoint-level contracts |
+| Data and state | [Data lifecycle](data-lifecycle.md) | Available/Not observed | Object movement and state transitions |
+| Fields | [Field validation and mapping](field-validation-and-mapping.md) | Available/Not observed | Field rules and proven outbound HTTP mappings |
+| Runtime configuration | [Runtime configuration matrix](runtime-config-matrix.md) | Available/Not observed | Configuration that changes behavior |
+| External dependencies | [Dependency contracts](external-dependency-contracts.md) | Available/Not observed | Observed repository boundaries |
+| Failures | [Failure taxonomy](failure-taxonomy.md) | Available/Not observed | Cross-behavior failure and recovery patterns |
+
+Remove links for documents that are not generated; keep their availability so absence is explicit.
 
 ## External connections
 

@@ -25,6 +25,10 @@ Summarize supported business capabilities. Separate confirmed capabilities from 
 |---|---|---|---|---|---|---|
 | Capability or Unknown | Business-readable title | Business request/event | Visible outcome | Confirmed/Inferred/Unknown | [BA](behaviors/repository.behavior-name.md) | [Tech](../tech-pack/behaviors/repository.behavior-name.md) |
 
+## Business objects and lifecycle
+
+Explain the important business objects, how repository behaviors create or change them, meaningful business states, and where responsibility passes to another participant. Keep storage resources and implementation details in the Tech Pack.
+
 ## External business participants
 
 Describe external parties or systems by their business role and the purpose of the interaction. Keep protocols and field mappings in the Tech Pack.
