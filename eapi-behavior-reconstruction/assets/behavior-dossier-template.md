@@ -21,6 +21,34 @@ Explain the observable purpose currently suggested by the executable path, what 
 
 Retell the flow from trigger to observable result in natural language. Include the major calls and decisions needed to understand the behavior without listing every method.
 
+## Semantic symbol and call trace
+
+Use this working section for Java behaviors; remove it for non-Java behaviors.
+
+- **Language and project model:** Java version/build modules/source sets relevant to this behavior.
+- **Semantic-navigation status:** `used|degraded|unavailable`, including project-import readiness and the available capability.
+- **Exact entry symbol:** Fully qualified type, method signature, and entry definition.
+- **Confirmed definitions and outgoing calls:** Exact symbols for critical calls, with source locations used to confirm them.
+- **Incoming callers or framework entry:** Production callers, test-only references, or route/listener/Lambda/configuration evidence when no Java caller exists.
+- **Interfaces, overrides, and implementation candidates:** Exact interface method, overrides, and all relevant candidates.
+- **Runtime implementation binding:** Constructor/field/parameter injection and `@Bean`, `@Qualifier`, `@Primary`, `@Profile`, component-scan, test, or runtime-config evidence. Keep selection unresolved when evidence does not choose one candidate.
+- **Dynamic, generated, or unresolved edges:** Proxy/AOP, reflection, annotation callbacks, event dispatch, Lombok, MapStruct, Spring Data, generated code, or incomplete semantic results.
+- **Effect on behavior conclusions:** What remains `Inferred` or `Unknown`, and whether the limitation affects the main flow.
+
+## Endpoint exposure evidence
+
+Use this working section for API behaviors; remove it for non-API behaviors. Do not merge observations before repository synthesis.
+
+| Layer | Observed identity or value | Status | Evidence/register IDs | Limitation |
+|---|---|---|---|---|
+| Application Route | Application method, route, and handler | Confirmed | `path/to/file.ext:line`; `EP-EV-001` | None or limitation |
+| External Entry Declaration | External method, path, target, or None | Confirmed/Conflicting/Unknown/Not observed | Evidence or `EP-EV-nnn` | Mapping or missing evidence |
+| Environment Deployment Intent | Environment and declared binding or None | Confirmed/Conflicting/Unknown/Not observed | Evidence or `EP-EV-nnn` | Limitation |
+| Observed Runtime Deployment | Sanitized observation or None | Confirmed/Conflicting/Unknown/Not observed | Evidence or `EP-EV-nnn` | Limitation |
+| External Reachability Assessment | Derived result and observed access conditions | Confirmed/Conflicting/Unknown/Not observed | Related `EP-EV-nnn` rows | Reasoning and missing link |
+
+List explicit target, binding, rewrite, or mapping evidence used to correlate layers. Method/route similarity alone is not a correlation.
+
 ## Input handling and validation
 
 Record parsing, normalization, required information, authorization, and conditions that stop or redirect processing.
@@ -74,6 +102,7 @@ List the endpoint, data/state, field rule, outbound HTTP mapping, configuration,
 - [ ] Repository-external internals remain qualified.
 - [ ] Key evidence and unresolved questions are recorded.
 - [ ] Applicable repository-register sections were updated.
+- [ ] For Java, semantic tracing was completed or the degraded/unavailable investigation and its impact were recorded.
+- [ ] For an API behavior, endpoint evidence layers were recorded separately and only explicitly bound external entries were attached.
 
 Set `understanding_status: understood` only after this reasoning review passes.
-

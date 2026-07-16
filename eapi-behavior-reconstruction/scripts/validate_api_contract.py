@@ -19,11 +19,15 @@ REQUIRED_KEYS = {
     "method",
     "route",
     "contract_status",
+    "application_route_status",
+    "external_reachability_status",
     "behavior_document",
+    "endpoint_matrix",
 }
 
 REQUIRED_HEADINGS = {
     "Endpoint summary",
+    "Exposure and reachability",
     "API input contract",
     "API output contract",
     "Open questions and conflicts",
@@ -31,6 +35,7 @@ REQUIRED_HEADINGS = {
 }
 
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
+ALLOWED_ENDPOINT_STATUSES = {"Confirmed", "Conflicting", "Unknown", "Not observed"}
 EVIDENCE_RE = re.compile(
     r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
 )
@@ -79,6 +84,19 @@ def section_value(body: str, heading: str) -> str:
     return match.group("content") if match else ""
 
 
+def table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def endpoint_status(cell: str) -> str | None:
+    found = [
+        status
+        for status in ALLOWED_ENDPOINT_STATUSES
+        if re.search(rf"\b{re.escape(status)}\b", cell)
+    ]
+    return found[0] if len(found) == 1 else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
@@ -107,6 +125,16 @@ def main() -> int:
     status = scalar_value(frontmatter, "contract_status")
     if status not in ALLOWED_STATUSES:
         errors.append("contract_status must be Confirmed, Inferred, Conflicting, or Unknown")
+
+    application_route_status = scalar_value(frontmatter, "application_route_status")
+    if application_route_status != "Confirmed":
+        errors.append("a full API contract requires application_route_status: Confirmed")
+
+    reachability_status = scalar_value(frontmatter, "external_reachability_status")
+    if reachability_status not in ALLOWED_ENDPOINT_STATUSES:
+        errors.append(
+            "external_reachability_status must be Confirmed, Conflicting, Unknown, or Not observed"
+        )
 
     endpoint_id = scalar_value(frontmatter, "endpoint_id")
     if endpoint_id:
@@ -156,6 +184,49 @@ def main() -> int:
                     errors.append("linked behavior api_contracts must point to this contract document")
         if not re.search(rf"\]\({re.escape(behavior_document)}\)", body):
             errors.append("contract body must contain a Markdown link matching behavior_document")
+
+    endpoint_matrix = scalar_value(frontmatter, "endpoint_matrix")
+    if not endpoint_matrix or endpoint_matrix.lower() in {"null", "none"}:
+        errors.append("endpoint_matrix must point to this endpoint's Matrix section")
+    else:
+        matrix_parts = endpoint_matrix.split("#", 1)
+        matrix_document = matrix_parts[0]
+        matrix_anchor = matrix_parts[1] if len(matrix_parts) == 2 else ""
+        matrix_path = (args.document.parent / matrix_document).resolve()
+        if not matrix_path.is_file():
+            errors.append(f"linked Endpoint Matrix does not exist: {matrix_document}")
+        else:
+            matrix_text = matrix_path.read_text(encoding="utf-8")
+            summary = section_value(matrix_text, "Endpoint summary")
+            matching_row: list[str] | None = None
+            for line in summary.splitlines():
+                if not line.strip().startswith("|"):
+                    continue
+                cells = table_cells(line)
+                if cells and endpoint_id and cells[0].strip("` ") == endpoint_id:
+                    matching_row = cells
+                    break
+            if matching_row is None:
+                errors.append("Endpoint Matrix does not contain this endpoint_id summary row")
+            elif len(matching_row) < 6:
+                errors.append("Endpoint Matrix summary row is incomplete")
+            else:
+                matrix_application_status = endpoint_status(matching_row[1])
+                matrix_reachability_status = endpoint_status(matching_row[5])
+                if matrix_application_status != application_route_status:
+                    errors.append("application_route_status does not match Endpoint Matrix")
+                if matrix_reachability_status != reachability_status:
+                    errors.append("external_reachability_status does not match Endpoint Matrix")
+            if not matrix_anchor:
+                errors.append("endpoint_matrix must include the endpoint detail anchor")
+            elif not re.search(
+                rf"<a\s+(?:id|name)=[\"']{re.escape(matrix_anchor)}[\"']\s*></a>",
+                matrix_text,
+                re.I,
+            ):
+                errors.append("Endpoint Matrix does not define the linked endpoint detail anchor")
+        if not re.search(rf"\]\({re.escape(endpoint_matrix)}\)", body):
+            errors.append("contract body must contain a Markdown link matching endpoint_matrix")
 
     citations = list(EVIDENCE_RE.finditer(body))
     if not citations:

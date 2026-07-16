@@ -27,7 +27,7 @@ Describe where important objects originate, how behaviors read or change them, s
 
 ## Endpoint and contract model
 
-Explain which endpoints expose which behaviors and where multiple endpoints share implementation but retain different contracts.
+Reconcile application routes, external entries, environment intent, and runtime observations without collapsing their evidence. Explain explicit bindings and rewrites, unmatched external entries, multiple exposures sharing one implementation, conflicts, external reachability, and which confirmed application routes receive contracts.
 
 ## Runtime configuration and dependency effects
 
@@ -44,4 +44,3 @@ Account for every entry point and explain blocked code, missing tests/IaC/schema
 ## Publication decisions
 
 List applicable final Tech Pack reference documents, omitted documents and why, BA-visible capabilities, and any warnings that must accompany delivery.
-

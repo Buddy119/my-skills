@@ -62,12 +62,24 @@ When higher-ranked evidence conflicts with lower-ranked evidence, record the con
 
 Evidence statuses apply to material conclusions and uncertainty, not to every connective sentence in readable prose.
 
+## Java semantic-navigation evidence
+
+- Treat Java language-service results as navigation and cross-confirmation, not as the final citation format or proof of runtime execution.
+- Cite repository source for the call site, exact method definition, implementation class, DI/configuration binding, framework entry wiring, and relevant test assertion.
+- `Find References` establishes that references exist. Separate production references from test references, and do not infer that every reference runs in a deployed path.
+- Incoming and outgoing call hierarchy establish static relationships the language service can resolve. They do not expose every proxy, reflection, generated, event-driven, or framework-invoked edge.
+- Interface implementations and overrides identify candidates. Use injection and runtime-binding evidence before naming the implementation selected for a behavior.
+- When a language service is unavailable, not ready, or incomplete, lower confidence for affected call edges and record the exact fallback evidence used. Do not convert a text-name match into `Confirmed` solely because no better tool is available.
+
 ## Scope rules
 
 - Treat other repositories as black boxes until separately analyzed.
 - Describe an outbound request or emitted event, but do not assert what the remote service does internally.
 - Distinguish source-defined behavior from environment-specific deployment behavior.
 - Record missing IaC, indirect environment variables, reflection, dynamic loading, and generated code as limitations.
+- Record Java proxy/AOP, annotation callbacks, event dispatch, Lombok, MapStruct, Spring Data, reflection, and generated-code boundaries when they prevent static call confirmation.
+- Treat application routes, external-entry declarations, environment deployment intent, observed runtime deployment, and external reachability as separate evidence layers. A source or configuration artifact proves only the layer it directly represents.
+- Accept runtime endpoint evidence only from repository-local or user-supplied sanitized artifacts with an identifiable environment and observation. Do not query live infrastructure or reproduce credentials and payloads.
 
 ## Required functional review flags
 

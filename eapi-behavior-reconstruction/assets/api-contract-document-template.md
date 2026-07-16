@@ -8,7 +8,10 @@ entry_point: "handler-or-route"
 method: "GET|POST|PUT|PATCH|DELETE|other"
 route: "/normalized/route"
 contract_status: "Confirmed|Inferred|Conflicting|Unknown"
+application_route_status: "Confirmed"
+external_reachability_status: "Confirmed|Conflicting|Unknown|Not observed"
 behavior_document: "../behaviors/repository.behavior-name.md"
+endpoint_matrix: "../endpoint-matrix.md#repository-method-route"
 ---
 
 # API contract title
@@ -23,6 +26,22 @@ behavior_document: "../behaviors/repository.behavior-name.md"
 | Method and route | `METHOD /normalized/path` | Confirmed | `path/to/file.ext:line` |
 | Authentication | Scheme or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
 | Content type | Value or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
+
+`contract_status` above describes the request/response/error contract, not deployment or reachability.
+
+## Exposure and reachability
+
+[View this endpoint in the Endpoint Matrix](../endpoint-matrix.md#repository-method-route)
+
+| Layer | Observed value | Status | Evidence |
+|---|---|---|---|
+| Application Route | `METHOD /normalized/path` → executable handler | Confirmed | `path/to/file.ext:line` |
+| External Entry Declaration | External route/target or None observed | Confirmed/Conflicting/Unknown/Not observed | `path/to/config.ext:line` or analysis boundary |
+| Environment Deployment Intent | Environment binding or None observed | Confirmed/Conflicting/Unknown/Not observed | `path/to/config.ext:line` or analysis boundary |
+| Observed Runtime Deployment | Sanitized runtime observation or None supplied | Confirmed/Conflicting/Unknown/Not observed | `path/to/runtime-evidence.ext:line` or analysis boundary |
+| External Reachability Assessment | Derived result under stated access conditions | Confirmed/Conflicting/Unknown/Not observed | Evidence rows above |
+
+When external and application paths differ, state the explicit rewrite or integration mapping. Do not replace the application `method` or `route` in frontmatter.
 
 ## API input contract
 

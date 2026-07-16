@@ -24,6 +24,14 @@ Summarize what the repository appears to do from executable evidence. Separate c
 |---|---|---|---|---|---|
 | Handler or route | API/event/queue/schedule | repository.behavior | Business/integration/technical | Documented | `path/to/file.ext:line` |
 
+## Endpoint exposure summary
+
+Include this section whenever any endpoint-layer evidence exists. Summarize application endpoints and unmatched external, environment-intent, or runtime records without calling an application route public or deployed unless external reachability is Confirmed.
+
+| Endpoint or Exposure ID | Application Route | External Entry | Runtime Deployment | External Reachability | Details |
+|---|---|---|---|---|---|
+| `repository.method-route` | Confirmed | Not observed | Not observed | Not observed | [Endpoint Matrix](endpoint-matrix.md#repository-method-route) |
+
 ## Behavior summary
 
 | Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA behavior | API contracts |
@@ -34,7 +42,7 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 | Knowledge area | Document | Availability | What it explains |
 |---|---|---|---|
-| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Available/Not observed/Not applicable | Runtime routes and endpoint-level contracts |
+| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Available/Not observed/Not applicable | Application routes, external entries, deployment evidence, reachability, and endpoint contracts |
 | Data and state | [Data lifecycle](data-lifecycle.md) | Available/Not observed | Object movement and state transitions |
 | Fields | [Field validation and mapping](field-validation-and-mapping.md) | Available/Not observed | Field rules and proven outbound HTTP mappings |
 | Runtime configuration | [Runtime configuration matrix](runtime-config-matrix.md) | Available/Not observed | Configuration that changes behavior |

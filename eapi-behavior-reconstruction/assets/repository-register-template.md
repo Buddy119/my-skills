@@ -8,11 +8,32 @@ register_status: "working|reconciled"
 
 Maintain this register while tracing behaviors. It is a shared notebook, not a Claim Ledger and not a final reader document. Add only observed items and reconcile duplicates during synthesis.
 
-## Endpoints
+## Java semantic analysis context
 
-| Method and route | Endpoint ID | Behavior ID | Runtime entry | Observation | Status | Evidence |
+Use this section once for a Java repository; remove it for non-Java repositories. Summarize the environment, not a language-server operation log.
+
+- **Java project model:** Build system, modules, source sets, and relevant generated-source roots.
+- **Semantic-navigation status:** `used|degraded|unavailable`.
+- **Project import/readiness:** What was successfully modeled and what was not.
+- **Available capabilities used:** Symbol/definition, references, call hierarchy, type hierarchy, implementations/overrides, or other existing capabilities.
+- **Fallback investigation:** Exact signatures, imports, annotations, injection, build/configuration, and tests used when semantic navigation was incomplete.
+- **Repository-wide limitations:** Dynamic/generated boundaries and conclusions whose call graph or implementation binding remains uncertain.
+
+## Endpoint evidence records
+
+Record direct observations separately before correlating endpoints. Use only `application-route`, `external-entry`, `environment-intent`, and `runtime-deployment` as evidence layers; reachability is derived later.
+
+| Evidence ID | Evidence layer | Observed method/route/handler/target | Environment or scope | Related candidate | Status | Evidence |
 |---|---|---|---|---|---|---|
-| `METHOD /route` | `repository.method-route` | `repository.behavior` | Handler or route | Contract or wiring note | Confirmed | `path/to/file.ext:line` |
+| `EP-EV-001` | application-route | `METHOD /route` → handler | Application source | Candidate name or None | Confirmed | `path/to/file.ext:line` |
+
+## Endpoint reconciliation
+
+Populate this section during repository synthesis. Preserve unmatched external entries instead of forcing them into an application endpoint.
+
+| Endpoint or Exposure ID | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract | Correlation, conflict, or gap |
+|---|---|---|---|---|---|---|---|---|
+| `repository.method-route` | Confirmed — `METHOD /route` | Not observed | Not observed | Not observed | Not observed | `repository.behavior` | Planned application contract | No external evidence observed |
 
 ## Business objects, data resources, and state changes
 
@@ -63,4 +84,3 @@ Only use this section after locating an executable outbound HTTP invocation.
 | Item | Affected behaviors | Conflict or unknown | Why it matters | Evidence needed |
 |---|---|---|---|---|
 | Item | Behavior IDs | Explanation | Impact | Artifact or owner |
-

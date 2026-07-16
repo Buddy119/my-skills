@@ -23,6 +23,8 @@ Prefer business actors, business objects, decisions, events, rules, and outcomes
 
 Do not repeat class names, handler names, method names, AWS resource names, source paths, field-level mapping tables, retry implementation, or full API schemas. Use the linked Tech Pack for those details.
 
+Do not reproduce the five endpoint exposure layers, deployment resources, or routing topology in BA documents. When uncertain external reachability materially affects a business capability, state only the business consequence—for example, that availability to external participants is not established—and link to the Tech view.
+
 ## Translation rules
 
 Translate only what is supported:

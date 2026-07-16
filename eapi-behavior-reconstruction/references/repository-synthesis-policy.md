@@ -34,6 +34,10 @@ Use the dossiers and register to answer:
 - Merge behavior candidates that are implementation layers of one flow.
 - Split a candidate when one entry point contains independently triggered or independently observable behaviors.
 - Keep multiple endpoints distinct in the Endpoint Matrix even when they share one behavior.
+- Reconcile application routes, external entries, environment intent, and runtime observations only through explicit target, binding, mapping, or rewrite evidence.
+- Preserve external-only entries as independent exposure records; do not create a behavior or API contract for them.
+- Keep multiple external entries under one application endpoint when explicit mappings prove they share its implementation.
+- Derive external reachability only after recording each layer's own status and evidence.
 - Resolve duplicate register entries and preserve conflicting evidence explicitly.
 - Do not infer ordering or lifecycle edges merely because two objects have similar names.
 - Do not infer a remote system's internal behavior from a client method name.

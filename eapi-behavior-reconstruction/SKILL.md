@@ -83,7 +83,9 @@ Before publishing final documents, read [references/editorial-review-policy.md](
 
 Load these only when applicable:
 
-- For an API endpoint, read [references/api-contract-policy.md](references/api-contract-policy.md).
+- After identifying a Java repository, read [references/java-semantic-analysis-policy.md](references/java-semantic-analysis-policy.md) completely before tracing Java symbols and calls.
+- After finding an application route or any endpoint-related external-entry, environment-intent, or runtime evidence, read [references/endpoint-exposure-evidence-policy.md](references/endpoint-exposure-evidence-policy.md) before correlating endpoint candidates.
+- For a confirmed application API route, read [references/api-contract-policy.md](references/api-contract-policy.md).
 - After proving an executable outbound HTTP call, read [references/field-mapping-policy.md](references/field-mapping-policy.md).
 - Before creating BA-facing outputs, read [references/ba-pack-policy.md](references/ba-pack-policy.md).
 
@@ -103,7 +105,7 @@ behavior-docs/<repository-name>/
 ├── tech-pack/
 │   ├── repository-overview.md
 │   ├── behavior-catalog.yaml
-│   ├── endpoint-matrix.md                  # only when API endpoints exist
+│   ├── endpoint-matrix.md                  # when any endpoint-layer evidence exists
 │   ├── behaviors/
 │   ├── contracts/
 │   ├── data-lifecycle.md                   # only when data/state behavior exists
@@ -129,6 +131,8 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 4. Set `analysis_mode: automatic`, and move `phase` through `inventory`, `tracing`, `synthesis`, `publishing`, and `completed` as work advances.
 5. If an existing `.work/analysis-state.yaml` has the same repository and commit, resume it. If its commit differs, preserve the existing output and start a sibling output directory suffixed with the new short commit; never reuse old dossiers as current facts.
 
+When resuming a same-commit analysis whose register lacks both `Endpoint evidence records` and `Endpoint reconciliation`, keep completed behavior dossiers but treat endpoint inventory and synthesis as stale. Rebuild the layered endpoint register, reset synthesis/publication to pending, regenerate affected formal documents, and do not publish the legacy flattened endpoint conclusions.
+
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register.
 
 ### 2. Build a navigation index and inventory entry points
@@ -143,6 +147,13 @@ python3 <skill-root>/scripts/build_evidence_index.py \
 
 Use line counts, role hints, symbols, endpoint markers, outbound HTTP markers, tests, and assertions to plan reads. Confirm every important marker by reading executable code.
 
+Identify a Java project when the repository contains Java source or a Java build model such as Maven or Gradle. For Java repositories:
+
+1. Load the Java semantic-analysis policy.
+2. Check whether the current agent environment already exposes a usable Java language service (LSP) and whether it imported the relevant project/module successfully.
+3. Record the Java project model and semantic-navigation status once in `repository-register.md`.
+4. Use available semantic navigation before text matching to establish source symbols and candidate call relationships. Do not install an extension, JDK, build dependency, or language server, and do not modify the repository to make semantic tooling work.
+
 Use `rg` and `rg --files` to find:
 
 - Runtimes, frameworks, build files, and module boundaries.
@@ -150,15 +161,26 @@ Use `rg` and `rg --files` to find:
 - IaC and runtime wiring.
 - Services, repositories, outbound clients, models, schemas, tests, and configuration.
 
+When API-related evidence exists, inventory these sources independently before forming endpoint identities:
+
+- Executable application routes and handlers.
+- External boundary declarations in proxy, ingress, gateway, routing, or infrastructure definitions.
+- Environment-specific deployment intent and bindings.
+- Repository-local or user-supplied sanitized runtime observations.
+
+Add each observation to `Endpoint evidence records` in the repository register. Do not let an application route prove exposure, let a declaration prove deployment, or correlate layers from method/route similarity alone. An external-only candidate is not an executable behavior and must not be added to the behavior catalog.
+
+For Java executable call relationships, use `rg` as discovery support and as the documented fallback when semantic navigation is unavailable or incomplete. A filename, method-name match, import, or subagent observation identifies a candidate; it does not by itself establish the called symbol or runtime implementation.
+
 Group trigger, handler, controller, service, and orchestration code into one behavior when they implement one end-to-end flow. Catalog framework glue, health checks, migrations, and deployment-only utilities as technical, duplicate, or excluded rather than promoting them to business behaviors.
 
-Create stable behavior IDs and record every entry point in `.work/behavior-catalog.yaml`. Mirror active behaviors in `analysis-state.yaml` with status `discovered`.
+Create stable behavior IDs and catalog every executable application or framework entry point. Keep external-only and configuration-only endpoint candidates out of the behavior catalog and in the endpoint register. Mirror active behaviors in `analysis-state.yaml` with status `discovered`.
 
 ### 3. Trace behaviors into working dossiers
 
 Order work by signal:
 
-1. Public API and synchronous request handlers.
+1. Application API routes and synchronous request handlers.
 2. Event, queue, stream, and scheduled consumers.
 3. Shared orchestration referenced by multiple entry points.
 4. Technical behaviors.
@@ -167,12 +189,14 @@ Process at most five behaviors per internal batch. For each behavior:
 
 1. Set its state to `tracing`.
 2. Copy [assets/behavior-dossier-template.md](assets/behavior-dossier-template.md) to `.work/behavior-dossiers/<behavior-id>.md`.
-3. Follow the executable path from trigger through input handling, validation, decisions, data access, external boundaries, outputs, and material failures.
-4. Inspect tests alongside implementation. When relevant tests exist, record one or two concrete assertions that prove a core outcome, prioritizing a failure path.
-5. Inspect IaC and configuration for trigger filters, timeouts, retries, DLQs, permissions, resources, and behavior-changing environment values.
-6. Stop at repository boundaries and describe remote internals as unknown.
-7. Update the relevant sections of `.work/repository-register.md` while the evidence is in context.
-8. Apply the behavior-understanding gate from the dossier policy. Mark the behavior `understood` only after it passes; otherwise continue tracing or mark it `blocked` with the exact limitation.
+3. For a Java behavior, complete the dossier's `Semantic symbol and call trace` before relying on the apparent call chain. Use exact symbols, definitions, call hierarchy, references, type hierarchy, overrides, and implementations when the environment exposes them. Then confirm critical edges and runtime implementation selection in source, DI/configuration, annotations, and tests. If semantic tooling is unavailable or incomplete, perform and record the policy's degraded investigation instead.
+4. For an API behavior, complete the dossier's `Endpoint exposure evidence` section and add every direct layer observation to the register without prematurely correlating it.
+5. Follow the executable path from trigger through input handling, validation, decisions, data access, external boundaries, outputs, and material failures.
+6. Inspect tests alongside implementation. When relevant tests exist, record one or two concrete assertions that prove a core outcome, prioritizing a failure path. Distinguish test-only references from production callers.
+7. Inspect IaC and configuration for trigger filters, timeouts, retries, DLQs, permissions, resources, and behavior-changing environment values.
+8. Stop at repository boundaries and describe remote internals as unknown.
+9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context.
+10. Apply the behavior-understanding gate from the dossier policy. Mark the behavior `understood` only after it passes; otherwise continue tracing or mark it `blocked` with the exact limitation.
 
 Do not write final Tech or BA behavior documents during this phase.
 
@@ -189,15 +213,16 @@ Do not classify inbound API contracts, event payloads, queue messages, persisten
 
 ### 5. Synthesize the repository mental model
 
-Begin only after every active behavior is `understood` or explicitly `blocked` and every entry point has a catalog disposition.
+Begin only after every active behavior is `understood` or explicitly `blocked`, every executable entry point has a catalog disposition, and endpoint evidence candidates are registered.
 
 1. Set `phase: synthesis`.
 2. Read all behavior dossiers and the repository register.
 3. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
-4. Reconcile behavior boundaries, shared rules, endpoints, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
-5. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
-6. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-7. Set `synthesis_status: complete` after the synthesis work is complete. Coverage may still be `partial` when explicitly blocked areas are accounted for.
+4. Reconcile behavior boundaries, shared rules, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
+5. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses, preserve unmatched external entries, and derive external reachability without upgrading missing layers.
+6. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
+7. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
+8. Set `synthesis_status: complete` after the synthesis work is complete. Coverage may still be `partial` when explicitly blocked areas are accounted for.
 
 Run the mechanical state check before publishing:
 
@@ -228,16 +253,20 @@ Set `phase: publishing` and `publication_status: in-progress`. Write for a devel
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
-### 7. Create one API contract per endpoint
+### 7. Publish endpoint evidence and application API contracts
 
-For every discovered endpoint:
+First generate `endpoint-matrix.md` whenever the register contains evidence from any endpoint layer. Include every reconciled application endpoint and every unmatched external, environment-intent, or runtime record, with separate statuses for all five layers.
+
+For every confirmed application endpoint:
 
 1. Generate a stable endpoint ID from repository, lower-case method, and normalized route. Replace slashes and route punctuation with hyphens; retain parameter names. Add a stable disambiguating suffix only for a collision.
 2. Copy [assets/api-contract-document-template.md](assets/api-contract-document-template.md) to `tech-pack/contracts/<endpoint-id>.api-contract.md`.
-3. Keep L1 executable, L2 schema-level, and L3 shared/opaque-transformer evidence separate.
-4. Set the contract's `behavior_document` backlink.
-5. Add the endpoint and contract to `endpoint-matrix.md`.
-6. Add every related endpoint to the Tech Behavior's `api_contracts` list and visible `API contracts` links. Use `api_contracts: []` for non-API behaviors.
+3. Keep L1 executable, L2 schema-level, and L3 shared/opaque-transformer evidence separate from the five endpoint-exposure layers.
+4. Keep `method` and `route` as application identities. Add the application-route and external-reachability statuses plus a link to the Endpoint Matrix evidence.
+5. Set the contract's `behavior_document` backlink.
+6. Add every related application endpoint to the Tech Behavior's `api_contracts` list and visible `API contracts` links. Use `api_contracts: []` for non-API behaviors.
+
+Do not generate a contract or behavior for an external-only or configuration-only record. Multiple external entries mapped to one application endpoint share its one application contract.
 
 Validate each endpoint contract and its backlink before continuing.
 
@@ -293,9 +322,11 @@ Before delivering, confirm:
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.
-- Every API endpoint has its own contract and Endpoint Matrix row.
+- Every confirmed application API route has its own contract; external-only records appear only in Endpoint Matrix.
+- Application route, external entry, environment intent, runtime deployment, and external reachability remain separate, with no single layer proving another.
 - Cross-boundary field mappings exist only for proven outbound HTTP calls.
 - Runtime configuration appears only when it changes behavior.
 - External systems are described at the observed boundary without invented internals.
+- Every Java behavior has a completed semantic symbol/call trace or an explicit degraded/unavailable investigation; unresolved callers, dynamic edges, and implementation bindings remain qualified.
 - Tech and BA flows answer different audience questions and are not copies.
 - The final prose reads as documentation, not as a Claim Ledger or validator transcript.

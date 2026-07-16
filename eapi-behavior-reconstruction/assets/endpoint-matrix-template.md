@@ -6,17 +6,33 @@ coverage_status: "complete|partial|blocked"
 
 # Endpoint matrix
 
-Use one row per runtime API endpoint, including endpoints that share a behavior.
+Use one row per reconciled application endpoint and one row per unmatched external exposure. Status cells use only `Confirmed`, `Conflicting`, `Unknown`, or `Not observed`.
 
-| Endpoint ID | Method | Route | Authentication | Behavior | Entry point | Contract | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|
-| `repository.method-route` | METHOD | `/route` | Scheme or Unknown | [Behavior](behaviors/repository.behavior.md) | Handler/route | [Contract](contracts/repository.method-route.api-contract.md) | Confirmed | `path/to/file.ext:line` |
+## Endpoint summary
 
-## Shared implementation and routing notes
+| Endpoint or Exposure ID | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract |
+|---|---|---|---|---|---|---|---|
+| `repository.method-route` | Confirmed — `METHOD /application-route` | Not observed | Not observed | Not observed | Not observed | [Behavior](behaviors/repository.behavior.md) | [Contract](contracts/repository.method-route.api-contract.md) |
+| `repository.external.method-route` | Not observed | Confirmed — `METHOD /external-route` | Unknown | Not observed | Unknown | — | — |
 
-Explain endpoints that share one behavior, differ by version or route parameters, or are conditionally wired.
+## Evidence and reconciliation notes
+
+<a id="repository-method-route"></a>
+
+### `repository.method-route`
+
+| Layer | Observed value | Status | Evidence |
+|---|---|---|---|
+| Application Route | `METHOD /application-route` → handler | Confirmed | `path/to/file.ext:line` |
+| External Entry Declaration | None observed | Not observed | Repository scope reviewed |
+| Environment Deployment Intent | None observed | Not observed | Repository scope reviewed |
+| Observed Runtime Deployment | None supplied | Not observed | Analysis boundary |
+| External Reachability Assessment | No external exposure evidence | Not observed | Derived from the preceding rows |
+
+Explain explicit target, binding, route rewrite, or mapping evidence. When multiple external entries share this application route, list every external identity here. For unmatched records, explain why they were not attached to an application behavior or contract.
+
+Create one explicit HTML anchor before every endpoint/exposure detail heading. Derive it from the ID by lower-casing and replacing punctuation with hyphens so Contract and Overview links remain stable.
 
 ## Unknowns and conflicts
 
-Record unresolved authentication, deployment, route, or contract questions.
-
+Record unresolved correlation, authentication, deployment, route, target, environment, and reachability questions without upgrading missing layers.

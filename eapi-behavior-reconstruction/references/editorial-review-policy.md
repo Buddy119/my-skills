@@ -41,8 +41,14 @@ Sample at least these high-risk facts back to source when present:
 - An outbound HTTP mapping.
 - A configuration-dependent branch.
 - A retry, partial-success, or dependency-failure path.
+- For Java, a critical caller/callee edge and any interface-to-implementation selection that affects behavior.
+- For API evidence, one application route, its external-entry correlation if any, and the resulting reachability assessment.
 
 For each sampled item, verify that the cited code proves the meaning expressed, not merely that the named file exists.
+
+For sampled Java call relationships, verify the exact signatures rather than names alone, distinguish production callers from tests, and inspect the relevant constructor/injection point plus `@Bean`, `@Qualifier`, `@Primary`, `@Profile`, or component-scan evidence. If runtime binding remains ambiguous, ensure the document says so. Do not publish raw language-server operation logs; retain only limitations that affect the reader's understanding or the confidence of a conclusion.
+
+For sampled endpoints, verify that each layer cites evidence of that layer, correlation uses an explicit target/mapping/binding, and the prose does not call an application route public, deployed, or reachable when only static evidence exists.
 
 ### Reader review
 

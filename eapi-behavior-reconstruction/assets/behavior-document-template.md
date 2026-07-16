@@ -39,8 +39,10 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 ## Trigger and entry point
 
 - Trigger:
-- Entry point:
-- Runtime wiring:
+- Application entry point:
+- External entry declaration:
+- Environment/runtime evidence:
+- External reachability:
 - Status:
 - Evidence:
   - `path/to/file.ext:line`
@@ -50,6 +52,8 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 Include this section only for `entry_type: api`. Keep it short and link to every endpoint contract implemented by this behavior:
 
 - [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
+
+[View endpoint exposure and reachability](../endpoint-matrix.md#repository-method-route)
 
 ## BA view
 

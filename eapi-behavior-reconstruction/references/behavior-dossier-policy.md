@@ -24,6 +24,20 @@ Answer these questions before declaring the behavior understood:
 
 Explain unknown answers rather than creating plausible behavior.
 
+## API endpoint exposure trace
+
+For an API behavior, follow the endpoint-exposure policy in addition to tracing the executable request path. Record the Application Route, external-entry declarations, environment intent, supplied runtime observations, and derived reachability separately in the dossier and repository register.
+
+Do not use the application route as proof of external exposure. Do not attach an external-only declaration to this behavior unless explicit integration, target, binding, or rewrite evidence connects them.
+
+## Java semantic trace
+
+For a Java behavior, establish the symbol-level path before treating a textual call chain as real. Follow the Java semantic-analysis policy and complete the dossier's `Semantic symbol and call trace` section.
+
+Use an available, already-configured Java language service to locate exact entry symbols and signatures, definitions, outgoing and incoming calls, references, overrides, type hierarchy, and implementation candidates. Confirm critical edges by reading the call site and target definition. Confirm actual implementation selection separately through constructor, field, or parameter injection; `@Bean`, `@Qualifier`, `@Primary`, `@Profile`; component scanning; and relevant runtime configuration or tests.
+
+If the Java language service is unavailable, the project is not imported, or results are incomplete, record `degraded` or `unavailable` and perform the documented fallback investigation. Do not install or modify anything. A missing incoming caller does not disprove a framework entry, and multiple implementation candidates without binding evidence must remain unresolved.
+
 ## Evidence while reading
 
 - Capture small source ranges when a code path, rule, mapping, or outcome becomes clear.
@@ -58,10 +72,11 @@ Move a behavior from `tracing` to `understood` only when:
 - Repository-external internals remain qualified as unknown.
 - Key evidence and unresolved questions are recorded.
 - Applicable repository-register sections were updated.
+- For an API behavior, endpoint layer observations were recorded separately and no unproven external entry was attached to the behavior.
+- For Java, semantic tracing was completed, or its degraded/unavailable status, fallback investigation, unresolved edges, and impact were recorded.
 
 This is a reasoning gate. Do not delegate it to a structural validator. If the gate cannot be met, keep tracing or mark the behavior `blocked` with the precise missing evidence and impact.
 
 ## Batch discipline
 
 Work on at most five behaviors before persisting dossiers, updating the register and state file, and reviewing behavior boundaries. Do not keep many incomplete behavior models only in conversation context.
-

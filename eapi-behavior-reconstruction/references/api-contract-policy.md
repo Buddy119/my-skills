@@ -2,7 +2,9 @@
 
 ## Scope
 
-Apply this policy when `entry_type` is `api`. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write one separate API contract per runtime endpoint, not one contract per grouped behavior and not inline in the behavior document. Link every contract to its behavior and list every endpoint in the repository Endpoint Matrix. Do not rely on DTO names alone.
+Apply this policy only when a confirmed Application Route has an executable request/response path. Reconstruct the contract actually enforced or emitted by the implementation at the recorded commit. Write one separate API contract per application endpoint, not one contract per grouped behavior and not inline in the behavior document. Link every contract to its behavior and Endpoint Matrix row. Do not rely on DTO names alone.
+
+Do not generate a contract for an external-entry, infrastructure, or environment declaration without application implementation evidence. Keep those records in Endpoint Matrix under the endpoint-exposure policy.
 
 ## Endpoint identity and links
 
@@ -16,7 +18,21 @@ Generate a stable endpoint ID from repository name, lower-case method, and norma
 
 Include both `behavior_id` and `endpoint_id` in contract frontmatter. The behavior document must list every endpoint contract in `api_contracts` and link to it using `../contracts/<endpoint-id>.api-contract.md`. Use `api_contracts: []` for non-API behaviors. Each contract must link back using `../behaviors/<behavior-id>.md`.
 
-Add one `endpoint-matrix.md` row per method and route, including endpoints that share the same behavior.
+Add one `endpoint-matrix.md` row per reconciled application endpoint. Keep unmatched external exposures as their own Matrix rows without contracts or behavior links.
+
+Keep the contract's `method` and `route` as the application method and application route. When one or more external paths map to it, record them in `Exposure and reachability` and Endpoint Matrix without replacing the application identity.
+
+## Contract versus exposure confidence
+
+`contract_status` describes the completeness and consistency of executable request, response, and error behavior. It does not describe deployment or external availability.
+
+Record these separately:
+
+- `application_route_status`, which must be `Confirmed` for a full contract.
+- `external_reachability_status`, using `Confirmed|Conflicting|Unknown|Not observed`.
+- `endpoint_matrix`, linking to the corresponding endpoint evidence and reconciliation section.
+
+In `Exposure and reachability`, summarize all five endpoint layers with their own status and evidence. The API field-contract L1/L2/L3 sections remain independent.
 
 ## Evidence layers
 
@@ -74,5 +90,5 @@ Do not invent fields for opaque framework-generated errors. Mark the body `Unkno
 - Prefer handler/controller, validation, serializer, schema, and test evidence together.
 - Record conflicts between published schemas and executable code.
 - Mark contract coverage partial when dynamic schemas, generated models, shared libraries, or infrastructure response mappings are unavailable.
-- Treat API Gateway or Lambda integration mappings as part of the contract when present.
+- Treat boundary and integration mappings as endpoint-exposure evidence. Include request/response transformation in the application contract only when executable or declarative mapping evidence defines contract behavior, while keeping deployment and reachability conclusions separate.
 - Cite assertion-level tests when they prove a validation failure, status code, error body, or conditional response field.
