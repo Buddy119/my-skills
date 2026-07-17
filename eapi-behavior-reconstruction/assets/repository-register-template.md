@@ -29,11 +29,15 @@ Record direct observations separately before correlating endpoints. Use only `ap
 
 ## Endpoint reconciliation
 
-Populate this section during repository synthesis. Preserve unmatched external entries instead of forcing them into an application endpoint.
+Populate this section during repository synthesis. Preserve unmatched external entries instead of forcing them into an application endpoint, then classify their operation role before deciding how they appear in the reader-facing Matrix.
 
-| Endpoint or Exposure ID | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract | Correlation, conflict, or gap |
-|---|---|---|---|---|---|---|---|---|
-| `repository.method-route` | Confirmed — `METHOD /route` | Not observed | Not observed | Not observed | Not observed | `repository.behavior` | Planned application contract | No external evidence observed |
+Use `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved` for Operation Role. Use `publish`, `summarize`, or `publish-as-exception` for Publication Disposition. Ordinary protocol-support records require evidence that they have no application handler, business payload, state access, or business dependency call; method or mock/static integration alone is insufficient.
+
+| Endpoint or Exposure ID | Operation Role | Publication Disposition | Related Route Group | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract | Classification basis | Correlation, conflict, or gap |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `repository.method-route` | application-endpoint | publish | `repository.route-group.normalized-route` | Confirmed — `METHOD /route` | Not observed | Not observed | Not observed | Not observed | `repository.behavior` | Planned application contract | Executable handler implements the application route | No external evidence observed |
+
+When one protocol-support operation covers several methods on the same normalized route, use `repository.route-group.<normalized-path>` without an HTTP method and use `summarize` rather than duplicating it under every method. For one shared configuration spanning unrelated paths, use `repository.protocol-group.<normalized-config-identity>` and state its covered scope. Use `publish-as-exception` for orphaned, conflicting, environment-inconsistent, or unresolved support records. Keep every underlying `EP-EV-nnn` observation in Endpoint evidence records regardless of publication disposition.
 
 ## Business objects, data resources, and state changes
 
@@ -47,13 +51,31 @@ Populate this section during repository synthesis. Preserve unmatched external e
 |---|---|---|---|---|---|---|
 | API/event/model | `field.path` | `repository.behavior` | Required/default/format/computation | Result | Confirmed | `path/to/file.ext:line` |
 
-## Proven outbound HTTP calls and mappings
+## Outbound HTTP operation records
 
-Only use this section after locating an executable outbound HTTP invocation.
+Only use these three outbound HTTP sections after locating an executable HTTP/HTTPS invocation. Keep operation identity separate from call-site usage and field mapping.
 
-| Call ID | Behavior ID | Method and target | Direction | Source field(s) | Target field(s) | Transformation/condition | Status | Evidence |
+Merge usages only when Method, Logical Target, and Client Operation all match. When legacy Call IDs are merged, retain the lexicographically first ID as canonical and list the others under Aliases.
+
+| Call ID | Method | Logical Target | Client Operation | Observable Purpose | Related Behaviors | Aliases | Status | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| HTTP-001 | `repository.behavior` | `POST external/path` | EAPI→external or external→EAPI | `source.path` | `target.path` | Rename/default/conversion | Confirmed | `path/to/file.ext:line` |
+| HTTP-001 | POST | External service/path | Client operation | Boundary purpose | `repository.behavior` | None | Confirmed | `path/to/file.ext:line` |
+
+## Outbound HTTP operation usages
+
+Record every executable call site. The same Call ID may have multiple usages and behaviors.
+
+| Usage ID | Call ID | Behavior ID | Executable Call Site | Invocation Condition or Config | Status | Evidence |
+|---|---|---|---|---|---|---|
+| HTTP-001-U01 | HTTP-001 | `repository.behavior` | Exact client invocation | Condition/configuration | Confirmed | `path/to/file.ext:line` |
+
+## External HTTP field mapping records
+
+Use `all` only when a mapping applies identically to every registered usage of its Call ID. Otherwise list the applicable Usage IDs. Do not repeat Method, Target, Client Operation, or Behavior in mapping rows.
+
+| Mapping ID | Call ID | Applies to Usage(s) | Direction | Source Field(s) | Target Field(s) | Transformation | Condition/Default | Lossy | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| FM-001 | HTTP-001 | all | eapi-to-external | `source.path` | `target.path` | Rename/conversion | Condition/default | No | Confirmed | `path/to/file.ext:line` |
 
 ## Runtime configuration effects
 

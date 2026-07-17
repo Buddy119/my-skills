@@ -189,18 +189,68 @@ def main() -> int:
         if "BA view" in headings:
             errors.append("technical behavior must omit the BA view section")
 
-    has_structured_mappings = bool(re.search(r"^field_mappings:\s*\n\s+-\s+mapping_id:", frontmatter, re.M))
-    has_external_http_calls = bool(
-        re.search(r"^external_http_calls:\s*\n\s+-\s+call_id:", frontmatter, re.M)
+    _, call_block = yaml_block(frontmatter, "external_http_calls")
+    _, mapping_block = yaml_block(frontmatter, "field_mappings")
+    call_ids = re.findall(
+        r"^\s*-\s+call_id:\s*[\"']?(HTTP-\d+)[\"']?\s*$", call_block, re.M
     )
+    usage_ids = re.findall(r"\bHTTP-\d+-U\d+\b", call_block)
+    mapping_ids = re.findall(
+        r"^\s*-\s+mapping_id:\s*[\"']?(FM-\d+)[\"']?\s*$", mapping_block, re.M
+    )
+    mapping_call_ids = re.findall(
+        r"^\s+call_id:\s*[\"']?(HTTP-\d+)[\"']?\s*$", mapping_block, re.M
+    )
+    mapping_usage_ids = re.findall(r"\bHTTP-\d+-U\d+\b", mapping_block)
+    applicable_usage_keys = re.findall(r"^\s+applicable_usage_ids:", mapping_block, re.M)
+    has_external_http_calls = bool(call_ids)
+    has_structured_mappings = bool(mapping_ids)
+
+    if len(call_ids) != len(set(call_ids)):
+        errors.append("external_http_calls contains duplicate Call IDs")
+    if len(usage_ids) != len(set(usage_ids)):
+        errors.append("external_http_calls contains duplicate Usage IDs")
+    if len(mapping_ids) != len(set(mapping_ids)):
+        errors.append("field_mappings contains duplicate Mapping IDs")
+    for usage_id in usage_ids:
+        if not any(usage_id.startswith(f"{call_id}-U") for call_id in call_ids):
+            errors.append(f"Usage ID does not belong to a listed Call ID: {usage_id}")
+
+    if has_external_http_calls:
+        if not usage_ids:
+            errors.append("external_http_calls must list at least one executable Usage ID")
+        if "External HTTP calls and mappings" not in headings:
+            errors.append(
+                "structured external_http_calls exist but the External HTTP calls and mappings "
+                "section is missing"
+            )
+        for call_id in call_ids:
+            expected_target = f"../field-validation-and-mapping.md#{call_id.lower()}"
+            if not re.search(rf"\]\({re.escape(expected_target)}\)", body):
+                errors.append(f"Tech behavior does not link outbound Call anchor: {call_id}")
+
     if has_structured_mappings:
         if not has_external_http_calls:
             errors.append("field_mappings require a proven outbound call in external_http_calls")
-        if "External HTTP field mappings" not in headings:
-            errors.append("structured field_mappings exist but the External HTTP field mappings section is missing")
-        if not re.search(r"\bFM-\d+\b", body):
-            errors.append("structured field_mappings exist but no FM-nnn mapping appears in the mapping section")
-        directions = re.findall(r"^\s+direction:\s*[\"']?([^\"'\s]+)", frontmatter, re.M)
+        if len(mapping_call_ids) != len(mapping_ids):
+            errors.append("every field_mappings entry must contain one Call ID")
+        if len(applicable_usage_keys) != len(mapping_ids):
+            errors.append("every field_mappings entry must contain applicable_usage_ids")
+        unknown_call_ids = sorted(set(mapping_call_ids) - set(call_ids))
+        if unknown_call_ids:
+            errors.append(
+                "field_mappings reference Call IDs not listed in external_http_calls: "
+                + ", ".join(unknown_call_ids)
+            )
+        unknown_usage_ids = sorted(set(mapping_usage_ids) - set(usage_ids))
+        if unknown_usage_ids:
+            errors.append(
+                "field_mappings reference Usage IDs not listed in external_http_calls: "
+                + ", ".join(unknown_usage_ids)
+            )
+        directions = re.findall(r"^\s+direction:\s*[\"']?([^\"'\s]+)", mapping_block, re.M)
+        if len(directions) != len(mapping_ids):
+            errors.append("every field_mappings entry must contain one direction")
         invalid_directions = sorted(set(directions) - {"eapi-to-external", "external-to-eapi"})
         if invalid_directions:
             errors.append("invalid field mapping direction(s): " + ", ".join(invalid_directions))

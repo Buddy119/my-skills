@@ -91,7 +91,7 @@ Explain unanswered questions, conflicting artifacts, unavailable shared code, dy
 
 ## Repository register contributions
 
-List the endpoint, data/state, field rule, outbound HTTP mapping, configuration, dependency, failure, and cross-behavior observations added to `repository-register.md`. Omit categories not observed.
+List the endpoint, data/state, field rule, outbound HTTP operation/usage/mapping, configuration, dependency, failure, and cross-behavior observations added to `repository-register.md`. Omit categories not observed.
 
 ## Understanding gate
 

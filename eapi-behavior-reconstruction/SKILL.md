@@ -133,6 +133,12 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 
 When resuming a same-commit analysis whose register lacks both `Endpoint evidence records` and `Endpoint reconciliation`, keep completed behavior dossiers but treat endpoint inventory and synthesis as stale. Rebuild the layered endpoint register, reset synthesis/publication to pending, regenerate affected formal documents, and do not publish the legacy flattened endpoint conclusions.
 
+When resuming a same-commit analysis whose Endpoint reconciliation lacks `Operation Role` or `Publication Disposition`, preserve completed dossiers and raw endpoint evidence but treat endpoint reconciliation, repository synthesis, and Endpoint Matrix as stale. Reclassify operation roles, rebuild route-group associations and publication dispositions, and republish the Matrix. Preserve application contracts whose endpoint identity and caller-visible contract remain unchanged, then revalidate their Matrix links.
+
+When resuming a same-commit analysis whose published API Contracts still use the legacy `Exposure and reachability` plus fixed input/output L1/L2/L3 body structure, keep the completed dossiers, register, synthesis, endpoint identities, and catalog. Treat only those formal Contracts and their related field-document index as stale, then republish them with the consumer-first format. Do not retrace behaviors unless the source commit changed or the working artifacts cannot support the caller-visible contract.
+
+When resuming a same-commit analysis whose register still combines outbound Call identity and field Mapping in `Proven outbound HTTP calls and mappings`, preserve dossiers and cited call/mapping evidence but treat outbound-operation reconciliation, `field-validation-and-mapping.md`, and Tech Behaviors that reference those calls as stale. Split the evidence into Remote Operation, Executable Usage, and Field Mapping records. Preserve API Contracts, Endpoint Matrix, BA Pack, and unrelated behaviors. When several legacy Call IDs prove the same Method, Logical Target, and Client Operation, retain the lexicographically first ID as canonical and record the others as aliases; keep unresolved identities separate.
+
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register.
 
 ### 2. Build a navigation index and inventory entry points
@@ -168,7 +174,7 @@ When API-related evidence exists, inventory these sources independently before f
 - Environment-specific deployment intent and bindings.
 - Repository-local or user-supplied sanitized runtime observations.
 
-Add each observation to `Endpoint evidence records` in the repository register. Do not let an application route prove exposure, let a declaration prove deployment, or correlate layers from method/route similarity alone. An external-only candidate is not an executable behavior and must not be added to the behavior catalog.
+Add each observation to `Endpoint evidence records` in the repository register. Do not let an application route prove exposure, let a declaration prove deployment, or correlate layers from method/route similarity alone. Do not make reader-facing publication decisions during inventory; a confirmed observation may later be summarized rather than promoted to a Matrix row. An external-only candidate is not an executable behavior and must not be added to the behavior catalog.
 
 For Java executable call relationships, use `rg` as discovery support and as the documented fallback when semantic navigation is unavailable or incomplete. A filename, method-name match, import, or subagent observation identifies a candidate; it does not by itself establish the called symbol or runtime implementation.
 
@@ -202,12 +208,16 @@ Do not write final Tech or BA behavior documents during this phase.
 
 ### 4. Record external HTTP mappings only when proven
 
-First locate an executable outbound HTTP/HTTPS invocation. Record the call, method, target, client operation, behavior ID, and evidence in the dossier and repository register.
+First locate every executable outbound HTTP/HTTPS invocation. Record it as an Executable Usage with its call site, Behavior ID, invocation condition, configuration, status, and evidence.
+
+Reconcile usages into Remote Operations only when Method, Logical Target, and Client Operation all match. Assign one Call ID such as `HTTP-001` to the operation and one Usage ID such as `HTTP-001-U01` to each executable call site. Do not merge from Method/Target similarity alone or split one logical operation solely because environment-provided target values differ.
 
 Only then record:
 
 - EAPI fields mapped to the external request path, query, header, or body.
 - External response fields mapped back into EAPI fields when consumed.
+
+Give every mapping a stable `FM-nnn` ID, its Call ID, and either the applicable Usage IDs or `all` when it applies identically to every registered usage. Do not repeat Method, Target, Client Operation, or Behavior in each mapping row.
 
 Do not classify inbound API contracts, event payloads, queue messages, persistence mappings, or internal DTO/domain conversions as cross-boundary HTTP field mappings.
 
@@ -219,10 +229,13 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 2. Read all behavior dossiers and the repository register.
 3. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
 4. Reconcile behavior boundaries, shared rules, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
-5. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses, preserve unmatched external entries, and derive external reachability without upgrading missing layers.
-6. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
-7. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-8. Set `synthesis_status: complete` after the synthesis work is complete. Coverage may still be `partial` when explicitly blocked areas are accounted for.
+5. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses and derive external reachability without upgrading missing layers.
+6. Classify each reconciled endpoint record as `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved`; record `publish`, `summarize`, or `publish-as-exception`, the classification basis, and any normalized route-group association. Ordinary protocol support requires proof that it has no application handler, business payload, state access, or business dependency call. Method or mock/static integration alone is insufficient.
+7. Associate a shared protocol-support operation with one normalized route group instead of copying it under every application method. Summarize ordinary support records; publish orphaned, conflicting, environment-inconsistent, and unresolved records as exceptions.
+8. Reconcile outbound HTTP observations into Remote Operations, Executable Usages, and Field Mappings. Merge Call IDs only from a complete Method + Logical Target + Client Operation match; preserve usage-specific conditions and transformations.
+9. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
+10. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
+11. Set `synthesis_status: complete` after the synthesis work is complete. Coverage may still be `partial` when explicitly blocked areas are accounted for.
 
 Run the mechanical state check before publishing:
 
@@ -249,24 +262,36 @@ Set `phase: publishing` and `publication_status: in-progress`. Write for a devel
    - [assets/runtime-config-matrix-template.md](assets/runtime-config-matrix-template.md)
    - [assets/external-dependency-contracts-template.md](assets/external-dependency-contracts-template.md)
    - [assets/failure-taxonomy-template.md](assets/failure-taxonomy-template.md)
-5. Link each behavior only to relevant repository references. Do not duplicate detailed contracts or repository-wide tables inside every behavior.
+5. Build the outbound portion of `field-validation-and-mapping.md` as one index row and one anchored section per Remote Operation. Put call identity once in Call Overview, list multiple or materially different Executable Usages, and nest request/response mappings under that Call. Do not copy the register tables or repeat call metadata in mapping rows.
+6. In each affected Tech Behavior, add one call-summary row per Remote Operation, link its Call ID directly to the operation anchor, and list only that behavior's Usage IDs. Do not create one behavior row per Mapping ID.
+7. Link each behavior only to relevant repository references. Do not duplicate detailed contracts or repository-wide tables inside every behavior.
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
 ### 7. Publish endpoint evidence and application API contracts
 
-First generate `endpoint-matrix.md` whenever the register contains evidence from any endpoint layer. Include every reconciled application endpoint and every unmatched external, environment-intent, or runtime record, with separate statuses for all five layers.
+First generate `endpoint-matrix.md` whenever the register contains evidence from any endpoint layer. Treat it as a reader-facing projection rather than a dump of every register row:
+
+- Publish every reconciled `application-endpoint` and `meaningful-external-exposure`.
+- Publish every `unresolved` record and every orphaned, conflicting, or environment-inconsistent protocol-support record as an exception.
+- Summarize ordinary `protocol-support` declarations in one compact section with raw declaration count, related route groups, exception count, source/scope summary, and one link to the complete repository register.
+- Do not publish one Matrix row per ordinary preflight/CORS declaration. Do not hide a real handler, business response, health/version capability, authentication/query behavior, state access, or dependency-backed operation merely because it uses OPTIONS or mock/static integration.
+- Keep all five endpoint-layer statuses independent from operation role and publication disposition.
 
 For every confirmed application endpoint:
 
 1. Generate a stable endpoint ID from repository, lower-case method, and normalized route. Replace slashes and route punctuation with hyphens; retain parameter names. Add a stable disambiguating suffix only for a collision.
 2. Copy [assets/api-contract-document-template.md](assets/api-contract-document-template.md) to `tech-pack/contracts/<endpoint-id>.api-contract.md`.
-3. Keep L1 executable, L2 schema-level, and L3 shared/opaque-transformer evidence separate from the five endpoint-exposure layers.
-4. Keep `method` and `route` as application identities. Add the application-route and external-reachability statuses plus a link to the Endpoint Matrix evidence.
-5. Set the contract's `behavior_document` backlink.
-6. Add every related application endpoint to the Tech Behavior's `api_contracts` list and visible `API contracts` links. Use `api_contracts: []` for non-API behaviors.
+3. Use L1 executable, L2 schema-level, and L3 shared/opaque evidence to reconcile fields before writing, but publish one caller-facing request and response view rather than fixed evidence-layer sections.
+4. Lead with purpose, invocation, authentication, caller inputs, validation, responses, supported examples, confidence, and material limitations. Omit empty input locations and optional sections.
+5. Keep `method` and `route` as application identities. Show only a concise external-path/reachability summary and the Endpoint Matrix link; do not copy the five-layer table into the Contract.
+6. Keep internal flow in Tech Behavior, detailed endpoint exposure in Endpoint Matrix, outbound HTTP mappings in Field Validation and Mapping, downstream boundaries in External Dependency Contracts, and internal/repository-wide failures in Failure Taxonomy.
+7. Use compact `[E#]` markers and grouped Source notes. Do not expose a repeated Evidence column or one citation per sentence when a meaningful row or paragraph can share support.
+8. Generate request and response examples only when code, schema, or tests support their fields, statuses, and wire shapes. Omit unsafe examples and record the caller impact instead of inventing values or serialization.
+9. Set the contract's `behavior_document` backlink.
+10. Add every related application endpoint to the Tech Behavior's `api_contracts` list and visible `API contracts` links. Use `api_contracts: []` for non-API behaviors.
 
-Do not generate a contract or behavior for an external-only or configuration-only record. Multiple external entries mapped to one application endpoint share its one application contract.
+Do not generate a contract or behavior for an external-only, configuration-only, or ordinary protocol-support record. Multiple external entries mapped to one application endpoint share its one application contract.
 
 Validate each endpoint contract and its backlink before continuing.
 
@@ -288,7 +313,7 @@ Apply the editorial policy in this order:
 
 1. Mechanical review: state, structure, links, endpoint identity, commit, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
-3. Reader review: confirm a developer and BA can independently retell the behavior, lifecycle, outcomes, and exceptions.
+3. Reader review: confirm a developer and BA can independently retell the behavior, lifecycle, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack.
 
 Run:
 
@@ -308,7 +333,7 @@ Set `publication_status: complete` and `phase: completed` after final review. Re
 - Repository path and commit.
 - Full-repository coverage and any blocked areas.
 - Pack directories and generated documents.
-- Behavior and endpoint counts, including blocked coverage.
+- Behavior and endpoint counts, separating application endpoints, meaningful external exposures, aggregated protocol-support declarations, published exceptions, and blocked coverage.
 - Important confirmed findings, unknowns, conflicts, and limitations.
 - Mechanical validation results and any intentional warnings.
 
@@ -322,9 +347,11 @@ Before delivering, confirm:
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.
-- Every confirmed application API route has its own contract; external-only records appear only in Endpoint Matrix.
+- Every confirmed application API route has its own contract; meaningful external-only records and endpoint exceptions appear only in Endpoint Matrix, while ordinary protocol-support records remain fully evidenced in the register and appear as a compact Matrix summary.
+- Every API Contract leads with caller purpose, invocation, inputs, validation, responses, confidence, and material limitations; it uses supported examples when available and links instead of copying internal flow, five-layer exposure, outbound mappings, or failure-taxonomy detail.
 - Application route, external entry, environment intent, runtime deployment, and external reachability remain separate, with no single layer proving another.
 - Cross-boundary field mappings exist only for proven outbound HTTP calls.
+- Outbound HTTP knowledge is separated into Remote Operations, Executable Usages, and Field Mappings; each Remote Operation has one final anchored section, while usage-specific conditions and mappings remain visible.
 - Runtime configuration appears only when it changes behavior.
 - External systems are described at the observed boundary without invented internals.
 - Every Java behavior has a completed semantic symbol/call trace or an explicit degraded/unavailable investigation; unresolved callers, dynamic edges, and implementation bindings remain qualified.

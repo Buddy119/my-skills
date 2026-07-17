@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -26,18 +27,27 @@ REQUIRED_KEYS = {
 }
 
 REQUIRED_HEADINGS = {
-    "Endpoint summary",
-    "Exposure and reachability",
-    "API input contract",
-    "API output contract",
-    "Open questions and conflicts",
-    "Evidence index",
+    "Quick reference",
+    "Request",
+    "Responses",
+    "Related documents",
+    "Source notes",
 }
 
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
 ALLOWED_ENDPOINT_STATUSES = {"Confirmed", "Conflicting", "Unknown", "Not observed"}
 EVIDENCE_RE = re.compile(
     r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)(?:-(?P<end>\d+))?`"
+)
+EVIDENCE_MARKER_RE = re.compile(r"\[(?P<label>E\d+)\]\(#(?P<anchor>e\d+)\)", re.I)
+SOURCE_NOTE_RE = re.compile(
+    r"<a\s+(?:id|name)=[\"'](?P<anchor>e\d+)[\"']\s*></a>\s*"
+    r"(?:\*\*)?(?P<label>E\d+)(?:\*\*)?",
+    re.I,
+)
+JSON_BLOCK_RE = re.compile(
+    r"^```json[ \t]*\n(?P<content>.*?)^```[ \t]*$",
+    re.M | re.S,
 )
 
 
@@ -147,12 +157,6 @@ def main() -> int:
     if missing_headings:
         errors.append("missing sections: " + ", ".join(missing_headings))
 
-    for heading in ("API input contract", "API output contract"):
-        section = section_value(body, heading)
-        missing_layers = [layer for layer in ("L1", "L2", "L3") if layer not in section]
-        if missing_layers:
-            errors.append(f"{heading} is missing evidence layer(s): " + ", ".join(missing_layers))
-
     behavior_document = scalar_value(frontmatter, "behavior_document")
     if not behavior_document or behavior_document.lower() in {"null", "none"}:
         errors.append("behavior_document must point to the related behavior document")
@@ -208,11 +212,14 @@ def main() -> int:
                     break
             if matching_row is None:
                 errors.append("Endpoint Matrix does not contain this endpoint_id summary row")
-            elif len(matching_row) < 6:
+            elif len(matching_row) < 9:
                 errors.append("Endpoint Matrix summary row is incomplete")
             else:
-                matrix_application_status = endpoint_status(matching_row[1])
-                matrix_reachability_status = endpoint_status(matching_row[5])
+                matrix_operation_role = matching_row[1].strip("` ")
+                matrix_application_status = endpoint_status(matching_row[2])
+                matrix_reachability_status = endpoint_status(matching_row[6])
+                if matrix_operation_role != "application-endpoint":
+                    errors.append("API Contract Matrix row must be an application-endpoint")
                 if matrix_application_status != application_route_status:
                     errors.append("application_route_status does not match Endpoint Matrix")
                 if matrix_reachability_status != reachability_status:
@@ -228,9 +235,32 @@ def main() -> int:
         if not re.search(rf"\]\({re.escape(endpoint_matrix)}\)", body):
             errors.append("contract body must contain a Markdown link matching endpoint_matrix")
 
-    citations = list(EVIDENCE_RE.finditer(body))
+    source_notes = section_value(body, "Source notes")
+    markers = list(EVIDENCE_MARKER_RE.finditer(body))
+    note_matches = list(SOURCE_NOTE_RE.finditer(source_notes))
+    note_definitions: dict[str, str] = {}
+    for match in note_matches:
+        anchor = match.group("anchor").lower()
+        label = match.group("label").lower()
+        if anchor != label:
+            errors.append(f"Source note label and anchor do not match: {label} -> #{anchor}")
+        if anchor in note_definitions:
+            errors.append(f"duplicate Source note anchor: {anchor}")
+        note_definitions[anchor] = label
+
+    if not markers:
+        errors.append("no compact evidence markers found; use [E1](#e1)")
+    for marker in markers:
+        label = marker.group("label").lower()
+        anchor = marker.group("anchor").lower()
+        if label != anchor:
+            errors.append(f"evidence marker label and anchor do not match: {label} -> #{anchor}")
+        if anchor not in note_definitions:
+            errors.append(f"evidence marker has no Source note definition: #{anchor}")
+
+    citations = list(EVIDENCE_RE.finditer(source_notes))
     if not citations:
-        errors.append("no source citations found; use `relative/path.ext:line`")
+        errors.append("Source notes contain no source citations; use `relative/path.ext:line`")
 
     checked: set[tuple[str, int, int | None]] = set()
     for match in citations:
@@ -259,7 +289,29 @@ def main() -> int:
                 f"citation outside file bounds: {relative}:{start}" + (f"-{end}" if end else "")
             )
 
-    placeholders = ("TODO", "path/to/", "repository.behavior-name", "repository.method-route")
+    json_blocks = list(JSON_BLOCK_RE.finditer(body))
+    for index, block in enumerate(json_blocks, start=1):
+        try:
+            json.loads(block.group("content"))
+        except json.JSONDecodeError as exc:
+            errors.append(
+                f"JSON example {index} is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+            )
+
+    placeholders = (
+        "TODO",
+        "TEMPLATE:",
+        "path/to/",
+        "repository.behavior-name",
+        "repository.method-route",
+        "Human-readable API contract title",
+        "METHOD /normalized/path",
+        "Header-Name",
+        "2xx/4xx/5xx",
+        "supported-or-clearly-illustrative-value",
+        "supported-value",
+        "SUPPORTED_ERROR_CODE",
+    )
     if any(placeholder in text for placeholder in placeholders):
         errors.append("template placeholders remain in the document")
 
@@ -268,7 +320,10 @@ def main() -> int:
     if errors:
         print(f"FAILED: {len(errors)} error(s)")
         return 1
-    print(f"OK: endpoint {endpoint_id}, {len(citations)} citation occurrence(s)")
+    print(
+        f"OK: endpoint {endpoint_id}, {len(markers)} evidence marker(s), "
+        f"{len(citations)} source citation(s), {len(json_blocks)} JSON example(s)"
+    )
     return 0
 
 

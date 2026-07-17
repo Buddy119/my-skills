@@ -16,97 +16,131 @@ endpoint_matrix: "../endpoint-matrix.md#repository-method-route"
 
 # API contract title
 
-[← Back to behavior](../behaviors/repository.behavior-name.md)
+<!-- TEMPLATE: Replace this comment with a one- or two-sentence caller-visible purpose and result, supported by a compact evidence marker. -->
 
-## Endpoint summary
+## Quick reference
 
-| Property | Observed value | Status | Evidence |
-|---|---|---|---|
-| Endpoint ID | `repository.method-route` | Confirmed | `path/to/file.ext:line` |
-| Method and route | `METHOD /normalized/path` | Confirmed | `path/to/file.ext:line` |
-| Authentication | Scheme or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
-| Content type | Value or Unknown | Confirmed/Unknown | `path/to/file.ext:line` |
+| Property | Value |
+|---|---|
+| Method and application route | `METHOD /normalized/path` [E1](#e1) |
+| External invocation path | TEMPLATE: Include only when explicitly correlated; otherwise remove this row [E2](#e2) |
+| Authentication | Scheme and requirement, or `Unknown` [E3](#e3) |
+| Content type | Observed media type, or `Unknown` [E3](#e3) |
+| Contract confidence | TEMPLATE: `Confirmed|Inferred|Conflicting|Unknown` — one short coverage explanation |
+| External reachability | [`Confirmed|Conflicting|Unknown|Not observed`](../endpoint-matrix.md#repository-method-route) — concise limitation if needed |
 
-`contract_status` above describes the request/response/error contract, not deployment or reachability.
+## Request
 
-## Exposure and reachability
+<!-- TEMPLATE: Keep only observed input-location subsections. When there is no caller-supplied input, replace all tables with one short sentence. -->
+<!-- TEMPLATE: Keep rules caller-visible. Move outbound forwarding, renaming, encoding, and downstream header/body mapping to Field Validation and Mapping. -->
 
-[View this endpoint in the Endpoint Matrix](../endpoint-matrix.md#repository-method-route)
+### Headers
 
-| Layer | Observed value | Status | Evidence |
-|---|---|---|---|
-| Application Route | `METHOD /normalized/path` → executable handler | Confirmed | `path/to/file.ext:line` |
-| External Entry Declaration | External route/target or None observed | Confirmed/Conflicting/Unknown/Not observed | `path/to/config.ext:line` or analysis boundary |
-| Environment Deployment Intent | Environment binding or None observed | Confirmed/Conflicting/Unknown/Not observed | `path/to/config.ext:line` or analysis boundary |
-| Observed Runtime Deployment | Sanitized runtime observation or None supplied | Confirmed/Conflicting/Unknown/Not observed | `path/to/runtime-evidence.ext:line` or analysis boundary |
-| External Reachability Assessment | Derived result under stated access conditions | Confirmed/Conflicting/Unknown/Not observed | Evidence rows above |
+| Header | Type/format | Required | Nullable | Default | Rules |
+|---|---|---:|---:|---|---|
+| `Header-Name` | Type/format | Yes/No/Conditional | Yes/No/Unknown | None/value | Caller-visible rule [E3](#e3) |
 
-When external and application paths differ, state the explicit rewrite or integration mapping. Do not replace the application `method` or `route` in frontmatter.
+### Path parameters
 
-## API input contract
+| Field | Type/format | Required | Nullable | Default | Rules |
+|---|---|---:|---:|---|---|
+| `parameter` | Type/format | Yes/No/Conditional | Yes/No/Unknown | None/value | Caller-visible rule [E4](#e4) |
 
-### L1 — Executable input evidence
+### Query parameters
 
-| Location | Field path | Type/format | Required | Nullable | Default | Validation and normalization rules | Status | Evidence |
-|---|---|---|---:|---:|---|---|---|---|
-| Header/path/query/body | `field.path` | Type | Yes/No/Conditional | Yes/No/Unknown | None/value | Length, range, pattern, enum, conversion, or cross-field rule | Confirmed | `path/to/file.ext:line` |
+| Field | Type/format | Required | Nullable | Default | Rules |
+|---|---|---:|---:|---|---|
+| `parameter` | Type/format | Yes/No/Conditional | Yes/No/Unknown | None/value | Caller-visible rule [E4](#e4) |
 
-### L2 — Schema-level input evidence
+### Body
 
-| Model/schema | Field path | Type/format | Declared constraints | Runtime use observed | Status | Evidence |
-|---|---|---|---|---:|---|---|
-| Model or schema | `field.path` | Type | Required/nullable/enum/etc. | Yes/No | Schema-level | `path/to/schema.ext:line` |
+| Field path | Type/format | Required | Nullable | Default | Rules |
+|---|---|---:|---:|---|---|
+| `field.path` | Type/format | Yes/No/Conditional | Yes/No/Unknown | None/value | Validation, normalization, allowed values, and schema-only/conflict note when applicable [E4](#e4) |
 
-### L3 — Shared or opaque input transformation
+### Validation rules
 
-| Shared component | Known input/output | Confidence | Limitation | Evidence |
-|---|---|---|---|---|
-| Transformer/controller/mapper | Known fields or None observed | Inferred/Unknown | Unavailable or dynamic implementation | `path/to/file.ext:line` |
+<!-- TEMPLATE: Keep only for request-level, cross-field, conditional-group, mutual-exclusion, content-type, or payload rules that are not already stated in field rows. -->
 
-### Request-level rules
+| Condition | Caller-visible result |
+|---|---|
+| Request-level or cross-field condition [E5](#e5) | Status/error or rejection behavior [E5](#e5) |
 
-| Rule ID | Rule | Failure result | Status | Evidence |
-|---|---|---|---|---|
-| API-IN-001 | Content, conditional, or cross-field rule | Status/error | Confirmed | `path/to/file.ext:line` |
+## Responses
 
-## API output contract
+| HTTP status | When | Body/schema | Relevant headers |
+|---:|---|---|---|
+| 2xx/4xx/5xx | Caller-visible condition | Observed body/schema or `Unknown` [E6](#e6) | Observed header or None |
 
-### Response outcomes
+<!-- TEMPLATE: Add response field tables only when they make the body easier to use. Do not add a separate Output Rules table. -->
 
-| Condition | HTTP status | Body/schema | Relevant headers | Status | Evidence |
-|---|---:|---|---|---|---|
-| Success or failure condition | 200/400/etc. | Schema or Unknown | Header or None | Confirmed | `path/to/file.ext:line` |
+### Response fields
 
-### L1 — Executable output evidence
+| Field path | Type/format | Present when | Nullable | Rules |
+|---|---|---|---:|---|
+| `field.path` | Type/format | Outcome/condition | Yes/No/Unknown | Caller-visible inclusion, format, enum, or default rule [E6](#e6) |
 
-| Field path | Type/format | Present when | Nullable | Source/default | Output rules | Status | Evidence |
-|---|---|---|---:|---|---|---|---|
-| `field.path` | Type | Always/condition | Yes/No/Unknown | Source, constant, or computed | Masking, formatting, enum, rounding, or inclusion rule | Confirmed | `path/to/file.ext:line` |
+## Examples
 
-### L2 — Schema-level output evidence
+<!-- TEMPLATE: Remove this section when code, schema, or tests do not support a reliable example. Do not invent a host, token, header, status, field, or wire shape. -->
 
-| Model/schema | Field path | Type/format | Declared constraints | Runtime write observed | Status | Evidence |
-|---|---|---|---|---:|---|---|
-| Model or schema | `field.path` | Type | Nullable/enum/etc. | Yes/No | Schema-level | `path/to/schema.ext:line` |
+### Request example
 
-### L3 — Shared or opaque output transformation
+```http
+METHOD /normalized/path HTTP/1.1
+Content-Type: application/json
+```
 
-| Shared component | Known output | Confidence | Limitation | Evidence |
-|---|---|---|---|---|
-| Transformer/controller/mapper | Known fields or None observed | Inferred/Unknown | Unavailable or dynamic implementation | `path/to/file.ext:line` |
+```json
+{
+  "field": "supported-or-clearly-illustrative-value"
+}
+```
 
-### Output and error rules
+### TEMPLATE: 2xx success response example
 
-| Rule ID | Rule | Applies to | Status | Evidence |
-|---|---|---|---|---|
-| API-OUT-001 | Response or error rule | Status/field | Confirmed | `path/to/file.ext:line` |
+```json
+{
+  "field": "supported-value"
+}
+```
 
-## Open questions and conflicts
+### TEMPLATE: 4xx/5xx error response example
 
-| Question or conflict | Why it matters | Status | Evidence needed |
-|---|---|---|---|
-| Item | Contract impact | Unknown/Conflicting | Artifact or owner |
+```json
+{
+  "code": "SUPPORTED_ERROR_CODE"
+}
+```
 
-## Evidence index
+<!-- TEMPLATE: Replace with a short explanation of which Source note supports the examples. -->
 
-- `path/to/file.ext:line` — what this location proves
+## Contract completeness and limitations
+
+<!-- TEMPLATE: Remove this section when no material Unknown, Conflict, schema/runtime gap, opaque transformation, authentication gap, or omitted example affects callers. -->
+
+- TEMPLATE: Explain the caller impact of a material limitation and what evidence would resolve it. [E8](#e8)
+
+## Related documents
+
+- [Tech Behavior](../behaviors/repository.behavior-name.md)
+- [Endpoint Matrix](../endpoint-matrix.md#repository-method-route)
+<!-- TEMPLATE: Add links to Field Validation and Mapping, External Dependency Contracts, Runtime Config Matrix, or Failure Taxonomy only when relevant. -->
+
+## Source notes
+
+<a id="e1"></a> **E1** — `path/to/file.ext:line` establishes the endpoint purpose, method, and application route.
+
+<a id="e2"></a> **E2** — `path/to/config.ext:line` establishes the explicit external-path correlation; remove this note when no external path is shown.
+
+<a id="e3"></a> **E3** — `path/to/file.ext:line` establishes authentication, headers, or content handling, or documents why they remain Unknown.
+
+<a id="e4"></a> **E4** — `path/to/file.ext:line` establishes the displayed request fields and field-local rules.
+
+<a id="e5"></a> **E5** — `path/to/file.ext:line` establishes a request-level or cross-field rule; remove when not applicable.
+
+<a id="e6"></a> **E6** — `path/to/file.ext:line` establishes the displayed response outcome and fields.
+
+<a id="e7"></a> **E7** — `path/to/test-or-schema.ext:line` supports the displayed example; remove when no example is published.
+
+<a id="e8"></a> **E8** — `path/to/file.ext:line` establishes a material limitation or conflict; use the analysis boundary when the missing artifact itself is the limitation.

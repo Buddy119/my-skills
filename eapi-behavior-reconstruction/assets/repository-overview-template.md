@@ -26,11 +26,16 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 ## Endpoint exposure summary
 
-Include this section whenever any endpoint-layer evidence exists. Summarize application endpoints and unmatched external, environment-intent, or runtime records without calling an application route public or deployed unless external reachability is Confirmed.
+Include this section whenever any endpoint-layer evidence exists. Separate reader-facing endpoints from aggregated protocol support without calling an application route public or deployed unless external reachability is Confirmed.
 
-| Endpoint or Exposure ID | Application Route | External Entry | Runtime Deployment | External Reachability | Details |
-|---|---|---|---|---|---|
-| `repository.method-route` | Confirmed | Not observed | Not observed | Not observed | [Endpoint Matrix](endpoint-matrix.md#repository-method-route) |
+| Category | Count | Interpretation | Details |
+|---|---|---|---|
+| Application endpoints | Count | Executable application routes | [Endpoint Matrix](endpoint-matrix.md) |
+| Meaningful external exposures | Count | Reader-relevant external-only entries | [Endpoint Matrix](endpoint-matrix.md) |
+| Aggregated protocol-support declarations | Count | Preflight, CORS, or other support operations represented as a summary | [Protocol-support summary](endpoint-matrix.md#protocol-support-summary) or Not observed |
+| Unresolved or conflicting exceptions | Count | Records kept visible because classification or wiring is incomplete | [Endpoint Matrix](endpoint-matrix.md) |
+
+Optionally list a small number of important endpoint or exception links. Do not reproduce the full Matrix or one row per ordinary protocol-support declaration.
 
 ## Behavior summary
 

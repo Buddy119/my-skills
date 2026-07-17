@@ -51,7 +51,39 @@ Method/route equality, naming similarity, directory proximity, or shared busines
 
 Use the existing stable endpoint ID based on the application method and application route after an application route is confirmed. Give an unmatched external-only record a stable exposure ID using `repository.external.<method>-<normalized-external-route>`; when method or route is absent, use a normalized declaration name. Add a stable suffix only for collisions.
 
-One application endpoint may correlate to multiple external entries. Preserve every external route and mapping under the one application endpoint. An unmatched external entry remains its own Endpoint Matrix row.
+One application endpoint may correlate to multiple external entries. Preserve every external route and mapping under the one application endpoint. Keep an unmatched external entry as its own register record until its operation role and reader-facing publication disposition are reconciled; being unmatched does not automatically make it a Matrix row.
+
+When one protocol-support operation applies to several application methods on the same normalized path, associate it with one route group rather than duplicating it under each method. Use `repository.route-group.<normalized-path>` for a path group and omit the HTTP method. When a single shared protocol configuration spans unrelated paths, use `repository.protocol-group.<normalized-config-identity>` and list the covered paths or scopes in the classification basis.
+
+## Operation role and publication projection
+
+Classify reconciled records separately from their five-layer evidence statuses. Use only these operation roles:
+
+- `application-endpoint` — executable application code implements the request path.
+- `meaningful-external-exposure` — an external-only entry has independent caller or operational meaning even though no application implementation is observed in this repository.
+- `protocol-support` — a declaration supplies transport- or protocol-level support without implementing an application behavior.
+- `unresolved` — the available evidence cannot safely determine the role.
+
+Then assign one publication disposition:
+
+- `publish` — include the record in the reader-facing Matrix summary.
+- `summarize` — keep complete register evidence and represent it only in the Matrix protocol-support summary.
+- `publish-as-exception` — include an otherwise supporting or unresolved record because a gap or conflict needs reader attention.
+
+Treat an operation as ordinary `protocol-support` only when all of these are established:
+
+1. It is an OPTIONS operation or another protocol-support operation.
+2. No executable application handler or business-processing path is present.
+3. Its response is static, mock, or automatically generated.
+4. Its observable result is limited to preflight, CORS, transport, or protocol headers/status rather than a business payload.
+5. It does not read or change business state, invoke a business dependency, or implement independent authentication/query behavior.
+6. It is explicitly related to an application route group or to a shared protocol-support configuration.
+
+Do not classify from method, integration type, name, or same-path similarity alone. If any criterion is unresolved, use `unresolved`. A mock health/version response, a static business response, or a mock that invokes meaningful logic remains `meaningful-external-exposure` or `unresolved`, not ordinary protocol support.
+
+Publish every `application-endpoint` and `meaningful-external-exposure`. Summarize ordinary `protocol-support` records instead of publishing one row per declaration. Publish protocol-support records individually as exceptions when they are orphaned, conflicting, environment-inconsistent, or cannot be safely related to an application route group. Publish every `unresolved` record until the uncertainty is resolved.
+
+Operation role and publication disposition do not change evidence status. A protocol-support declaration may be `Confirmed` at its observed layer while still being summarized rather than promoted to a reader-facing endpoint.
 
 ## Reachability assessment
 
@@ -72,6 +104,8 @@ Do not describe an endpoint as public, exposed, deployed, or externally reachabl
 
 Keep endpoint environment intent in the endpoint register and Matrix. Add it to Runtime Config Matrix only when the same configuration also changes executable application behavior. A named external target is not an executable dependency contract unless repository code actually invokes or implements that boundary.
 
-Publish every reconciled application endpoint and every unmatched external exposure in Endpoint Matrix. Carry detailed layer evidence in the register and concise reader-facing evidence in the Matrix and applicable Contract.
+Carry complete layer evidence, operation role, route-group association, classification basis, and publication disposition in the register. Publish only reader-relevant endpoints, meaningful external exposures, and exceptions in the Matrix summary. Add a compact protocol-support summary that reports ordinary supporting declarations and links once to the complete register evidence. Runtime evidence for a protocol-support operation remains evidence of that operation; it does not create a business endpoint.
+
+In an API Contract, show only the application identity, any explicitly correlated external path, the external-reachability status, a material limitation when needed, and a link to the Matrix. Do not repeat the five-layer table or protocol-support inventory in the Contract.
 
 Give each Matrix detail section an explicit stable HTML anchor derived from its endpoint/exposure ID by lower-casing and replacing punctuation with hyphens. Use that exact anchor in Contract and Overview links rather than relying on renderer-generated heading anchors.

@@ -78,17 +78,15 @@ Explain the important nodes and branches with source evidence.
 
 Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
 
-## External HTTP field mappings
+## External HTTP calls and mappings
 
 Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
 
-Summarize why the call matters to this behavior and the material transformations. Keep exact field-by-field tables in the repository field document.
+Use one row per remote operation used by this behavior, regardless of mapping count. Summarize why the operation matters and any material transformation or limitation. Keep call identity, executable-usage detail, and exact field-by-field mappings in the repository field document.
 
-| Call and mapping IDs | External interaction | Behavior-relevant transformation or limitation | Status | Evidence |
-|---|---|---|---|---|
-| HTTP-001; FM-001 | Client operation and target | Key rename/default/conversion or unresolved field | Confirmed | `path/to/file.ext:line` |
-
-[View detailed field validation and HTTP mappings](../field-validation-and-mapping.md)
+| Call | Why this behavior uses it | Usage IDs | Key transformation or limitation | Status | Evidence |
+|---|---|---|---|---|---|
+| [HTTP-001](../field-validation-and-mapping.md#http-001) | Behavior-relevant purpose | HTTP-001-U01 | Key rename/default/conversion, mapping count, or unresolved field | Confirmed | `path/to/file.ext:line` |
 
 ## Preconditions and business rules
 

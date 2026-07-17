@@ -18,6 +18,7 @@ Describe only the boundary visible in this repository. Do not infer remote imple
 
 ### Dependency or operation
 
+- Outbound operation and field mappings: [HTTP-001](field-validation-and-mapping.md#http-001), when applicable.
 - Invocation and condition:
 - Observed request, event, or resource:
 - Observed response or effect:
@@ -29,4 +30,3 @@ Describe only the boundary visible in this repository. Do not infer remote imple
 ## Shared and environment-provided dependencies
 
 Explain layers, libraries, generated clients, environment wiring, or schemas whose implementation is unavailable and the resulting limitations.
-

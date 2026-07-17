@@ -53,7 +53,7 @@ Before leaving the behavior, add applicable observations to the repository regis
 - Endpoint identity and owning behavior.
 - Data resources, business objects, and state transitions.
 - Input or output field rules.
-- Proven outbound HTTP calls and mappings.
+- Proven outbound HTTP operations, executable usages, and mappings.
 - Behavior-changing runtime configuration.
 - External dependencies.
 - Material failures.

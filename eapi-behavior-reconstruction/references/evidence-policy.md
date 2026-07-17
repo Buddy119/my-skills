@@ -79,6 +79,7 @@ Evidence statuses apply to material conclusions and uncertainty, not to every co
 - Record missing IaC, indirect environment variables, reflection, dynamic loading, and generated code as limitations.
 - Record Java proxy/AOP, annotation callbacks, event dispatch, Lombok, MapStruct, Spring Data, reflection, and generated-code boundaries when they prevent static call confirmation.
 - Treat application routes, external-entry declarations, environment deployment intent, observed runtime deployment, and external reachability as separate evidence layers. A source or configuration artifact proves only the layer it directly represents.
+- Keep endpoint evidence collection separate from reader-facing publication. A `Confirmed` declaration remains in the register even when its reconciled operation role is protocol support and its publication disposition is summary-only.
 - Accept runtime endpoint evidence only from repository-local or user-supplied sanitized artifacts with an identifiable environment and observation. Do not query live infrastructure or reproduce credentials and payloads.
 
 ## Required functional review flags
