@@ -8,7 +8,7 @@ entry_point: "handler-or-route"
 behavior_category: "business|integration|technical"
 overall_status: "Confirmed|Inferred|Conflicting|Unknown"
 api_contracts: []
-ba_behavior_document: null
+ba_scenarios: []
 consumes:
   - type: "http-api|event|queue|topic|stream|schedule|other"
     name: "stable connection name"
@@ -22,10 +22,12 @@ writes:
   - type: "dynamodb|rds|s3|other"
     name: "resource or logical name"
 external_dependencies:
-  - type: "service|lambda|api|library|layer|other"
+  - dependency_id: "DEP-001"
+    type: "service|database|event-resource|storage|runtime-boundary|other"
     name: "dependency name"
 external_http_calls: []
 field_mappings: []
+failure_patterns: []
 analysis_limitations:
   - "Describe an excluded or unavailable area"
 ---
@@ -55,11 +57,11 @@ Include this section only for `entry_type: api`. Keep it short and link to every
 
 [View endpoint exposure and reachability](../endpoint-matrix.md#repository-method-route)
 
-## BA view
+## BA scenarios
 
-Include this section only for `behavior_category: business|integration`:
+Include this optional section only when the independent Business Model maps this Tech Behavior to one or more Scenarios. Add the same relationships to `ba_scenarios`. Omit the section and use `ba_scenarios: []` when no Scenario maps directly to this Behavior.
 
-[View business behavior](../../ba-pack/behaviors/repository.behavior-name.md)
+- [Business Scenario](../../ba-pack/scenarios/repository.scenario.context-outcome.md)
 
 ## Behavior flow
 
@@ -118,13 +120,19 @@ Use one row per remote operation used by this behavior, regardless of mapping co
 
 ## Failures, retries, and partial success
 
-| Failure | Handling | Retry/DLQ/rollback | Status | Evidence |
+Keep this Behavior's executable failure story here and link its repository-wide Pattern when reconciled. Add those stable IDs to `failure_patterns`; leave `failure_patterns: []` when no Pattern applies. Do not copy the complete taxonomy.
+
+| Failure or Pattern | Handling and visible result in this Behavior | State/retry/recovery | Status | Evidence |
 |---|---|---|---|---|
-| Failure condition | Observed behavior | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
+| [FAIL-001](../failure-taxonomy.md#fail-001) or behavior-specific failure | Observed handling/result | State outcome and mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
 
-## External dependency stubs
+## External dependencies
 
-For each dependency outside this repository, record the request/event/resource name, invocation evidence, observed contract, and unknown internal behavior.
+Include one concise row per synthesized Dependency used by this Behavior and use the same `dependency_id` in `external_dependencies`. Explain only the usage-specific purpose and impact; keep the shared role, Operations, remote Unknowns, and full availability model in External Dependency Contracts. Remove this section and use `external_dependencies: []` when none applies.
+
+| Dependency | Why this Behavior uses it | Criticality | Unavailability effect in this Behavior | Status | Evidence |
+|---|---|---|---|---|---|
+| [DEP-001](../external-dependency-contracts.md#dep-001) | Usage-specific purpose | Required/Degradable/Optional/Unknown | Failure, fallback, partial result, or Unknown | Confirmed | `path/to/file.ext:line` |
 
 ## Related repository knowledge
 

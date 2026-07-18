@@ -1,68 +1,123 @@
 # BA Pack policy
 
+## Contents
+
+- Purpose and evidence boundary
+- Independent business-model stage
+- Business modeling units
+- Prevent technical-to-business relabeling
+- Many-to-many traceability
+- Reader document responsibilities
+- Completion and review gate
+
 ## Purpose and evidence boundary
 
-The BA Pack translates verified observable behavior from the Tech Pack into business-readable documentation. It does not reconstruct an unproven historical requirement, business intention, product promise, or policy rationale.
+Reconstruct an independent business model from the completed repository synthesis and Tech facts. Do not translate one Tech Behavior into one BA document.
 
-- Generate the BA Pack only after full-repository synthesis is complete and the related Tech documents exist at the same repository commit.
-- Derive each BA behavior from its completed dossier, repository synthesis, and verified Tech Behavior; do not use a shared metadata flow as the source for both views.
-- Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` exactly; do not upgrade confidence during translation.
-- Link to the Tech Behavior for implementation details and source evidence. Do not place raw source citations in BA documents.
-- Exclude purely technical behaviors unless they materially change a business-visible outcome. Describe that relevance in the affected BA behavior instead of creating a technical BA behavior.
+- Generate the Business Model only after repository synthesis and the related Tech documents are complete at the same commit.
+- Generate the BA Pack only after the Business Model receives a semantic review and has status `complete` or `partial`.
+- Describe only the repository-observable portion of a business journey. Keep upstream, downstream, historical intent, policy rationale, and remote behavior `Unknown` when this repository cannot establish them.
+- Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown`; do not upgrade confidence during business modeling.
+- Keep raw source citations in the Tech Pack. Use Journey and Scenario traceability links to reach supporting Tech Behaviors.
 
-## Audience and language
+## Independent business-model stage
 
-Write for a business analyst who understands the banking domain but may not know the repository, framework, AWS service, class structure, or code terminology.
+Create `.work/business-model.md` from the completed dossiers, repository synthesis, Tech Behaviors, API Contracts, lifecycle, dependencies, failures, and configuration effects. The Business Model is a natural-language working synthesis, not a Claim Ledger or a translated Tech catalog.
 
-Prefer business actors, business objects, decisions, events, rules, and outcomes:
+Account for every active Tech Behavior with one BA disposition:
 
-- Write “The customer update request is checked for required information” rather than “The handler validates the DTO.”
-- Write “The customer record is updated” rather than “The service writes to DynamoDB.”
-- Write “The external customer system is asked to update the profile” rather than “The Lambda makes a POST request.”
-- Write “The request is rejected and the caller is informed” rather than naming an exception class or HTTP adapter.
+- `scenario-support`: directly supports one or more Business Scenarios.
+- `business-visible-support`: changes a business-visible result but is represented inside another Scenario rather than as a standalone Scenario.
+- `no-business-visible-role`: has no supported business-visible role in this repository.
+- `unknown`: available facts cannot establish its business relevance.
 
-Do not repeat class names, handler names, method names, AWS resource names, source paths, field-level mapping tables, retry implementation, or full API schemas. Use the linked Tech Pack for those details.
+Do not use the Tech Behavior count as a target for Journey or Scenario count.
 
-Do not reproduce the five endpoint exposure layers, deployment resources, or routing topology in BA documents. When uncertain external reachability materially affects a business capability, state only the business consequence—for example, that availability to external participants is not established—and link to the Tech view.
+## Business modeling units
 
-## Translation rules
+### Business Journey
 
-Translate only what is supported:
+A Journey is the repository-observable sequence through which an actor or participant pursues a business goal and reaches an outcome. It organizes one or more Scenarios into meaningful stages, handoffs, business-object changes, and visible outcomes.
 
-| Technical observation | BA representation |
-|---|---|
-| API, handler, event, queue, or schedule trigger | A business request, business event, operational event, or timed business activity |
-| Validation branch | A business precondition or rule only when its business meaning is supported; otherwise a request-quality condition |
-| Database write | A business state change, when the affected business object is known |
-| Outbound HTTP call | An external business interaction and the business information exchanged conceptually |
-| Published message or event | A business notification or event when its meaning is known |
-| Retry, dead-letter queue, or technical exception | A BA exception only when it changes timing, completion, visibility, or recovery from a business perspective |
+- A simple repository may have one Journey containing one Scenario.
+- Reuse a Scenario in several Journeys when the same supported business situation contributes to different goals.
+- Do not invent stages outside the repository. Show an unknown upstream or downstream boundary when it matters.
+- Use a semantic ID: `<repository>.journey.<business-goal-slug>`.
 
-Do not turn null checks, serialization constraints, framework behavior, or infrastructure wiring into business rules unless the business meaning is evident from code, tests, schema names, or other repository evidence.
+### Business Scenario
 
-## BA behavior contents
+A Scenario is a discrete business situation with a supported context or trigger, actors, relevant preconditions, decisions, affected business information or objects, and visible outcomes.
 
-Each BA behavior must state:
+- A Scenario may be supported by several Tech Behaviors.
+- One Tech Behavior may support several Scenarios when its business contexts or outcomes materially differ.
+- A Tech Behavior may support no Scenario.
+- Use a semantic ID: `<repository>.scenario.<business-context-outcome-slug>`.
 
-- The business capability it supports, or `Unknown`.
-- Actors or system participants and their roles.
-- The business trigger and preconditions.
-- An ordered business flow with decisions and visible outcomes.
-- Confirmed or qualified business rules.
-- Conceptual business inputs and outputs, without API schema tables.
-- Successful outcomes and business-visible side effects.
-- Business exceptions, including the visible effect and recovery when known.
-- External business interactions, without HTTP mechanics or field-level mappings.
-- Open questions and a link to the corresponding Tech Behavior.
+Merge technical paths into one Scenario when they achieve the same business goal under materially equivalent context, decisions, and outcomes. Split only when actor goal, business context, decision meaning, affected object lifecycle, or visible result materially differs.
 
-The Mermaid flow must use actor, action, decision, affected business object, and outcome labels. Create it independently from the synthesized business model. Do not copy the Tech Mermaid, mechanically rename its nodes, or reproduce internal call chains.
+## Prevent technical-to-business relabeling
 
-## Traceability and links
+- An Entry Point, Endpoint, Event, Handler, or Tech Behavior does not automatically create a Scenario.
+- A technical branch becomes a business decision only when it changes a supported business condition or visible business result.
+- A validation becomes a Business Rule only when its business meaning is supported. Otherwise keep it as a request-quality or information precondition.
+- A technical dependency becomes an External Business Participant only when its role or unavailability changes a business interaction or result.
+- A technical exception becomes a Business Exception only when it changes completion, caller-visible outcome, recovery, timing, or business-object state.
+- Do not model internal retries, transformations, framework calls, mapping steps, or fully recovered technical failures as standalone business stages.
+- Do not reproduce endpoint exposure layers, class names, methods, AWS resources, protocols, field mappings, storage identities, or Failure Pattern mechanics in BA documents.
 
-- Tech Behavior path: `tech-pack/behaviors/<behavior-id>.md`.
-- BA Behavior path: `ba-pack/behaviors/<behavior-id>.md`.
-- From a Tech Behavior, link to `../../ba-pack/behaviors/<behavior-id>.md`.
-- From a BA Behavior, link to `../../tech-pack/behaviors/<behavior-id>.md`.
-- The two documents must have the same `behavior_id`, `repository`, and `source_commit`.
-- BA overview and catalog entries must link to both views.
-- Before delivery, compare Tech and BA Mermaid content. Identical diagrams are a defect; similar topology is acceptable only when the labels and surrounding explanation answer different audience questions.
+## Many-to-many traceability
+
+Maintain direct Scenario-to-Tech traceability:
+
+- Each Scenario lists every directly supporting Tech Behavior.
+- Each supporting Tech Behavior lists the Scenario ID and document in `ba_scenarios`.
+- A Journey lists its Scenarios and the union of their supporting Tech Behaviors for navigation, but Tech Behaviors do not maintain Journey backlinks.
+- Journey and Scenario IDs are independent of Tech Behavior IDs and filenames.
+- `ba_scenarios: []` is valid for every Tech Behavior category.
+
+The Business Model's Tech coverage map is the completeness control. Mechanical validators check declared links and backlinks, not whether a Behavior should have been mapped.
+
+## Reader document responsibilities
+
+`business-overview.md` explains capabilities, actors, important objects, Journey landscape, shared business rules, business-visible participants, outcomes, and limitations. It does not repeat Scenario details.
+
+`business-catalog.md` contains a Journey index, a Scenario index, and a Tech coverage map.
+
+A Journey document explains:
+
+- Business goal and repository-observable scope.
+- Actors and start/end conditions.
+- Ordered stages and linked Scenarios.
+- Business-object changes and handoffs.
+- Business-visible exceptions, degradation, recovery constraints, and Unknown boundaries.
+- Scenario links and supporting Tech Behavior links.
+
+A Scenario document explains:
+
+- Business purpose and context.
+- Actors, business trigger, and relevant preconditions.
+- An independently modeled business flow.
+- Business decisions and information concepts.
+- Successful, alternative, and failed visible outcomes.
+- Business-visible external interactions.
+- Related Journeys and supporting Tech Behaviors.
+
+Remove optional sections that add no reader value. Do not fill simple Scenarios with empty tables.
+
+## Completion and review gate
+
+Set `business_model_status`:
+
+- `complete`: all Tech Behaviors have a disposition and the observable Journey/Scenario model has been reviewed; Unknowns may remain.
+- `partial`: supported Journeys and Scenarios can be published, but blocked or unreadable evidence materially limits business coverage.
+- `blocked`: a safe Journey/Scenario model cannot be established; do not publish invented BA documents.
+- `pending`: business modeling has not completed.
+
+Before publication, verify:
+
+- Journey and Scenario counts arose from business meaning rather than Tech document count.
+- Every Scenario has at least one supporting Tech Behavior.
+- Every Journey has at least one Scenario.
+- Every active Tech Behavior has a BA disposition.
+- Business rules, participants, and exceptions satisfy the evidence boundary above.
+- A BA reader can retell business goals, situations, object changes, outcomes, and limitations without following the Tech call chain.

@@ -19,7 +19,7 @@ REQUIRED_KEYS = {
     "behavior_category",
     "overall_status",
     "api_contracts",
-    "ba_behavior_document",
+    "ba_scenarios",
     "consumes",
     "produces",
     "reads",
@@ -40,7 +40,6 @@ REQUIRED_HEADINGS = {
     "Data access and state changes",
     "Outputs and side effects",
     "Failures, retries, and partial success",
-    "External dependency stubs",
     "Open questions and conflicts",
     "Evidence index",
 }
@@ -87,15 +86,21 @@ def yaml_block(frontmatter: str, key: str) -> tuple[str, str]:
     return match.group("inline").strip(), match.group("body")
 
 
-def api_contract_entries(frontmatter: str) -> list[tuple[str, str]]:
-    inline, block = yaml_block(frontmatter, "api_contracts")
+def linked_entries(frontmatter: str, block_key: str, id_key: str) -> list[tuple[str, str]]:
+    inline, block = yaml_block(frontmatter, block_key)
     if inline == "[]":
         return []
-    endpoint_ids = re.findall(
-        r"^\s*-\s+endpoint_id:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M
+    identifiers = re.findall(
+        rf"^\s*-\s+{re.escape(id_key)}:\s*[\"']?([^\"'\n]+?)[\"']?\s*$",
+        block,
+        re.M,
     )
     documents = re.findall(r"^\s+document:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M)
-    return list(zip((item.strip() for item in endpoint_ids), (item.strip() for item in documents)))
+    return list(zip((item.strip() for item in identifiers), (item.strip() for item in documents)))
+
+
+def api_contract_entries(frontmatter: str) -> list[tuple[str, str]]:
+    return linked_entries(frontmatter, "api_contracts", "endpoint_id")
 
 
 def main() -> int:
@@ -171,26 +176,80 @@ def main() -> int:
         if "API contracts" in headings:
             errors.append("non-API behavior must omit the API contracts section")
 
-    ba_behavior_document = scalar_value(frontmatter, "ba_behavior_document")
-    if behavior_category in {"business", "integration"}:
-        if "BA view" not in headings:
-            errors.append("business or integration behavior is missing the BA view link section")
-        if not ba_behavior_document or ba_behavior_document.lower() in {"null", "none"}:
-            errors.append("business or integration behavior must set ba_behavior_document")
-        else:
-            ba_path = (args.document.parent / ba_behavior_document).resolve()
-            if not ba_path.is_file() and not args.allow_missing_ba:
-                errors.append(f"linked BA behavior does not exist: {ba_behavior_document}")
-            if not re.search(rf"\]\({re.escape(ba_behavior_document)}\)", body):
-                errors.append("Tech behavior body must contain a Markdown link matching ba_behavior_document")
-    elif behavior_category == "technical":
-        if ba_behavior_document and ba_behavior_document.lower() not in {"null", "none"}:
-            errors.append("technical behavior must set ba_behavior_document to null")
-        if "BA view" in headings:
-            errors.append("technical behavior must omit the BA view section")
+    ba_inline, ba_block = yaml_block(frontmatter, "ba_scenarios")
+    ba_scenarios = linked_entries(frontmatter, "ba_scenarios", "scenario_id")
+    scenario_count = len(re.findall(r"^\s*-\s+scenario_id:", ba_block, re.M))
+    scenario_document_count = len(re.findall(r"^\s+document:", ba_block, re.M))
+    if scenario_count != scenario_document_count:
+        errors.append("every ba_scenarios entry must contain scenario_id and document")
+    if len({item[0] for item in ba_scenarios}) != len(ba_scenarios):
+        errors.append("ba_scenarios contains duplicate Scenario IDs")
+    if len({item[1] for item in ba_scenarios}) != len(ba_scenarios):
+        errors.append("ba_scenarios contains duplicate documents")
+
+    if ba_scenarios:
+        if "BA scenarios" not in headings:
+            errors.append("Tech behavior with ba_scenarios is missing the BA scenarios section")
+        behavior_id = scalar_value(frontmatter, "behavior_id")
+        repository = scalar_value(frontmatter, "repository")
+        source_commit = scalar_value(frontmatter, "source_commit")
+        for scenario_id, document in ba_scenarios:
+            scenario_path = (args.document.parent / document).resolve()
+            if not scenario_path.is_file():
+                if not args.allow_missing_ba:
+                    errors.append(f"linked BA Scenario does not exist: {document}")
+            else:
+                try:
+                    scenario_frontmatter, _ = split_frontmatter(
+                        scenario_path.read_text(encoding="utf-8")
+                    )
+                except ValueError as exc:
+                    errors.append(f"linked BA Scenario is invalid: {document}: {exc}")
+                else:
+                    if scalar_value(scenario_frontmatter, "scenario_id") != scenario_id:
+                        errors.append(
+                            f"ba_scenarios ID does not match linked Scenario: {scenario_id}"
+                        )
+                    for key, expected in (
+                        ("repository", repository),
+                        ("source_commit", source_commit),
+                    ):
+                        if scalar_value(scenario_frontmatter, key) != expected:
+                            errors.append(
+                                f"Tech behavior and linked Scenario must have the same {key}: "
+                                f"{scenario_id}"
+                            )
+                    backlinks = linked_entries(
+                        scenario_frontmatter, "tech_behaviors", "behavior_id"
+                    )
+                    backlink_matches = [
+                        backlink_document
+                        for backlink_id, backlink_document in backlinks
+                        if backlink_id == behavior_id
+                        and (scenario_path.parent / backlink_document).resolve()
+                        == args.document.resolve()
+                    ]
+                    if not backlink_matches:
+                        errors.append(
+                            "linked Scenario does not contain the Tech behavior backlink: "
+                            f"{scenario_id} -> {behavior_id}"
+                        )
+            if not re.search(rf"\]\({re.escape(document)}\)", body):
+                errors.append(
+                    f"Tech behavior body must link BA Scenario {scenario_id}: {document}"
+                )
+    else:
+        if ba_inline != "[]":
+            errors.append("empty BA Scenario mapping must use ba_scenarios: []")
+        if "BA scenarios" in headings:
+            errors.append(
+                "Tech behavior with ba_scenarios: [] must omit the BA scenarios section"
+            )
 
     _, call_block = yaml_block(frontmatter, "external_http_calls")
     _, mapping_block = yaml_block(frontmatter, "field_mappings")
+    dependency_inline, dependency_block = yaml_block(frontmatter, "external_dependencies")
+    failure_inline, failure_block = yaml_block(frontmatter, "failure_patterns")
     call_ids = re.findall(
         r"^\s*-\s+call_id:\s*[\"']?(HTTP-\d+)[\"']?\s*$", call_block, re.M
     )
@@ -205,6 +264,12 @@ def main() -> int:
     applicable_usage_keys = re.findall(r"^\s+applicable_usage_ids:", mapping_block, re.M)
     has_external_http_calls = bool(call_ids)
     has_structured_mappings = bool(mapping_ids)
+    dependency_ids = re.findall(
+        r"^\s*-\s+dependency_id:\s*[\"']?(DEP-\d+)[\"']?\s*$",
+        dependency_block,
+        re.M,
+    )
+    failure_pattern_ids = re.findall(r"\bFAIL-\d+\b", failure_block)
 
     if len(call_ids) != len(set(call_ids)):
         errors.append("external_http_calls contains duplicate Call IDs")
@@ -212,6 +277,10 @@ def main() -> int:
         errors.append("external_http_calls contains duplicate Usage IDs")
     if len(mapping_ids) != len(set(mapping_ids)):
         errors.append("field_mappings contains duplicate Mapping IDs")
+    if len(dependency_ids) != len(set(dependency_ids)):
+        errors.append("external_dependencies contains duplicate Dependency IDs")
+    if len(failure_pattern_ids) != len(set(failure_pattern_ids)):
+        errors.append("failure_patterns contains duplicate Failure Pattern IDs")
     for usage_id in usage_ids:
         if not any(usage_id.startswith(f"{call_id}-U") for call_id in call_ids):
             errors.append(f"Usage ID does not belong to a listed Call ID: {usage_id}")
@@ -255,6 +324,35 @@ def main() -> int:
         if invalid_directions:
             errors.append("invalid field mapping direction(s): " + ", ".join(invalid_directions))
 
+    if dependency_ids:
+        if "External dependencies" not in headings:
+            errors.append(
+                "structured external_dependencies exist but the External dependencies section is missing"
+            )
+        for dependency_id in dependency_ids:
+            expected_target = f"../external-dependency-contracts.md#{dependency_id.lower()}"
+            if not re.search(rf"\]\({re.escape(expected_target)}\)", body):
+                errors.append(f"Tech behavior does not link Dependency anchor: {dependency_id}")
+    else:
+        if dependency_inline != "[]" or dependency_block.strip():
+            errors.append(
+                "external_dependencies entries must contain a Dependency ID or use external_dependencies: []"
+            )
+        if "External dependencies" in headings:
+            errors.append(
+                "behavior without reconciled Dependencies must omit the External dependencies section"
+            )
+
+    if failure_pattern_ids:
+        for pattern_id in failure_pattern_ids:
+            expected_target = f"../failure-taxonomy.md#{pattern_id.lower()}"
+            if not re.search(rf"\]\({re.escape(expected_target)}\)", body):
+                errors.append(f"Tech behavior does not link Failure Pattern anchor: {pattern_id}")
+    elif failure_inline not in {"", "[]"} or failure_block.strip():
+        errors.append(
+            "failure_patterns entries must contain a Failure Pattern ID or use failure_patterns: []"
+        )
+
     citations = list(EVIDENCE_RE.finditer(body))
     if not citations:
         errors.append("no source citations found; use `relative/path.ext:line`")
@@ -287,7 +385,13 @@ def main() -> int:
 
     if "Unknown" not in body and "Conflicting" not in body:
         warnings.append("document contains no Unknown or Conflicting review items")
-    placeholders = ("TODO", "path/to/", "repository.behavior-name", "repository.method-route")
+    placeholders = (
+        "TODO",
+        "path/to/",
+        "repository.behavior-name",
+        "repository.method-route",
+        "repository.scenario.context-outcome",
+    )
     if any(placeholder in text for placeholder in placeholders):
         errors.append("template placeholders remain in the document")
 

@@ -16,6 +16,7 @@ REQUIRED_KEYS = {
     "analysis_mode",
     "phase",
     "synthesis_status",
+    "business_model_status",
     "publication_status",
     "output_directory",
     "behaviors",
@@ -23,6 +24,7 @@ REQUIRED_KEYS = {
 ALLOWED_MODES = {"automatic"}
 ALLOWED_PHASES = {"inventory", "tracing", "synthesis", "publishing", "completed"}
 ALLOWED_SYNTHESIS = {"pending", "complete", "partial"}
+ALLOWED_BUSINESS_MODEL = {"pending", "complete", "partial", "blocked"}
 ALLOWED_PUBLICATION = {"pending", "in-progress", "complete"}
 ALLOWED_BEHAVIOR_STATUS = {"discovered", "tracing", "understood", "blocked"}
 CATALOG_WITHOUT_DOSSIER = {"duplicate", "excluded"}
@@ -117,6 +119,11 @@ def main() -> int:
         action="store_true",
         help="require the synthesis gate needed to begin or complete formal publication",
     )
+    parser.add_argument(
+        "--require-ba-publishable",
+        action="store_true",
+        help="require completed repository synthesis and a complete or partial Business Model",
+    )
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -144,6 +151,7 @@ def main() -> int:
     mode = scalar_value(state_text, "analysis_mode")
     phase = scalar_value(state_text, "phase")
     synthesis = scalar_value(state_text, "synthesis_status")
+    business_model = scalar_value(state_text, "business_model_status")
     publication = scalar_value(state_text, "publication_status")
     source_commit = scalar_value(state_text, "source_commit")
 
@@ -153,6 +161,8 @@ def main() -> int:
         errors.append("phase must be inventory, tracing, synthesis, publishing, or completed")
     if synthesis not in ALLOWED_SYNTHESIS:
         errors.append("synthesis_status must be pending, complete, or partial")
+    if business_model not in ALLOWED_BUSINESS_MODEL:
+        errors.append("business_model_status must be pending, complete, partial, or blocked")
     if publication not in ALLOWED_PUBLICATION:
         errors.append("publication_status must be pending, in-progress, or complete")
 
@@ -221,8 +231,27 @@ def main() -> int:
         if synthesis != "complete":
             errors.append("full-repository publication requires synthesis_status: complete")
 
+    if args.require_ba_publishable:
+        if phase not in {"publishing", "completed"}:
+            errors.append("BA publication requires phase publishing or completed")
+        incomplete = sorted(
+            behavior_id
+            for behavior_id, entry in state_by_id.items()
+            if entry.get("status") not in {"understood", "blocked"}
+        )
+        if incomplete:
+            errors.append("BA-publishable state has untraced behavior(s): " + ", ".join(incomplete))
+        if synthesis != "complete":
+            errors.append("BA publication requires synthesis_status: complete")
+        if business_model not in {"complete", "partial"}:
+            errors.append(
+                "BA publication requires business_model_status: complete or partial"
+            )
+
     if phase == "completed" and publication != "complete":
         errors.append("phase completed requires publication_status: complete")
+    if phase == "completed" and business_model == "pending":
+        errors.append("phase completed requires the Business Model to be complete, partial, or blocked")
     if publication == "complete" and phase != "completed":
         errors.append("publication_status complete requires phase: completed")
 
@@ -239,7 +268,8 @@ def main() -> int:
         return 1
     print(
         f"OK: {len(state_entries)} state behavior(s), {len(catalog_entries)} catalog behavior(s), "
-        f"phase={phase}, synthesis={synthesis}, {len(warnings)} warning(s)"
+        f"phase={phase}, synthesis={synthesis}, business_model={business_model}, "
+        f"{len(warnings)} warning(s)"
     )
     return 0
 

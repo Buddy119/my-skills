@@ -67,11 +67,11 @@ Record reads, writes, affected objects, state transitions, transaction boundarie
 
 ## Boundaries, outputs, and side effects
 
-Record responses, events, messages, external calls, and other effects. Keep remote internals unknown unless separately available in this repository.
+Record responses, events, messages, external calls, resources, and other effects. Add each executable external boundary as a `DEP-OBS-nnn` observation in the repository register. Keep remote internals unknown unless separately available in this repository; do not create a Dependency Contract while tracing one Behavior.
 
 ## Failures, retry, and partial success
 
-Explain important failure conditions, visible results, retries, DLQs, compensation, idempotency, and partial completion where observed.
+Explain important failure conditions, propagation, visible results, state outcomes, retries, DLQs, compensation, idempotency, and partial completion where observed. Add each material path as an `FO-nnn` observation in the repository register. Do not assign repository-wide Failure Patterns until synthesis.
 
 ## Runtime configuration and IaC
 
@@ -91,7 +91,7 @@ Explain unanswered questions, conflicting artifacts, unavailable shared code, dy
 
 ## Repository register contributions
 
-List the endpoint, data/state, field rule, outbound HTTP operation/usage/mapping, configuration, dependency, failure, and cross-behavior observations added to `repository-register.md`. Omit categories not observed.
+List the endpoint, data/state, field rule, outbound HTTP operation/usage/mapping, configuration, Dependency Observation, Failure Observation, and cross-behavior records added to `repository-register.md`. Omit categories not observed.
 
 ## Understanding gate
 

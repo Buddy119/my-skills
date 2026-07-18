@@ -83,17 +83,45 @@ Use `all` only when a mapping applies identically to every registered usage of i
 |---|---|---|---|---|---|---|---|
 | Config name | `repository.behavior` | Location | Default/environment/unknown | How execution changes | Condition | Confirmed | `path/to/file.ext:line` |
 
-## External dependencies
+## External dependency observations
 
-| Dependency | Behavior ID | Boundary/operation | Observed request or resource | Observed response/effect | Failure impact | Status | Evidence |
-|---|---|---|---|---|---|---|---|
-| System/library/resource | `repository.behavior` | Operation | Contract fragment | Contract fragment | Impact or Unknown | Confirmed | `path/to/file.ext:line` |
+Record each executable boundary observation before grouping dependencies. A dependency observation is evidence, not a reader-facing contract. Use `Unresolved` when the observation cannot yet be assigned safely.
+
+| Observation ID | Candidate dependency | Boundary type | Behavior ID | Operation or resource | Exchanged concept or observed effect | Availability observation | Status | Evidence | Reconciliation |
+|---|---|---|---|---|---|---|---|---|---|
+| `DEP-OBS-001` | System/resource candidate | HTTP/event/queue/store/runtime-boundary/other | `repository.behavior` | Call, resource, event, or operation | Concept sent, consumed, read, written, or affected | Failure/fallback/state observation or Unknown | Confirmed | `path/to/file.ext:line` | `DEP-001` or `Unresolved` |
+
+## Dependency contract records
+
+Populate during repository synthesis. Create one record per proven logical external participant or resource boundary, not one per Behavior or call site. `Criticality by usage` may retain different classifications for different operations or behaviors.
+
+| Dependency ID | Logical identity | Type | Repository-observed role | Related operations | Related behaviors or capabilities | Criticality by usage | Observation IDs | Aliases | Status | Unknowns or conflicts |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `DEP-001` | Stable logical dependency identity | service/database/event-resource/storage/runtime-boundary/other | What this dependency enables at the repository boundary | `DEP-001-OP01` | Behavior/capability IDs | `repository.behavior`: Required/Degradable/Optional/Unknown | `DEP-OBS-001` | None | Confirmed | Remote internals, conflicts, or None observed |
+
+## Dependency operation records
+
+Keep operations beneath their parent Dependency. Link an existing `HTTP-nnn` Call ID when the operation is an outbound HTTP boundary; do not copy its field mappings here.
+
+| Operation ID | Dependency ID | Boundary reference | Invocation or resource | Exchanged concepts | Behaviors or capabilities | Criticality by usage | Unavailability, fallback, and state impact | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+| `DEP-001-OP01` | `DEP-001` | `HTTP-001` or stable event/resource identity | Executable invocation, event, or resource | Conceptual input/output/effect | Behavior/capability IDs | `repository.behavior`: Required/Degradable/Optional/Unknown | Visible failure, degradation, alternative path, partial state, or Unknown | Confirmed | `path/to/file.ext:line` |
 
 ## Failure observations
 
-| Failure category | Behavior ID | Trigger or condition | Handling and visible result | Retry/recovery/partial state | Status | Evidence |
-|---|---|---|---|---|---|---|
-| Validation/business/data/dependency/runtime | `repository.behavior` | Condition | Result | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` |
+Record the observed failure path before assigning a repository-wide Pattern. Keep handling, visibility, state, retry, and recovery separate so failures with different outcomes are not merged from a shared exception name.
+
+| Observation ID | Failure category | Behavior ID | Trigger or source | Handling and propagation | Caller-visible result | State outcome | Retry or recovery | Status | Evidence | Reconciliation |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `FO-001` | Validation/business/dependency/data/configuration/runtime/other | `repository.behavior` | Condition or failure source | Catch/translate/propagate/swallow/degrade | Observed result or Unknown | Unchanged/Rolled back/Partial/Committed before failure/Unknown | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` | `FAIL-001` or `Unresolved` |
+
+## Failure pattern reconciliation
+
+Populate during repository synthesis. Group observations only when their trigger, propagation, caller visibility, state outcome, and retry/recovery semantics are materially equivalent.
+
+| Pattern ID | Category | Trigger or source | Observation IDs | Behaviors or capabilities | Related dependencies | Caller visibility | State outcome | Retry safety | Recovery | Risk attention | Conflicts or unknowns | Evidence |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `FAIL-001` | Normalized repository failure category | Shared trigger/source description | `FO-001` | Behavior/capability IDs | `DEP-001` or None | Explicit error/Degraded result/Success with loss/Swallowed/Async only/Unknown | Unchanged/Rolled back/Partial/Committed before failure/Unknown | Safe/Conditional/Unsafe/Unknown | Automatic retry/Rollback/Compensation/Manual/None observed/Unknown | High/Medium/Low/Unknown | Material variation or None observed | `path/to/file.ext:line` |
 
 ## Cross-behavior relationships
 

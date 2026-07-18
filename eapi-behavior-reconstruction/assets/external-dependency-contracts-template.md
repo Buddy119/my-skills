@@ -6,27 +6,53 @@ coverage_status: "complete|partial|blocked"
 
 # External dependency contracts
 
-Describe only the boundary visible in this repository. Do not infer remote implementation.
+Explain the external participants and resources this repository actually depends on. Synthesize observations into dependency contracts; do not copy the working-register rows or infer remote implementation.
 
 ## Dependency landscape
 
-| Dependency | Type | Affected behaviors | Purpose at boundary | Availability impact | Status | Evidence |
+Use one row per Dependency ID. `Criticality` is the highest supported usage-level classification; call out mixed or Unknown usages in the detail section.
+
+| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Status | Details |
 |---|---|---|---|---|---|---|
-| System/resource/library | HTTP/event/queue/store/lambda/library | Behavior links | Observed purpose or Unknown | Impact | Confirmed | `path/to/file.ext:line` |
+| `DEP-001` — Dependency name | Type — concise boundary role | Capability/Behavior links | Required/Degradable/Optional/Unknown | Concise visible impact | Confirmed/Inferred/Conflicting/Unknown | [Details](#dep-001) |
 
-## Observed operations and contracts
+<a id="dep-001"></a>
+## `DEP-001` — Dependency name
 
-### Dependency or operation
+### Role and boundary
 
-- Outbound operation and field mappings: [HTTP-001](field-validation-and-mapping.md#http-001), when applicable.
-- Invocation and condition:
-- Observed request, event, or resource:
-- Observed response or effect:
-- Timeout, retry, and recovery:
-- Known failure outcomes:
-- Unknown remote behavior:
-- Evidence:
+Explain what this external participant or resource enables, which boundary is observable in this repository, and where repository responsibility ends.
 
-## Shared and environment-provided dependencies
+### Dependent capabilities and behaviors
 
-Explain layers, libraries, generated clients, environment wiring, or schemas whose implementation is unavailable and the resulting limitations.
+Describe the shared business or technical capabilities that depend on it. Link the relevant Tech Behaviors without repeating their internal flows.
+
+### Observed operations and exchanged concepts
+
+List each operation once beneath this Dependency. Describe exchanged concepts rather than repeating field-level mappings.
+
+| Operation | Boundary reference | Purpose and condition | Concepts sent, consumed, read, or written | Affected capabilities/behaviors | Status |
+|---|---|---|---|---|---|
+| `DEP-001-OP01` | [HTTP-001](field-validation-and-mapping.md#http-001), event, or resource | Observable operation purpose and invocation condition | Business/data concepts | Behavior links | Confirmed/Inferred/Conflicting/Unknown |
+
+### Availability impact and criticality
+
+Explain Required, Degradable, Optional, or Unknown classifications at the operation or behavior level. State what stops, continues, becomes delayed, or remains incomplete when the dependency is unavailable.
+
+### Fallback, degradation, and state implications
+
+Describe only observed alternative paths, retries, partial success, state inconsistency, compensation, or manual recovery. Link relevant [failure patterns](failure-taxonomy.md) and [data lifecycle](data-lifecycle.md) sections instead of reproducing them.
+
+### Known local contract and unknown remote behavior
+
+Separate what this repository sends, consumes, or assumes from remote SLA, persistence, idempotency, error semantics, and implementation that remain Unknown.
+
+### Related documents and source notes
+
+- Related Tech Behaviors:
+- Field mappings or resource details:
+- Failure patterns:
+- Source notes:
+  - `path/to/file.ext:line` — what the source establishes at this boundary
+
+Repeat one anchored `## DEP-nnn` section for each synthesized Dependency. Remove optional subsections that add no reader value.

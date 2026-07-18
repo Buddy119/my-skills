@@ -3,6 +3,7 @@ source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic"
 phase: "inventory|tracing|synthesis|publishing|completed"
 synthesis_status: "pending|complete|partial"
+business_model_status: "pending|complete|partial|blocked"
 publication_status: "pending|in-progress|complete"
 output_directory: "behavior-docs/repository-name"
 behaviors:

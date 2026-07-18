@@ -13,7 +13,7 @@ behaviors:
     status: "discovered|documented|technical|duplicate|excluded|blocked"
     duplicate_of: null
     document: "behaviors/repository.behavior-name.md"
-    ba_document: null
+    ba_scenarios: []
     api_contracts:
       - endpoint_id: "repository.method-route"
         document: "contracts/repository.method-route.api-contract.md"

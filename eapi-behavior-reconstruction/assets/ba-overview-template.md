@@ -1,46 +1,62 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
-tech_pack: "../tech-pack/repository-overview.md"
+business_model_status: "complete|partial"
 coverage_status: "complete|partial|blocked"
+business_catalog: "business-catalog.md"
 ---
 
-# Business behavior overview
+# Business overview
 
-[View technical repository overview](../tech-pack/repository-overview.md)
+[Browse Journeys and Scenarios](business-catalog.md) · [View technical repository overview](../tech-pack/repository-overview.md)
+
+## Observable business boundary
+
+Explain the business responsibility visible in this repository and clearly mark upstream, downstream, policy, or ownership boundaries that remain Unknown. Do not describe the repository package structure.
 
 ## Business capabilities
 
-Summarize supported business capabilities. Separate confirmed capabilities from inferred or unknown business purpose.
+| Capability | Business purpose | Actors or participants | Observable outcomes | Journeys | Status |
+|---|---|---|---|---|---|
+| Business capability | Supported purpose | Participants | Outcomes or handoffs | Journey links | Confirmed/Inferred/Conflicting/Unknown |
+
+## Journey landscape
+
+Draw a compact business landscape from actors and business goals to Journeys and observable outcomes. This is not the Tech connection diagram or a flow of handlers.
+
+```mermaid
+flowchart LR
+    A[Business actor or participant] --> J[Business journey]
+    J --> O[Observable business outcome]
+    J -. Unknown boundary .-> U[Upstream or downstream stage outside this repository]
+```
+
+| Journey | Business goal | Actors | Scenarios | Observable outcome | Status |
+|---|---|---|---|---|---|
+| [Journey](journeys/repository.journey.business-goal.md) | Supported goal | Participants | Scenario links | Outcome/handoff | Confirmed/Inferred/Conflicting/Unknown |
 
 ## Business actors and participants
 
-| Actor or participant | Observed role | Status |
-|---|---|---|
-| Person, channel, team, or system participant | Business-facing role | Confirmed/Inferred/Unknown |
-
-## Business behavior landscape
-
-| Capability | Behavior | Trigger | Outcome | Status | BA behavior | Tech behavior |
-|---|---|---|---|---|---|---|
-| Capability or Unknown | Business-readable title | Business request/event | Visible outcome | Confirmed/Inferred/Unknown | [BA](behaviors/repository.behavior-name.md) | [Tech](../tech-pack/behaviors/repository.behavior-name.md) |
+| Actor or participant | Business role | Journeys or Scenarios | Status and limitation |
+|---|---|---|---|
+| Person, channel, team, or business-visible system | Initiates, decides, receives, or supports an outcome | Business links | Confirmed/Inferred/Conflicting/Unknown |
 
 ## Business objects and lifecycle
 
-Explain the important business objects, how repository behaviors create or change them, meaningful business states, and where responsibility passes to another participant. Keep storage resources and implementation details in the Tech Pack.
+Explain important business objects, meaningful state or responsibility changes, and where the observable journey begins or ends. Keep database, event, field, and storage detail in the Tech Pack.
 
-## External business participants
+## Shared business rules
 
-Describe external parties or systems by their business role and the purpose of the interaction. Keep protocols and field mappings in the Tech Pack.
+Record only supported rules reused across Scenarios or Journeys. Preserve differences and overrides. Do not promote technical validation into business policy.
 
-## Cross-behavior business rules
+## External business interactions
 
-Record only rules that are supported across multiple behaviors. Do not promote technical validation into policy.
+Describe only participants whose role or unavailability changes a business interaction or result. Keep protocols, dependency operations, configuration identities, and field mappings in the Tech Pack.
 
-## Business exceptions and dependencies
+## Business-visible exceptions and limitations
 
-Summarize recurring business-visible exceptions, incomplete outcomes, recovery constraints, and external dependencies.
+Summarize incomplete, delayed, reduced, inconsistent, false-success, or recovery-limited outcomes from the Business Model. Do not copy technical Failure or Dependency tables.
 
 ## Coverage and open questions
 
-Explain which business and integration behaviors are represented, which technical behaviors were intentionally omitted, and which business meanings remain unknown or conflicting.
+Explain supported Journey/Scenario coverage, Tech Behaviors with no business-visible role, partial or blocked areas, and business meaning that remains Unknown or Conflicting.

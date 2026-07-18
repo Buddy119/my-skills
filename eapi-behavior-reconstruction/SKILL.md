@@ -1,6 +1,6 @@
 ---
 name: eapi-behavior-reconstruction
-description: "Reconstruct a human-readable repository knowledge pack from one complete EAPI microservice or AWS Lambda repository, starting with only a local path or a $eapi-behavior-reconstruction --repo invocation. Follow an expert reading workflow: index the repository, discover every executable behavior, trace behaviors end to end into working dossiers, synthesize repository-wide relationships and data lifecycles, then publish linked developer and BA views with endpoint-level API contracts and evidence-backed technical references. Use when Codex needs to reverse-engineer an undocumented repository, help developers and business analysts understand it, or prepare reliable inputs for later cross-service impact analysis."
+description: "Reconstruct a human-readable repository knowledge pack from one complete EAPI microservice or AWS Lambda repository, starting with only a local path or a $eapi-behavior-reconstruction --repo invocation. Follow an expert reading workflow: index the repository, trace every executable behavior into working dossiers, synthesize repository-wide relationships and lifecycles, publish the Tech Pack, then independently reconstruct business Journeys and Scenarios for the BA Pack with many-to-many technical traceability. Use when Codex needs to reverse-engineer an undocumented repository, help developers and business analysts understand it, or prepare reliable inputs for later cross-service impact analysis."
 ---
 
 # EAPI Repository Knowledge Reconstruction
@@ -79,6 +79,8 @@ Before tracing the first behavior, read [references/behavior-dossier-policy.md](
 
 Before repository-wide synthesis, read [references/repository-synthesis-policy.md](references/repository-synthesis-policy.md) completely.
 
+Before building the repository connection model, shared behavior model, or Repository Overview, read [references/repository-mental-model-publication-policy.md](references/repository-mental-model-publication-policy.md) completely.
+
 Before publishing final documents, read [references/editorial-review-policy.md](references/editorial-review-policy.md) completely.
 
 Load these only when applicable:
@@ -87,7 +89,9 @@ Load these only when applicable:
 - After finding an application route or any endpoint-related external-entry, environment-intent, or runtime evidence, read [references/endpoint-exposure-evidence-policy.md](references/endpoint-exposure-evidence-policy.md) before correlating endpoint candidates.
 - For a confirmed application API route, read [references/api-contract-policy.md](references/api-contract-policy.md).
 - After proving an executable outbound HTTP call, read [references/field-mapping-policy.md](references/field-mapping-policy.md).
-- Before creating BA-facing outputs, read [references/ba-pack-policy.md](references/ba-pack-policy.md).
+- After observing any executable external service, database, event, storage, or runtime-provided boundary, read [references/external-dependency-synthesis-policy.md](references/external-dependency-synthesis-policy.md) before dependency reconciliation or publication.
+- After recording any material failure path, read [references/failure-taxonomy-synthesis-policy.md](references/failure-taxonomy-synthesis-policy.md) before failure-pattern reconciliation or publication.
+- Before creating the independent Business Model or any BA-facing output, read [references/ba-pack-policy.md](references/ba-pack-policy.md).
 
 ## Output layout
 
@@ -101,7 +105,8 @@ behavior-docs/<repository-name>/
 │   ├── behavior-catalog.yaml
 │   ├── behavior-dossiers/
 │   ├── repository-register.md
-│   └── repository-synthesis.md
+│   ├── repository-synthesis.md
+│   └── business-model.md
 ├── tech-pack/
 │   ├── repository-overview.md
 │   ├── behavior-catalog.yaml
@@ -115,8 +120,9 @@ behavior-docs/<repository-name>/
 │   └── failure-taxonomy.md                 # only when material failures exist
 └── ba-pack/
     ├── business-overview.md
-    ├── behavior-catalog.md
-    └── behaviors/
+    ├── business-catalog.md
+    ├── journeys/
+    └── scenarios/
 ```
 
 Do not create empty reference documents to satisfy this tree. Record absent or inapplicable modules in `repository-overview.md` as `Not observed` or `Not applicable`.
@@ -138,6 +144,14 @@ When resuming a same-commit analysis whose Endpoint reconciliation lacks `Operat
 When resuming a same-commit analysis whose published API Contracts still use the legacy `Exposure and reachability` plus fixed input/output L1/L2/L3 body structure, keep the completed dossiers, register, synthesis, endpoint identities, and catalog. Treat only those formal Contracts and their related field-document index as stale, then republish them with the consumer-first format. Do not retrace behaviors unless the source commit changed or the working artifacts cannot support the caller-visible contract.
 
 When resuming a same-commit analysis whose register still combines outbound Call identity and field Mapping in `Proven outbound HTTP calls and mappings`, preserve dossiers and cited call/mapping evidence but treat outbound-operation reconciliation, `field-validation-and-mapping.md`, and Tech Behaviors that reference those calls as stale. Split the evidence into Remote Operation, Executable Usage, and Field Mapping records. Preserve API Contracts, Endpoint Matrix, BA Pack, and unrelated behaviors. When several legacy Call IDs prove the same Method, Logical Target, and Client Operation, retain the lexicographically first ID as canonical and record the others as aliases; keep unresolved identities separate.
+
+When resuming a same-commit analysis whose register still uses the flattened `External dependencies` table or lacks `Dependency contract records`, preserve dossiers and all cited dependency observations. Convert each legacy row into a stable `DEP-OBS-nnn` observation, then rebuild Dependency Contract and Operation reconciliation, the dependency section of repository synthesis, and `external-dependency-contracts.md`. Keep identities unresolved when the old evidence cannot prove grouping; do not retrace unrelated Behaviors or regenerate Endpoint, API Contract, or Field Mapping documents.
+
+When resuming a same-commit analysis whose Failure observations lack stable IDs/reconciliation or whose register lacks `Failure pattern reconciliation`, preserve dossiers and every cited failure path. Assign stable `FO-nnn` observations, rebuild Failure Patterns, the failure section of repository synthesis, and `failure-taxonomy.md`. Republish only affected repository summaries, Tech links, and business-visible BA exception text. Do not infer retry, rollback, compensation, or state outcomes missing from the retained evidence.
+
+When resuming a same-commit analysis whose synthesis lacks `Repository connection model` or `Shared behavior model`, or whose Repository Overview still reduces connections or shared behavior to a name list, preserve completed dossiers, register reconciliation, and existing Endpoint, API, Field, Lifecycle, Config, Dependency, and Failure documents. Rebuild only those synthesis models and `tech-pack/repository-overview.md`. Update BA documents only when the rebuilt models change a business-visible participant, interaction, shared business rule, outcome, or limitation.
+
+When resuming a same-commit analysis whose state lacks `business_model_status`, whose BA Pack still uses `ba-pack/behaviors/`, shares Tech `behavior_id` values, or whose Tech documents use `ba_behavior_document`, preserve dossiers, the register, repository synthesis, and all established Tech facts. Set `business_model_status: pending`, archive the legacy BA files under `.work/legacy-ba-pack/`, create a new independent Business Model, and rebuild the complete BA Pack as Journeys and Scenarios. Replace Tech and catalog BA links with `ba_scenarios` lists and update Repository Overview. Do not retrace understood Behaviors, generate old-path redirect stubs, or reuse legacy BA prose as business-model facts.
 
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register.
 
@@ -201,10 +215,10 @@ Process at most five behaviors per internal batch. For each behavior:
 6. Inspect tests alongside implementation. When relevant tests exist, record one or two concrete assertions that prove a core outcome, prioritizing a failure path. Distinguish test-only references from production callers.
 7. Inspect IaC and configuration for trigger filters, timeouts, retries, DLQs, permissions, resources, and behavior-changing environment values.
 8. Stop at repository boundaries and describe remote internals as unknown.
-9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context.
+9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context. Record each executable external boundary as a Dependency Observation and each material failure path as a Failure Observation; do not create reader-facing Dependency Contracts or Failure Patterns while tracing one Behavior.
 10. Apply the behavior-understanding gate from the dossier policy. Mark the behavior `understood` only after it passes; otherwise continue tracing or mark it `blocked` with the exact limitation.
 
-Do not write final Tech or BA behavior documents during this phase.
+Do not write formal Tech documents, the Business Model, Journeys, or Scenarios during this phase.
 
 ### 4. Record external HTTP mappings only when proven
 
@@ -228,14 +242,18 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 1. Set `phase: synthesis`.
 2. Read all behavior dossiers and the repository register.
 3. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
-4. Reconcile behavior boundaries, shared rules, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
+4. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
 5. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses and derive external reachability without upgrading missing layers.
 6. Classify each reconciled endpoint record as `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved`; record `publish`, `summarize`, or `publish-as-exception`, the classification basis, and any normalized route-group association. Ordinary protocol support requires proof that it has no application handler, business payload, state access, or business dependency call. Method or mock/static integration alone is insufficient.
 7. Associate a shared protocol-support operation with one normalized route group instead of copying it under every application method. Summarize ordinary support records; publish orphaned, conflicting, environment-inconsistent, and unresolved records as exceptions.
 8. Reconcile outbound HTTP observations into Remote Operations, Executable Usages, and Field Mappings. Merge Call IDs only from a complete Method + Logical Target + Client Operation match; preserve usage-specific conditions and transformations.
-9. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
-10. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-11. Set `synthesis_status: complete` after the synthesis work is complete. Coverage may still be `partial` when explicitly blocked areas are accounted for.
+9. Reconcile every `DEP-OBS-nnn` into a logical `DEP-nnn` Dependency or mark it `Unresolved`. Group only with executable binding, configuration, DI/wiring, or resource-identity evidence. Create `DEP-nnn-OPnn` Operations beneath each Dependency, link existing HTTP Call IDs instead of copying mappings, record dependent capabilities, and classify availability impact as `Required`, `Degradable`, `Optional`, or `Unknown` at Operation or Behavior usage level.
+10. Reconcile every `FO-nnn` into a `FAIL-nnn` Pattern or mark it `Unresolved`. Merge only when trigger/source, propagation, caller visibility, state outcome, retry safety, and recovery semantics are materially equivalent. Record recurring behaviors, dependency relationships, recovery gaps, and evidence-supported `High`, `Medium`, `Low`, or `Unknown` risk attention.
+11. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
+12. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
+13. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
+14. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
+15. Set `synthesis_status: complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. Coverage may still be `partial` when explicitly blocked areas are accounted for.
 
 Run the mechanical state check before publishing:
 
@@ -253,9 +271,9 @@ python3 <skill-root>/scripts/validate_analysis_state.py \
 Set `phase: publishing` and `publication_status: in-progress`. Write for a developer who needs to understand the repository, not for an auditor trying to count claims.
 
 1. Build each Tech Behavior from its completed dossier. Use [assets/behavior-document-template.md](assets/behavior-document-template.md).
-2. Build `repository-overview.md` from `repository-synthesis.md` using [assets/repository-overview-template.md](assets/repository-overview-template.md), not directly from the evidence index.
+2. Build `repository-overview.md` from the completed Connection and Shared Behavior models in `repository-synthesis.md` using [assets/repository-overview-template.md](assets/repository-overview-template.md), not directly from the evidence index, dependency names, configuration names, or file roles. Publish one grouped system-context Mermaid diagram and a compact connection matrix; then publish separate Shared Rules and Shared Behavior-shaping Components tables. Link to detailed models instead of copying their Operation, Mapping, Lifecycle, Config, or Failure tables. Leave BA Scenario links empty until the independent Business Model is complete.
 3. Copy the reconciled working catalog to `tech-pack/behavior-catalog.yaml` and replace working dossier paths with final document links.
-4. Generate applicable repository references from the corresponding register and synthesis sections:
+4. Generate applicable repository references from the corresponding reconciled register records and repository-synthesis models:
    - [assets/endpoint-matrix-template.md](assets/endpoint-matrix-template.md)
    - [assets/data-lifecycle-template.md](assets/data-lifecycle-template.md)
    - [assets/field-validation-and-mapping-template.md](assets/field-validation-and-mapping-template.md)
@@ -264,7 +282,9 @@ Set `phase: publishing` and `publication_status: in-progress`. Write for a devel
    - [assets/failure-taxonomy-template.md](assets/failure-taxonomy-template.md)
 5. Build the outbound portion of `field-validation-and-mapping.md` as one index row and one anchored section per Remote Operation. Put call identity once in Call Overview, list multiple or materially different Executable Usages, and nest request/response mappings under that Call. Do not copy the register tables or repeat call metadata in mapping rows.
 6. In each affected Tech Behavior, add one call-summary row per Remote Operation, link its Call ID directly to the operation anchor, and list only that behavior's Usage IDs. Do not create one behavior row per Mapping ID.
-7. Link each behavior only to relevant repository references. Do not duplicate detailed contracts or repository-wide tables inside every behavior.
+7. Build `external-dependency-contracts.md` as one landscape row and one anchored section per `DEP-nnn`. Nest Operations beneath their Dependency, explain role, shared capabilities, availability, degradation, state implications, and remote Unknowns, and link Field Mapping and Failure details instead of repeating them. Never publish the Dependency Observation table.
+8. Build `failure-taxonomy.md` as one index row and one anchored section per `FAIL-nnn`. Lead with repository-wide High and Unknown attention, then explain trigger, caller visibility, state outcome, retry/recovery, and cross-Behavior variations. Link API errors, lifecycle changes, Dependency Contracts, and Tech flows instead of repeating them. Never publish the Failure Observation table.
+9. Link each behavior only to relevant repository references. Use stable `dependency_id` entries and `failure_patterns` IDs in affected Tech frontmatter, with one concise usage-specific row linking each repository-level anchor. Do not duplicate detailed contracts or repository-wide tables inside every behavior.
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
@@ -295,17 +315,30 @@ Do not generate a contract or behavior for an external-only, configuration-only,
 
 Validate each endpoint contract and its backlink before continuing.
 
-### 8. Derive the BA Pack after synthesis
+### 8. Build an independent Business Model and publish the BA Pack
 
-Generate the BA Pack only after repository synthesis and related Tech documents are complete.
+Begin only after repository synthesis and the related Tech documents are complete.
 
-1. Build `business-overview.md` from the synthesized business capabilities, participants, business objects, lifecycles, shared rules, outcomes, and exceptions using [assets/ba-overview-template.md](assets/ba-overview-template.md).
-2. Build `behavior-catalog.md` with [assets/ba-behavior-catalog-template.md](assets/ba-behavior-catalog-template.md), then generate `business` and `integration` behaviors with [assets/ba-behavior-document-template.md](assets/ba-behavior-document-template.md).
-3. Use the dossier, repository synthesis, and Tech Behavior as inputs; do not translate the Tech Mermaid or reuse a shared flow object.
-4. Model BA flow using business events, participants, decisions, business-object changes, and visible outcomes.
-5. Preserve evidence confidence without exposing raw source citations. Link back to the Tech Behavior.
+1. Read the BA Pack policy, keep `business_model_status: pending`, and copy [assets/business-model-template.md](assets/business-model-template.md) to `.work/business-model.md`.
+2. Reconstruct Capabilities, actors, business objects, Journeys, Scenarios, shared business rules, business-visible exceptions, and Journey–Scenario relationships across all completed Tech facts. Do not iterate through Tech Behaviors and generate one BA document per row.
+3. Account for every active Tech Behavior in the Business Model as `scenario-support`, `business-visible-support`, `no-business-visible-role`, or `unknown`. An Entry Point, technical branch, validation, Dependency, or exception does not automatically become a Scenario, business decision, rule, participant, or exception.
+4. Assign semantic Journey and Scenario IDs from supported business goals and contexts. Merge and split by actor goal, business context, decision meaning, business-object lifecycle, and visible outcome—not by endpoint, handler, event, or Behavior identity.
+5. Review the Business Model semantically. Set `business_model_status: complete` when every Tech Behavior has a disposition and observable business modeling is complete; use `partial` for material blocked coverage and `blocked` when no safe model can be published.
+6. When status is `complete` or `partial`, build `business-overview.md` with [assets/ba-overview-template.md](assets/ba-overview-template.md), `business-catalog.md` with [assets/ba-business-catalog-template.md](assets/ba-business-catalog-template.md), Journey documents with [assets/ba-journey-document-template.md](assets/ba-journey-document-template.md), and Scenario documents with [assets/ba-scenario-document-template.md](assets/ba-scenario-document-template.md).
+7. Maintain direct many-to-many Scenario/Tech traceability: each Scenario lists all supporting Tech Behaviors; each supporting Tech Behavior and catalog entry lists the Scenario in `ba_scenarios`. A Journey links its Scenarios and their supporting Tech Behaviors, but Tech documents do not maintain Journey backlinks. `ba_scenarios: []` is valid for every Behavior category.
+8. Preserve evidence confidence without exposing raw source citations. Include only business-visible participants, interactions, shared rules, degradation, partial success, state risk, and recovery limitations. Do not copy the technical context diagram, connection matrix, internal components, Dependency tables, Failure tables, or Tech flows.
+9. When status is `blocked`, omit invented Journey and Scenario documents, explain the blocker in Repository Overview and delivery, and keep the supported Tech Pack complete.
 
-Purely technical behavior belongs in the BA Pack only when its effect materially changes a business-visible outcome; describe that effect in the affected BA behavior.
+Run the BA publication gate before writing or completing BA documents:
+
+```bash
+python3 <skill-root>/scripts/validate_analysis_state.py \
+  <output-dir>/.work/analysis-state.yaml \
+  --repo <repository-root> \
+  --catalog <output-dir>/.work/behavior-catalog.yaml \
+  --dossiers-dir <output-dir>/.work/behavior-dossiers \
+  --require-ba-publishable
+```
 
 ### 9. Review in three passes
 
@@ -313,15 +346,22 @@ Apply the editorial policy in this order:
 
 1. Mechanical review: state, structure, links, endpoint identity, commit, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
-3. Reader review: confirm a developer and BA can independently retell the behavior, lifecycle, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack.
+3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack.
+
+During reader review, also verify that each external Dependency appears once regardless of the number of Behaviors or Operations, and that each Failure Pattern explains a repository-level trigger-to-visible-result-and-state story instead of presenting an observation inventory.
+
+For Repository Overview, verify that the context diagram and connection matrix make direction, boundary, interaction role, exchanged concepts, supported Behaviors, configuration selection, criticality, and failure/state impact understandable without the register. Confirm that same-role Operations are not repeated as connections, materially different roles are not collapsed, shared items really affect at least two Behavior paths, ordinary utilities are excluded, and every deep-dive destination is reachable with one link.
+
+For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
 Run:
 
 ```bash
 python3 <skill-root>/scripts/validate_behavior_doc.py <tech-behavior.md> --repo <repository-root>
 python3 <skill-root>/scripts/validate_api_contract.py <endpoint-contract.md> --repo <repository-root>
-python3 <skill-root>/scripts/validate_ba_behavior.py <ba-behavior.md>
-python3 <skill-root>/scripts/validate_pack_links.py <output-dir>
+python3 <skill-root>/scripts/validate_ba_journey.py <ba-journey.md>
+python3 <skill-root>/scripts/validate_ba_scenario.py <ba-scenario.md>
+python3 <skill-root>/scripts/validate_pack_links.py <output-dir> --repo <repository-root>
 ```
 
 Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors without rewriting readable text into claim statements.
@@ -333,7 +373,7 @@ Set `publication_status: complete` and `phase: completed` after final review. Re
 - Repository path and commit.
 - Full-repository coverage and any blocked areas.
 - Pack directories and generated documents.
-- Behavior and endpoint counts, separating application endpoints, meaningful external exposures, aggregated protocol-support declarations, published exceptions, and blocked coverage.
+- Behavior, Journey, Scenario, and endpoint counts, separating application endpoints, meaningful external exposures, aggregated protocol-support declarations, published exceptions, and blocked coverage.
 - Important confirmed findings, unknowns, conflicts, and limitations.
 - Mechanical validation results and any intentional warnings.
 
@@ -343,7 +383,7 @@ Do not modify application source code unless the user separately requests an imp
 
 Before delivering, confirm:
 
-- `.work` shows inventory, per-behavior understanding, repository registration, and synthesis in that order.
+- `.work` shows inventory, per-behavior understanding, repository registration, repository synthesis, and independent business modeling in that order.
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.
@@ -353,7 +393,14 @@ Before delivering, confirm:
 - Cross-boundary field mappings exist only for proven outbound HTTP calls.
 - Outbound HTTP knowledge is separated into Remote Operations, Executable Usages, and Field Mappings; each Remote Operation has one final anchored section, while usage-specific conditions and mappings remain visible.
 - Runtime configuration appears only when it changes behavior.
-- External systems are described at the observed boundary without invented internals.
+- External systems are reconciled into Dependency Contracts with distinct Operations, dependent capabilities, availability impact, and explicit remote Unknowns; the formal document does not repeat one dependency per Behavior or copy the observation register.
+- Failure observations are reconciled into repository-wide Patterns with caller visibility, state outcome, retry safety, recovery, and evidence-supported risk attention; the formal taxonomy does not copy one row per dossier failure.
+- Repository Overview contains a synthesis-backed context diagram and connection matrix rather than a list of external names; logical connections preserve direction, boundary, role, exchanged concepts, configuration variants, criticality, failure/state impact, and one-click deep links without repeating every Operation.
+- Shared Rules and Shared Behavior-shaping Components include only proven cross-Behavior items that materially affect observable behavior, preserve differences and overrides, and exclude ordinary tools and framework glue.
 - Every Java behavior has a completed semantic symbol/call trace or an explicit degraded/unavailable investigation; unresolved callers, dynamic edges, and implementation bindings remain qualified.
-- Tech and BA flows answer different audience questions and are not copies.
+- `.work/business-model.md` accounts for every active Tech Behavior without using Behavior count as a Journey or Scenario target.
+- Journey and Scenario IDs are independent from Tech Behavior IDs; Scenario/Tech traceability is many-to-many and every declared relationship has a backlink.
+- BA Journeys explain business goals, stages, object progression, handoffs, outcomes, and repository boundaries; BA Scenarios explain supported business situations, decisions, information, outcomes, and exceptions.
+- Technical triggers, branches, validations, Dependencies, and exceptions are not promoted to business concepts without supported business-visible meaning.
+- BA flows are independently modeled business views, not copied or mechanically renamed Tech call chains.
 - The final prose reads as documentation, not as a Claim Ledger or validator transcript.

@@ -31,6 +31,11 @@ Use the dossiers and register to answer:
 11. Which endpoint observations are application behavior, meaningful external exposure, protocol support, or unresolved?
 12. Which endpoint records belong in the reader-facing Matrix, which belong in its protocol-support summary, and which must be published as exceptions?
 13. Which outbound HTTP usages represent the same remote operation, and which usage-specific conditions or mappings must remain distinct?
+14. Which external-boundary observations belong to the same logical Dependency, what role does it play, which Operations and capabilities share it, and how does unavailability affect each usage?
+15. Which failure observations share materially equivalent trigger, propagation, visibility, state, retry, and recovery semantics, and which represent distinct repository-wide Patterns?
+16. Which dependency and failure conclusions are High-attention or materially Unknown, and what repository evidence supports that reader priority?
+17. Which reconciled Operations form one reader-meaningful logical connection, and where do direction, boundary, interaction role, or configuration selection require separate connections for the same participant?
+18. Which shared rules and behavior-shaping components materially affect at least two Behaviors or independent entry paths, where do their effects differ, and what would change if their source changed?
 
 ## Reconcile rather than concatenate
 
@@ -45,6 +50,15 @@ Use the dossiers and register to answer:
 - Do not suppress a record solely because its method is OPTIONS or its integration is mock/static. Confirm the absence of application behavior, business payload, state access, and business dependency calls first.
 - Derive external reachability only after recording each layer's own status and evidence.
 - Reconcile outbound HTTP usages into one Call ID only when Method, Logical Target, and Client Operation all match. Keep every executable call site as a Usage and preserve usage-specific mappings; do not concatenate flat mapping rows into a call model.
+- Reconcile Dependency Observations into one Dependency only when code, configuration, DI/wiring, resource definitions, or explicit operation bindings establish the same logical external participant or resource boundary. Keep distinct Operations beneath one Dependency and keep ambiguous candidates unresolved; names, hosts, paths, and resource types alone are not grouping evidence.
+- Reconcile Failure Observations into one Pattern only when trigger/source, handling/propagation, caller visibility, state outcome, retry safety, and recovery are materially equivalent. Do not group from exception names, error codes, statuses, or text alone.
+- Assign every Dependency and Failure Observation to a reconciled object or mark it `Unresolved`; do not discard observations that do not fit a clean reader model.
+- Preserve operation- or behavior-level Dependency criticality when one Dependency is Required for one capability but Degradable, Optional, or Unknown for another.
+- Use Failure risk attention to prioritize reading, not to manufacture a business risk score. Keep decisive missing state, retry, or recovery evidence as `Unknown`.
+- Reconcile repository connections from executable boundaries and explicit trigger bindings after Endpoint, Dependency, Lifecycle, Config, and Failure reconciliation. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics match. Split one participant when it plays materially different roles or directions.
+- Do not create a connection from a host, resource, class, client, configuration, or participant name alone. Preserve missing role, exchanged-concept, target-selection, availability, or state-impact evidence as `Unknown` rather than filling the Overview with name associations.
+- Reconcile a Shared Rule or Shared Behavior-shaping Component only when one proven rule source, implementation, or configuration binding affects at least two Behaviors or independent entry paths and changes observable validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Similar names are not shared identity evidence.
+- Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, behavior-neutral utilities, and single-Behavior helpers from the Shared Behavior model.
 - Resolve duplicate register entries and preserve conflicting evidence explicitly.
 - Do not infer ordering or lifecycle edges merely because two objects have similar names.
 - Do not infer a remote system's internal behavior from a client method name.
@@ -63,9 +77,13 @@ Use the final pack's `coverage_status`:
 
 ## Source of final documents
 
-- Repository overview and BA overview come from repository synthesis.
+- Repository Overview comes from the synthesized Repository Connection and Shared Behavior models. The independent Business Model uses repository synthesis and the completed Tech facts to reconstruct business-visible Capabilities, Journeys, Scenarios, actors, objects, rules, outcomes, and limitations before any BA document is published.
 - Behavior documents come from their dossiers, informed by synthesis.
 - Endpoint Matrix comes from the register's reconciled publication projection: application endpoints, meaningful external exposures, exceptions, and a compact protocol-support summary. The outbound part of Field Validation and Mapping comes from reconciled Remote Operations, Executable Usages, and Field Mappings rather than the raw observation shape. Other field rules, configuration, and dependency references come from their reconciled register sections.
-- Data lifecycle and failure taxonomy require cross-behavior synthesis.
+- External Dependency Contracts come from reconciled `DEP-nnn` participants/resources and their `DEP-nnn-OPnn` Operations, not the Dependency Observation rows.
+- Failure Taxonomy comes from reconciled `FAIL-nnn` Patterns and cross-pattern risk analysis, not the Failure Observation rows.
+- Data lifecycle, Dependency Contracts, and Failure Taxonomy require cross-behavior synthesis even when a resulting Pattern or Dependency is observed in only one Behavior.
 
 Never generate the formal pack directly from evidence-index JSON, file-role metadata, or a batch of unreviewed structured facts.
+
+Never derive the BA Pack by iterating the Tech Behavior catalog. Tech Behaviors are supporting evidence inputs; they are not the BA document identity or cardinality model.

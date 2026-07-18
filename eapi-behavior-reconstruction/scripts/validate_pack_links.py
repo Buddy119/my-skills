@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate local Markdown links and final Tech catalog document paths."""
+"""Validate pack links plus mechanical endpoint, call, dependency, and failure integrity."""
 
 from __future__ import annotations
 
@@ -11,15 +11,23 @@ from urllib.parse import unquote
 
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\((?P<target>[^)]+)\)")
+SOURCE_CITATION_RE = re.compile(
+    r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):(?P<start>\d+)"
+    r"(?:-(?P<end>\d+))?`"
+)
 CATALOG_PATH_RE = re.compile(
-    r"^\s*(?:document|ba_document):\s*[\"']?(?P<target>[^\"'\n#]+?)[\"']?\s*$", re.M
+    r"^\s*document:\s*[\"']?(?P<target>[^\"'\n#]+?)[\"']?\s*$", re.M
 )
 PLACEHOLDERS = (
     "TODO",
     "TEMPLATE:",
     "path/to/",
     "repository.behavior-name",
+    "repository.journey.business-goal",
+    "repository.scenario.context-outcome",
     "repository.method-route",
+    "Business journey title",
+    "Business scenario title",
     "Human-readable API contract title",
     "METHOD /normalized/path",
     "Header-Name",
@@ -49,6 +57,38 @@ ENDPOINT_HEADERS = [
 CALL_ID_RE = re.compile(r"HTTP-\d+")
 USAGE_ID_RE = re.compile(r"HTTP-\d+-U\d+")
 MAPPING_ID_RE = re.compile(r"FM-\d+")
+DEPENDENCY_OBSERVATION_ID_RE = re.compile(r"DEP-OBS-\d+")
+DEPENDENCY_ID_RE = re.compile(r"DEP-\d+")
+DEPENDENCY_OPERATION_ID_RE = re.compile(r"DEP-\d+-OP\d+")
+FAILURE_OBSERVATION_ID_RE = re.compile(r"FO-\d+")
+FAILURE_PATTERN_ID_RE = re.compile(r"FAIL-\d+")
+EVIDENCE_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
+DEPENDENCY_CRITICALITIES = {"Required", "Degradable", "Optional", "Unknown"}
+CALLER_VISIBILITIES = {
+    "Explicit error",
+    "Degraded result",
+    "Success with loss",
+    "Swallowed",
+    "Async only",
+    "Unknown",
+}
+STATE_OUTCOMES = {
+    "Unchanged",
+    "Rolled back",
+    "Partial",
+    "Committed before failure",
+    "Unknown",
+}
+RETRY_SAFETIES = {"Safe", "Conditional", "Unsafe", "Unknown"}
+RECOVERY_MODES = {
+    "Automatic retry",
+    "Rollback",
+    "Compensation",
+    "Manual",
+    "None observed",
+    "Unknown",
+}
+RISK_ATTENTIONS = {"High", "Medium", "Low", "Unknown"}
 FIELD_OPERATION_HEADERS = [
     "Call ID",
     "Method and Logical Target",
@@ -109,6 +149,98 @@ REGISTER_MAPPING_HEADERS = [
     "Lossy",
     "Status",
     "Evidence",
+]
+REGISTER_DEPENDENCY_OBSERVATION_HEADERS = [
+    "Observation ID",
+    "Candidate dependency",
+    "Boundary type",
+    "Behavior ID",
+    "Operation or resource",
+    "Exchanged concept or observed effect",
+    "Availability observation",
+    "Status",
+    "Evidence",
+    "Reconciliation",
+]
+REGISTER_DEPENDENCY_CONTRACT_HEADERS = [
+    "Dependency ID",
+    "Logical identity",
+    "Type",
+    "Repository-observed role",
+    "Related operations",
+    "Related behaviors or capabilities",
+    "Criticality by usage",
+    "Observation IDs",
+    "Aliases",
+    "Status",
+    "Unknowns or conflicts",
+]
+REGISTER_DEPENDENCY_OPERATION_HEADERS = [
+    "Operation ID",
+    "Dependency ID",
+    "Boundary reference",
+    "Invocation or resource",
+    "Exchanged concepts",
+    "Behaviors or capabilities",
+    "Criticality by usage",
+    "Unavailability, fallback, and state impact",
+    "Status",
+    "Evidence",
+]
+REGISTER_FAILURE_OBSERVATION_HEADERS = [
+    "Observation ID",
+    "Failure category",
+    "Behavior ID",
+    "Trigger or source",
+    "Handling and propagation",
+    "Caller-visible result",
+    "State outcome",
+    "Retry or recovery",
+    "Status",
+    "Evidence",
+    "Reconciliation",
+]
+REGISTER_FAILURE_PATTERN_HEADERS = [
+    "Pattern ID",
+    "Category",
+    "Trigger or source",
+    "Observation IDs",
+    "Behaviors or capabilities",
+    "Related dependencies",
+    "Caller visibility",
+    "State outcome",
+    "Retry safety",
+    "Recovery",
+    "Risk attention",
+    "Conflicts or unknowns",
+    "Evidence",
+]
+DEPENDENCY_LANDSCAPE_HEADERS = [
+    "Dependency",
+    "Type and repository-observed role",
+    "Dependent capabilities",
+    "Criticality",
+    "Availability impact",
+    "Status",
+    "Details",
+]
+DEPENDENCY_OPERATION_DOCUMENT_HEADERS = [
+    "Operation",
+    "Boundary reference",
+    "Purpose and condition",
+    "Concepts sent, consumed, read, or written",
+    "Affected capabilities/behaviors",
+    "Status",
+]
+FAILURE_PATTERN_INDEX_HEADERS = [
+    "Failure pattern",
+    "Category",
+    "Affected capabilities",
+    "Caller visibility",
+    "State outcome",
+    "Retry safety",
+    "Risk attention",
+    "Details",
 ]
 
 
@@ -180,6 +312,292 @@ def endpoint_anchor(identifier: str) -> str:
 def scalar_value(frontmatter: str, key: str) -> str | None:
     match = re.search(rf"^{re.escape(key)}:\s*[\"']?([^\"'\n]+)[\"']?\s*$", frontmatter, re.M)
     return match.group(1).strip() if match else None
+
+
+def frontmatter_text(document: Path) -> str | None:
+    text = document.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return None
+    end = text.find("\n---\n", 4)
+    return text[4:end] if end != -1 else None
+
+
+def linked_document_entries(
+    frontmatter: str, block_key: str, id_key: str
+) -> list[tuple[str, str]]:
+    block = yaml_block(frontmatter, block_key)
+    identifiers = re.findall(
+        rf"^\s*-\s+{re.escape(id_key)}:\s*[\"']?([^\"'\n]+?)[\"']?\s*$",
+        block,
+        re.M,
+    )
+    documents = re.findall(
+        r"^\s+document:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M
+    )
+    return list(zip((item.strip() for item in identifiers), (item.strip() for item in documents)))
+
+
+def validate_ba_traceability(root: Path, errors: list[str]) -> None:
+    ba_root = root / "ba-pack"
+    if not ba_root.is_dir():
+        return
+    if (ba_root / "behaviors").exists():
+        errors.append("legacy ba-pack/behaviors directory remains in the published Pack")
+
+    journey_documents = sorted((ba_root / "journeys").glob("*.md"))
+    scenario_documents = sorted((ba_root / "scenarios").glob("*.md"))
+    if not journey_documents and not scenario_documents:
+        return
+    for required in (ba_root / "business-overview.md", ba_root / "business-catalog.md"):
+        if not required.is_file():
+            errors.append(f"BA Pack is missing required reader document: {required.name}")
+
+    journeys: dict[str, tuple[Path, str]] = {}
+    scenarios: dict[str, tuple[Path, str]] = {}
+    tech_behaviors: dict[str, tuple[Path, str]] = {}
+
+    for document, id_key, destination, label in (
+        *((path, "journey_id", journeys, "Journey") for path in journey_documents),
+        *((path, "scenario_id", scenarios, "Scenario") for path in scenario_documents),
+        *(
+            (path, "behavior_id", tech_behaviors, "Tech Behavior")
+            for path in sorted((root / "tech-pack" / "behaviors").glob("*.md"))
+        ),
+    ):
+        frontmatter = frontmatter_text(document)
+        if frontmatter is None:
+            errors.append(f"{label} has invalid YAML frontmatter: {document.relative_to(root)}")
+            continue
+        identifier = scalar_value(frontmatter, id_key)
+        if not identifier:
+            errors.append(f"{label} is missing {id_key}: {document.relative_to(root)}")
+            continue
+        if identifier in destination:
+            errors.append(f"duplicate {label} ID: {identifier}")
+            continue
+        destination[identifier] = (document.resolve(), frontmatter)
+
+    for scenario_id, (scenario_path, scenario_frontmatter) in scenarios.items():
+        journey_entries = linked_document_entries(
+            scenario_frontmatter, "journeys", "journey_id"
+        )
+        tech_entries = linked_document_entries(
+            scenario_frontmatter, "tech_behaviors", "behavior_id"
+        )
+        if not journey_entries:
+            errors.append(f"BA Scenario has no Journey relationship: {scenario_id}")
+        if not tech_entries:
+            errors.append(f"BA Scenario has no supporting Tech Behavior: {scenario_id}")
+
+        for journey_id, document in journey_entries:
+            journey = journeys.get(journey_id)
+            if journey is None:
+                errors.append(f"BA Scenario references unknown Journey: {scenario_id} -> {journey_id}")
+                continue
+            if (scenario_path.parent / document).resolve() != journey[0]:
+                errors.append(
+                    f"BA Scenario resolves the wrong Journey document: "
+                    f"{scenario_id} -> {journey_id}"
+                )
+            backlinks = linked_document_entries(journey[1], "scenarios", "scenario_id")
+            if not any(
+                backlink_id == scenario_id
+                and (journey[0].parent / backlink_document).resolve() == scenario_path
+                for backlink_id, backlink_document in backlinks
+            ):
+                errors.append(f"BA Journey lacks Scenario backlink: {journey_id} -> {scenario_id}")
+
+        for behavior_id, document in tech_entries:
+            tech = tech_behaviors.get(behavior_id)
+            if tech is None:
+                errors.append(
+                    f"BA Scenario references unknown Tech Behavior: {scenario_id} -> {behavior_id}"
+                )
+                continue
+            if (scenario_path.parent / document).resolve() != tech[0]:
+                errors.append(
+                    f"BA Scenario resolves the wrong Tech Behavior document: "
+                    f"{scenario_id} -> {behavior_id}"
+                )
+            backlinks = linked_document_entries(tech[1], "ba_scenarios", "scenario_id")
+            if not any(
+                backlink_id == scenario_id
+                and (tech[0].parent / backlink_document).resolve() == scenario_path
+                for backlink_id, backlink_document in backlinks
+            ):
+                errors.append(
+                    f"Tech Behavior lacks BA Scenario backlink: {behavior_id} -> {scenario_id}"
+                )
+
+    for journey_id, (journey_path, journey_frontmatter) in journeys.items():
+        scenario_entries = linked_document_entries(
+            journey_frontmatter, "scenarios", "scenario_id"
+        )
+        tech_entries = linked_document_entries(
+            journey_frontmatter, "supporting_tech_behaviors", "behavior_id"
+        )
+        if not scenario_entries:
+            errors.append(f"BA Journey has no Scenario: {journey_id}")
+        derived_tech: dict[str, Path] = {}
+        for scenario_id, document in scenario_entries:
+            scenario = scenarios.get(scenario_id)
+            if scenario is None:
+                errors.append(f"BA Journey references unknown Scenario: {journey_id} -> {scenario_id}")
+                continue
+            if (journey_path.parent / document).resolve() != scenario[0]:
+                errors.append(
+                    f"BA Journey resolves the wrong Scenario document: "
+                    f"{journey_id} -> {scenario_id}"
+                )
+            for behavior_id, behavior_document in linked_document_entries(
+                scenario[1], "tech_behaviors", "behavior_id"
+            ):
+                behavior_path = (scenario[0].parent / behavior_document).resolve()
+                if behavior_id in derived_tech and derived_tech[behavior_id] != behavior_path:
+                    errors.append(
+                        f"BA Scenarios resolve the same Tech Behavior differently: {behavior_id}"
+                    )
+                derived_tech[behavior_id] = behavior_path
+
+        declared_tech = {
+            behavior_id: (journey_path.parent / document).resolve()
+            for behavior_id, document in tech_entries
+        }
+        if set(declared_tech) != set(derived_tech):
+            missing = sorted(set(derived_tech) - set(declared_tech))
+            extra = sorted(set(declared_tech) - set(derived_tech))
+            if missing:
+                errors.append(
+                    f"BA Journey omits Scenario-derived Tech Behaviors {journey_id}: "
+                    + ", ".join(missing)
+                )
+            if extra:
+                errors.append(
+                    f"BA Journey lists Tech Behaviors not used by its Scenarios {journey_id}: "
+                    + ", ".join(extra)
+                )
+        for behavior_id in sorted(set(declared_tech) & set(derived_tech)):
+            if declared_tech[behavior_id] != derived_tech[behavior_id]:
+                errors.append(
+                    f"BA Journey and Scenario resolve Tech Behavior differently: "
+                    f"{journey_id} -> {behavior_id}"
+                )
+
+    for behavior_id, (behavior_path, behavior_frontmatter) in tech_behaviors.items():
+        for scenario_id, document in linked_document_entries(
+            behavior_frontmatter, "ba_scenarios", "scenario_id"
+        ):
+            scenario = scenarios.get(scenario_id)
+            if scenario is None:
+                errors.append(
+                    f"Tech Behavior references unknown BA Scenario: {behavior_id} -> {scenario_id}"
+                )
+            elif (behavior_path.parent / document).resolve() != scenario[0]:
+                errors.append(
+                    f"Tech Behavior resolves the wrong BA Scenario document: "
+                    f"{behavior_id} -> {scenario_id}"
+                )
+
+
+def normalized_label(cell: str) -> str:
+    return re.sub(r"\s+", " ", code_value(cell)).strip()
+
+
+def validate_exact_label(
+    cell: str,
+    allowed: set[str],
+    context: str,
+    errors: list[str],
+) -> str | None:
+    value = normalized_label(cell)
+    if value not in allowed:
+        errors.append(f"{context} has an invalid value: {value or '<empty>'}")
+        return None
+    return value
+
+
+def validate_usage_criticality(cell: str, context: str, errors: list[str]) -> None:
+    value = normalized_label(cell)
+    found = {
+        label
+        for label in DEPENDENCY_CRITICALITIES
+        if re.search(rf"\b{re.escape(label)}\b", value)
+    }
+    if not found:
+        errors.append(f"{context} has no valid Criticality classification")
+
+
+def validate_recovery_modes(cell: str, context: str, errors: list[str]) -> None:
+    value = normalized_label(cell)
+    parts = [
+        part.strip()
+        for part in re.split(r"\s*(?:<br\s*/?>|[,;/])\s*", value, flags=re.I)
+        if part.strip()
+    ]
+    if not parts or any(part not in RECOVERY_MODES for part in parts):
+        errors.append(f"{context} has invalid Recovery value(s): {value or '<empty>'}")
+
+
+def anchored_sections(text: str, identifier_re: re.Pattern[str]) -> dict[str, str]:
+    matches = list(
+        re.finditer(
+            rf"^##\s+`?(?P<identifier>{identifier_re.pattern})`?(?:\s+[—-].*)?\s*$",
+            text,
+            re.M,
+        )
+    )
+    sections: dict[str, str] = {}
+    for index, match in enumerate(matches):
+        identifier = match.group("identifier")
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[identifier] = text[match.end() : end]
+    return sections
+
+
+def validate_source_citations(
+    document: Path,
+    repo: Path | None,
+    errors: list[str],
+) -> None:
+    if repo is None:
+        return
+    text = document.read_text(encoding="utf-8")
+    citations = list(SOURCE_CITATION_RE.finditer(text))
+    if not citations:
+        errors.append(f"reader document has no source citations: {document.name}")
+        return
+
+    checked: set[tuple[str, int, int | None]] = set()
+    for match in citations:
+        rel = match.group("path")
+        start = int(match.group("start"))
+        end = int(match.group("end")) if match.group("end") else None
+        key = (rel, start, end)
+        if key in checked:
+            continue
+        checked.add(key)
+        source = (repo / rel).resolve()
+        if not within_root(source, repo):
+            errors.append(f"source citation escapes repository: {document.name} -> {rel}")
+            continue
+        if not source.is_file():
+            errors.append(f"cited source does not exist: {document.name} -> {rel}")
+            continue
+        if end is not None and end < start:
+            errors.append(f"invalid source line range: {document.name} -> {rel}:{start}-{end}")
+            continue
+        try:
+            line_count = sum(1 for _ in source.open(encoding="utf-8", errors="replace"))
+        except OSError as exc:
+            errors.append(f"cannot read cited source {rel}: {exc}")
+            continue
+        final_line = end or start
+        if start < 1 or final_line > line_count:
+            suffix = f"-{end}" if end is not None else ""
+            errors.append(
+                f"source citation outside file bounds: {document.name} -> "
+                f"{rel}:{start}{suffix}"
+            )
 
 
 def validate_endpoint_matrix(matrix: Path, root: Path, errors: list[str]) -> None:
@@ -356,6 +774,263 @@ def validate_http_register(
                     )
 
     return call_ids, usages_by_call, usage_to_call, mapping_directions
+
+
+def validate_dependency_register(
+    register: Path,
+    call_ids: set[str],
+    errors: list[str],
+) -> tuple[set[str], dict[str, set[str]], dict[str, set[str]]]:
+    dependency_ids: set[str] = set()
+    operations_by_dependency: dict[str, set[str]] = {}
+    http_refs_by_operation: dict[str, set[str]] = {}
+    if not register.is_file():
+        return dependency_ids, operations_by_dependency, http_refs_by_operation
+
+    text = register.read_text(encoding="utf-8")
+    if section_value(text, "External dependencies"):
+        errors.append("repository register still uses the legacy flattened External dependencies table")
+
+    observation_header, observation_rows = table_in_section(
+        text, "External dependency observations"
+    )
+    contract_header, contract_rows = table_in_section(text, "Dependency contract records")
+    operation_header, operation_rows = table_in_section(text, "Dependency operation records")
+
+    if observation_header and observation_header != REGISTER_DEPENDENCY_OBSERVATION_HEADERS:
+        errors.append("repository register Dependency Observation columns are invalid")
+    if contract_header and contract_header != REGISTER_DEPENDENCY_CONTRACT_HEADERS:
+        errors.append("repository register Dependency Contract columns are invalid")
+    if operation_header and operation_header != REGISTER_DEPENDENCY_OPERATION_HEADERS:
+        errors.append("repository register Dependency Operation columns are invalid")
+
+    observation_assignments: dict[str, str] = {}
+    for row in observation_rows:
+        if len(row) != len(REGISTER_DEPENDENCY_OBSERVATION_HEADERS):
+            errors.append("repository register Dependency Observation row has the wrong column count")
+            continue
+        observation_id = code_value(row[0])
+        if not DEPENDENCY_OBSERVATION_ID_RE.fullmatch(observation_id):
+            errors.append(
+                f"invalid Dependency Observation ID: {observation_id or '<empty>'}"
+            )
+            continue
+        if observation_id in observation_assignments:
+            errors.append(f"duplicate Dependency Observation ID: {observation_id}")
+            continue
+        validate_exact_label(
+            row[7], EVIDENCE_STATUSES, f"Dependency Observation {observation_id} Status", errors
+        )
+        reconciliation = code_value(row[9])
+        if reconciliation != "Unresolved" and not DEPENDENCY_ID_RE.fullmatch(reconciliation):
+            errors.append(
+                f"Dependency Observation {observation_id} has invalid reconciliation: "
+                f"{reconciliation or '<empty>'}"
+            )
+        observation_assignments[observation_id] = reconciliation
+
+    contract_observations: dict[str, set[str]] = {}
+    declared_operations: dict[str, set[str]] = {}
+    for row in contract_rows:
+        if len(row) != len(REGISTER_DEPENDENCY_CONTRACT_HEADERS):
+            errors.append("repository register Dependency Contract row has the wrong column count")
+            continue
+        dependency_id = code_value(row[0])
+        if not DEPENDENCY_ID_RE.fullmatch(dependency_id):
+            errors.append(f"invalid Dependency ID: {dependency_id or '<empty>'}")
+            continue
+        if dependency_id in dependency_ids:
+            errors.append(f"duplicate Dependency ID: {dependency_id}")
+        dependency_ids.add(dependency_id)
+        operations_by_dependency.setdefault(dependency_id, set())
+        validate_exact_label(
+            row[9], EVIDENCE_STATUSES, f"Dependency Contract {dependency_id} Status", errors
+        )
+        validate_usage_criticality(
+            row[6], f"Dependency Contract {dependency_id}", errors
+        )
+        observation_refs = set(DEPENDENCY_OBSERVATION_ID_RE.findall(row[7]))
+        if not observation_refs:
+            errors.append(f"Dependency Contract has no Observation IDs: {dependency_id}")
+        contract_observations[dependency_id] = observation_refs
+        declared_operations[dependency_id] = set(DEPENDENCY_OPERATION_ID_RE.findall(row[4]))
+
+    operation_parents: dict[str, str] = {}
+    for row in operation_rows:
+        if len(row) != len(REGISTER_DEPENDENCY_OPERATION_HEADERS):
+            errors.append("repository register Dependency Operation row has the wrong column count")
+            continue
+        operation_id = code_value(row[0])
+        dependency_id = code_value(row[1])
+        if not DEPENDENCY_OPERATION_ID_RE.fullmatch(operation_id):
+            errors.append(f"invalid Dependency Operation ID: {operation_id or '<empty>'}")
+            continue
+        if operation_id in operation_parents:
+            errors.append(f"duplicate Dependency Operation ID: {operation_id}")
+            continue
+        operation_parents[operation_id] = dependency_id
+        if not DEPENDENCY_ID_RE.fullmatch(dependency_id):
+            errors.append(
+                f"Dependency Operation {operation_id} has invalid Dependency ID: "
+                f"{dependency_id or '<empty>'}"
+            )
+        elif not operation_id.startswith(f"{dependency_id}-OP"):
+            errors.append(
+                f"Dependency Operation ID does not belong to its Dependency: "
+                f"{operation_id} -> {dependency_id}"
+            )
+        operations_by_dependency.setdefault(dependency_id, set()).add(operation_id)
+        validate_exact_label(
+            row[8], EVIDENCE_STATUSES, f"Dependency Operation {operation_id} Status", errors
+        )
+        validate_usage_criticality(
+            row[6], f"Dependency Operation {operation_id}", errors
+        )
+        http_refs = set(CALL_ID_RE.findall(row[2]))
+        http_refs_by_operation[operation_id] = http_refs
+        for call_id in sorted(http_refs - call_ids):
+            errors.append(
+                f"Dependency Operation {operation_id} references unknown outbound Call ID: {call_id}"
+            )
+
+    for observation_id, reconciliation in sorted(observation_assignments.items()):
+        if DEPENDENCY_ID_RE.fullmatch(reconciliation) and reconciliation not in dependency_ids:
+            errors.append(
+                f"Dependency Observation {observation_id} references unknown Dependency: "
+                f"{reconciliation}"
+            )
+
+    for dependency_id, observation_refs in sorted(contract_observations.items()):
+        for observation_id in sorted(observation_refs):
+            if observation_id not in observation_assignments:
+                errors.append(
+                    f"Dependency Contract {dependency_id} references unknown Observation: "
+                    f"{observation_id}"
+                )
+            elif observation_assignments[observation_id] != dependency_id:
+                errors.append(
+                    f"Dependency Contract {dependency_id} references Observation assigned to "
+                    f"{observation_assignments[observation_id]}: {observation_id}"
+                )
+
+    for operation_id, dependency_id in sorted(operation_parents.items()):
+        if dependency_id not in dependency_ids:
+            errors.append(
+                f"Dependency Operation {operation_id} references unknown Dependency: {dependency_id}"
+            )
+
+    for dependency_id in sorted(dependency_ids):
+        actual = operations_by_dependency.get(dependency_id, set())
+        declared = declared_operations.get(dependency_id, set())
+        if not actual:
+            errors.append(f"Dependency Contract has no Operation record: {dependency_id}")
+        for operation_id in sorted(declared - actual):
+            errors.append(
+                f"Dependency Contract {dependency_id} declares unknown Operation: {operation_id}"
+            )
+        for operation_id in sorted(actual - declared):
+            errors.append(
+                f"Dependency Operation is missing from its Contract record: "
+                f"{dependency_id} -> {operation_id}"
+            )
+
+    return dependency_ids, operations_by_dependency, http_refs_by_operation
+
+
+def validate_failure_register(
+    register: Path,
+    dependency_ids: set[str],
+    errors: list[str],
+) -> set[str]:
+    pattern_ids: set[str] = set()
+    if not register.is_file():
+        return pattern_ids
+
+    text = register.read_text(encoding="utf-8")
+    observation_header, observation_rows = table_in_section(text, "Failure observations")
+    pattern_header, pattern_rows = table_in_section(text, "Failure pattern reconciliation")
+
+    if observation_header and observation_header != REGISTER_FAILURE_OBSERVATION_HEADERS:
+        errors.append("repository register Failure Observation columns are invalid")
+    if pattern_header and pattern_header != REGISTER_FAILURE_PATTERN_HEADERS:
+        errors.append("repository register Failure Pattern columns are invalid")
+
+    observation_assignments: dict[str, str] = {}
+    for row in observation_rows:
+        if len(row) != len(REGISTER_FAILURE_OBSERVATION_HEADERS):
+            errors.append("repository register Failure Observation row has the wrong column count")
+            continue
+        observation_id = code_value(row[0])
+        if not FAILURE_OBSERVATION_ID_RE.fullmatch(observation_id):
+            errors.append(f"invalid Failure Observation ID: {observation_id or '<empty>'}")
+            continue
+        if observation_id in observation_assignments:
+            errors.append(f"duplicate Failure Observation ID: {observation_id}")
+            continue
+        validate_exact_label(
+            row[8], EVIDENCE_STATUSES, f"Failure Observation {observation_id} Status", errors
+        )
+        reconciliation = code_value(row[10])
+        if reconciliation != "Unresolved" and not FAILURE_PATTERN_ID_RE.fullmatch(reconciliation):
+            errors.append(
+                f"Failure Observation {observation_id} has invalid reconciliation: "
+                f"{reconciliation or '<empty>'}"
+            )
+        observation_assignments[observation_id] = reconciliation
+
+    pattern_observations: dict[str, set[str]] = {}
+    for row in pattern_rows:
+        if len(row) != len(REGISTER_FAILURE_PATTERN_HEADERS):
+            errors.append("repository register Failure Pattern row has the wrong column count")
+            continue
+        pattern_id = code_value(row[0])
+        if not FAILURE_PATTERN_ID_RE.fullmatch(pattern_id):
+            errors.append(f"invalid Failure Pattern ID: {pattern_id or '<empty>'}")
+            continue
+        if pattern_id in pattern_ids:
+            errors.append(f"duplicate Failure Pattern ID: {pattern_id}")
+        pattern_ids.add(pattern_id)
+        observation_refs = set(FAILURE_OBSERVATION_ID_RE.findall(row[3]))
+        if not observation_refs:
+            errors.append(f"Failure Pattern has no Observation IDs: {pattern_id}")
+        pattern_observations[pattern_id] = observation_refs
+        for dependency_id in sorted(set(DEPENDENCY_ID_RE.findall(row[5])) - dependency_ids):
+            errors.append(
+                f"Failure Pattern {pattern_id} references unknown Dependency: {dependency_id}"
+            )
+        validate_exact_label(
+            row[6], CALLER_VISIBILITIES, f"Failure Pattern {pattern_id} Caller visibility", errors
+        )
+        validate_exact_label(
+            row[7], STATE_OUTCOMES, f"Failure Pattern {pattern_id} State outcome", errors
+        )
+        validate_exact_label(
+            row[8], RETRY_SAFETIES, f"Failure Pattern {pattern_id} Retry safety", errors
+        )
+        validate_recovery_modes(row[9], f"Failure Pattern {pattern_id}", errors)
+        validate_exact_label(
+            row[10], RISK_ATTENTIONS, f"Failure Pattern {pattern_id} Risk attention", errors
+        )
+
+    for observation_id, reconciliation in sorted(observation_assignments.items()):
+        if FAILURE_PATTERN_ID_RE.fullmatch(reconciliation) and reconciliation not in pattern_ids:
+            errors.append(
+                f"Failure Observation {observation_id} references unknown Pattern: {reconciliation}"
+            )
+
+    for pattern_id, observation_refs in sorted(pattern_observations.items()):
+        for observation_id in sorted(observation_refs):
+            if observation_id not in observation_assignments:
+                errors.append(
+                    f"Failure Pattern {pattern_id} references unknown Observation: {observation_id}"
+                )
+            elif observation_assignments[observation_id] != pattern_id:
+                errors.append(
+                    f"Failure Pattern {pattern_id} references Observation assigned to "
+                    f"{observation_assignments[observation_id]}: {observation_id}"
+                )
+
+    return pattern_ids
 
 
 def validate_field_mapping_document(
@@ -550,9 +1225,259 @@ def validate_behavior_call_links(root: Path, call_ids: set[str], errors: list[st
                 )
 
 
+def validate_external_dependency_document(
+    document: Path,
+    dependency_ids: set[str],
+    operations_by_dependency: dict[str, set[str]],
+    http_refs_by_operation: dict[str, set[str]],
+    repo: Path | None,
+    errors: list[str],
+) -> None:
+    if not document.is_file():
+        if dependency_ids:
+            errors.append("Dependency Contracts exist but external-dependency-contracts.md is missing")
+        return
+    if not dependency_ids:
+        errors.append("external-dependency-contracts.md exists without reconciled Dependency Contracts")
+        return
+
+    text = document.read_text(encoding="utf-8")
+    validate_source_citations(document, repo, errors)
+    if section_value(text, "Observed operations and contracts"):
+        errors.append("External Dependency Contracts still uses the legacy operation/evidence layout")
+    if section_value(text, "External dependency observations"):
+        errors.append("External Dependency Contracts publishes the working Observation inventory")
+
+    index_header, index_rows = table_in_section(text, "Dependency landscape")
+    if index_header != DEPENDENCY_LANDSCAPE_HEADERS:
+        errors.append("External Dependency landscape columns are invalid")
+
+    index_ids: set[str] = set()
+    for row in index_rows:
+        if len(row) != len(DEPENDENCY_LANDSCAPE_HEADERS):
+            errors.append("External Dependency landscape row has the wrong column count")
+            continue
+        match = DEPENDENCY_ID_RE.search(row[0])
+        if not match:
+            errors.append("External Dependency landscape row is missing a Dependency ID")
+            continue
+        dependency_id = match.group(0)
+        if dependency_id in index_ids:
+            errors.append(f"duplicate Dependency landscape ID: {dependency_id}")
+        index_ids.add(dependency_id)
+        validate_exact_label(
+            row[3],
+            DEPENDENCY_CRITICALITIES,
+            f"Dependency landscape {dependency_id} Criticality",
+            errors,
+        )
+        validate_exact_label(
+            row[5], EVIDENCE_STATUSES, f"Dependency landscape {dependency_id} Status", errors
+        )
+        if not re.search(rf"\]\(#{re.escape(dependency_id.lower())}\)", row[6]):
+            errors.append(f"Dependency landscape does not link its detail anchor: {dependency_id}")
+
+    sections = anchored_sections(text, DEPENDENCY_ID_RE)
+    section_ids = set(sections)
+    for dependency_id in sorted(section_ids):
+        anchor = dependency_id.lower()
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(anchor)}[\"']\s*></a>\s*\n\s*"
+            rf"##\s+`?{re.escape(dependency_id)}`?",
+            text,
+            re.I,
+        ):
+            errors.append(f"External Dependency document is missing stable anchor: {dependency_id}")
+
+    for dependency_id in sorted(dependency_ids - index_ids):
+        errors.append(f"registered Dependency is missing from the landscape: {dependency_id}")
+    for dependency_id in sorted(index_ids - dependency_ids):
+        errors.append(f"Dependency landscape ID is missing from the register: {dependency_id}")
+    for dependency_id in sorted(dependency_ids - section_ids):
+        errors.append(f"registered Dependency is missing its detail section: {dependency_id}")
+    for dependency_id in sorted(section_ids - dependency_ids):
+        errors.append(f"Dependency detail section is missing from the register: {dependency_id}")
+
+    for dependency_id in sorted(dependency_ids):
+        operation_ids = operations_by_dependency.get(dependency_id, set())
+        section = sections.get(dependency_id, "")
+        if operation_ids and not any(
+            table_cells(line) == DEPENDENCY_OPERATION_DOCUMENT_HEADERS
+            for line in section.splitlines()
+            if line.strip().startswith("|")
+        ):
+            errors.append(
+                f"Dependency detail section has no valid Operation table: {dependency_id}"
+            )
+        for operation_id in sorted(operation_ids):
+            if not re.search(rf"\b{re.escape(operation_id)}\b", section):
+                errors.append(
+                    f"Dependency Operation is missing from its final section: {operation_id}"
+                )
+            for call_id in sorted(http_refs_by_operation.get(operation_id, set())):
+                expected = f"field-validation-and-mapping.md#{call_id.lower()}"
+                if not re.search(rf"\]\({re.escape(expected)}\)", section):
+                    errors.append(
+                        f"Dependency Operation does not link its HTTP Call anchor: "
+                        f"{operation_id} -> {call_id}"
+                    )
+
+
+def validate_failure_taxonomy_document(
+    document: Path,
+    pattern_ids: set[str],
+    repo: Path | None,
+    errors: list[str],
+) -> None:
+    if not document.is_file():
+        if pattern_ids:
+            errors.append("Failure Patterns exist but failure-taxonomy.md is missing")
+        return
+    if not pattern_ids:
+        errors.append("failure-taxonomy.md exists without reconciled Failure Patterns")
+        return
+
+    text = document.read_text(encoding="utf-8")
+    validate_source_citations(document, repo, errors)
+    if section_value(text, "Failure observations"):
+        errors.append("Failure Taxonomy publishes the working Failure Observation inventory")
+
+    index_header, index_rows = table_in_section(text, "Failure pattern index")
+    if index_header != FAILURE_PATTERN_INDEX_HEADERS:
+        errors.append("Failure Pattern index columns are invalid")
+
+    index_ids: set[str] = set()
+    for row in index_rows:
+        if len(row) != len(FAILURE_PATTERN_INDEX_HEADERS):
+            errors.append("Failure Pattern index row has the wrong column count")
+            continue
+        match = FAILURE_PATTERN_ID_RE.search(row[0])
+        if not match:
+            errors.append("Failure Pattern index row is missing a Pattern ID")
+            continue
+        pattern_id = match.group(0)
+        if pattern_id in index_ids:
+            errors.append(f"duplicate Failure Pattern index ID: {pattern_id}")
+        index_ids.add(pattern_id)
+        validate_exact_label(
+            row[3], CALLER_VISIBILITIES, f"Failure index {pattern_id} Caller visibility", errors
+        )
+        validate_exact_label(
+            row[4], STATE_OUTCOMES, f"Failure index {pattern_id} State outcome", errors
+        )
+        validate_exact_label(
+            row[5], RETRY_SAFETIES, f"Failure index {pattern_id} Retry safety", errors
+        )
+        validate_exact_label(
+            row[6], RISK_ATTENTIONS, f"Failure index {pattern_id} Risk attention", errors
+        )
+        if not re.search(rf"\]\(#{re.escape(pattern_id.lower())}\)", row[7]):
+            errors.append(f"Failure Pattern index does not link its detail anchor: {pattern_id}")
+
+    sections = anchored_sections(text, FAILURE_PATTERN_ID_RE)
+    section_ids = set(sections)
+    for pattern_id in sorted(section_ids):
+        anchor = pattern_id.lower()
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(anchor)}[\"']\s*></a>\s*\n\s*"
+            rf"##\s+`?{re.escape(pattern_id)}`?",
+            text,
+            re.I,
+        ):
+            errors.append(f"Failure Taxonomy is missing stable anchor: {pattern_id}")
+
+    for pattern_id in sorted(pattern_ids - index_ids):
+        errors.append(f"registered Failure Pattern is missing from the index: {pattern_id}")
+    for pattern_id in sorted(index_ids - pattern_ids):
+        errors.append(f"Failure Pattern index ID is missing from the register: {pattern_id}")
+    for pattern_id in sorted(pattern_ids - section_ids):
+        errors.append(f"registered Failure Pattern is missing its detail section: {pattern_id}")
+    for pattern_id in sorted(section_ids - pattern_ids):
+        errors.append(f"Failure detail section is missing from the register: {pattern_id}")
+
+
+def validate_behavior_repository_links(
+    root: Path,
+    dependency_ids: set[str],
+    pattern_ids: set[str],
+    errors: list[str],
+) -> None:
+    behaviors_dir = root / "tech-pack" / "behaviors"
+    if not behaviors_dir.is_dir():
+        return
+    for behavior in sorted(behaviors_dir.glob("*.md")):
+        text = behavior.read_text(encoding="utf-8")
+        if not text.startswith("---\n"):
+            continue
+        end = text.find("\n---\n", 4)
+        if end == -1:
+            continue
+        frontmatter = text[4:end]
+
+        dependency_block = yaml_block(frontmatter, "external_dependencies")
+        behavior_dependencies = set(
+            re.findall(
+                r"^\s*-\s+dependency_id:\s*[\"']?(DEP-\d+)[\"']?\s*$",
+                dependency_block,
+                re.M,
+            )
+        )
+        for dependency_id in sorted(behavior_dependencies):
+            if dependency_id not in dependency_ids:
+                errors.append(
+                    f"Tech Behavior references unknown Dependency: "
+                    f"{behavior.relative_to(root)} -> {dependency_id}"
+                )
+                continue
+            expected = f"../external-dependency-contracts.md#{dependency_id.lower()}"
+            if not re.search(rf"\]\({re.escape(expected)}\)", text):
+                errors.append(
+                    f"Tech Behavior does not link its Dependency anchor: "
+                    f"{behavior.relative_to(root)} -> {dependency_id}"
+                )
+
+        failure_block = yaml_block(frontmatter, "failure_patterns")
+        behavior_patterns = set(FAILURE_PATTERN_ID_RE.findall(failure_block))
+        for pattern_id in sorted(behavior_patterns):
+            if pattern_id not in pattern_ids:
+                errors.append(
+                    f"Tech Behavior references unknown Failure Pattern: "
+                    f"{behavior.relative_to(root)} -> {pattern_id}"
+                )
+                continue
+            expected = f"../failure-taxonomy.md#{pattern_id.lower()}"
+            if not re.search(rf"\]\({re.escape(expected)}\)", text):
+                errors.append(
+                    f"Tech Behavior does not link its Failure Pattern anchor: "
+                    f"{behavior.relative_to(root)} -> {pattern_id}"
+                )
+
+        for dependency_id in set(
+            re.findall(r"external-dependency-contracts\.md#(dep-\d+)", text, re.I)
+        ):
+            normalized = dependency_id.upper()
+            if normalized not in dependency_ids:
+                errors.append(
+                    f"Tech Behavior links unknown Dependency anchor: "
+                    f"{behavior.relative_to(root)} -> {dependency_id}"
+                )
+        for pattern_id in set(re.findall(r"failure-taxonomy\.md#(fail-\d+)", text, re.I)):
+            normalized = pattern_id.upper()
+            if normalized not in pattern_ids:
+                errors.append(
+                    f"Tech Behavior links unknown Failure Pattern anchor: "
+                    f"{behavior.relative_to(root)} -> {pattern_id}"
+                )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("pack_root", type=Path)
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        help="optional repository root for validating source citations in repository reader documents",
+    )
     args = parser.parse_args()
 
     if not args.pack_root.is_dir():
@@ -560,6 +1485,10 @@ def main() -> int:
         return 2
 
     root = args.pack_root.resolve()
+    repo = args.repo.resolve() if args.repo is not None else None
+    if repo is not None and not repo.is_dir():
+        print(f"ERROR: repository directory does not exist: {args.repo}")
+        return 2
     errors: list[str] = []
     checked_links = 0
 
@@ -617,6 +1546,27 @@ def main() -> int:
         errors,
     )
     validate_behavior_call_links(root, published_call_ids, errors)
+
+    dependency_ids, operations_by_dependency, http_refs_by_operation = (
+        validate_dependency_register(register, call_ids, errors)
+    )
+    pattern_ids = validate_failure_register(register, dependency_ids, errors)
+    validate_external_dependency_document(
+        root / "tech-pack" / "external-dependency-contracts.md",
+        dependency_ids,
+        operations_by_dependency,
+        http_refs_by_operation,
+        repo,
+        errors,
+    )
+    validate_failure_taxonomy_document(
+        root / "tech-pack" / "failure-taxonomy.md",
+        pattern_ids,
+        repo,
+        errors,
+    )
+    validate_behavior_repository_links(root, dependency_ids, pattern_ids, errors)
+    validate_ba_traceability(root, errors)
 
     for error in errors:
         print(f"ERROR: {error}")

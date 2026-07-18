@@ -129,7 +129,7 @@ Start with one operation index row per Call ID. Then create one anchored `## HTT
 
 Do not copy the register tables directly into the final document. Mapping tables live inside their parent Call section and omit method, target, client operation, and Behavior columns. A single simple usage may be summarized in Call Overview instead of receiving an otherwise redundant Usage table.
 
-Keep detailed downstream response behavior, retry, timeout, recovery, and dependency failure semantics in External Dependency Contracts. The field document carries only the operation identity needed to understand its field transformations and links to the dependency document when applicable.
+Keep detailed downstream response behavior, retry, timeout, recovery, and dependency failure semantics in the synthesized `DEP-nnn` section of External Dependency Contracts. The field document carries only the operation identity needed to understand its field transformations and links to that Dependency anchor when applicable. A `HTTP-nnn` Remote Operation may be one of several Operations beneath the same Dependency; do not treat every Call ID as a separate Dependency.
 
 ## Evidence rules
 
