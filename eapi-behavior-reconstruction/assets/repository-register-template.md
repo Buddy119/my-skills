@@ -1,6 +1,7 @@
 ---
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
+register_schema_version: "1"
 register_status: "working|reconciled"
 ---
 

@@ -67,6 +67,7 @@ When no options are present, continue to accept a repository path and optional o
 - Understand each behavior before drafting its Tech or BA document. Do not create a Claim Ledger or convert prose into atomic claim statements.
 - Do not publish the formal pack until full-repository synthesis is complete.
 - Let AI trace, interpret, synthesize, and write. Use scripts only for deterministic indexing, mechanical validation, and transactional stage control.
+- Treat [assets/register-schema.json](assets/register-schema.json) as the single mechanical contract for `repository-register.md`. Do not rename, reorder, add, or remove Register table columns during an analysis. A Schema change is Skill development work and must update the Schema, Register template, Validator, Stage Executor, and tests together.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
 - Do not access credentials, secret values, production customer data, live AWS resources, or repositories outside the supplied boundary.
@@ -142,6 +143,8 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 3. For a new output, run `stage_executor.py init --repo <repository-root> --output <output-dir> --json`. Do not copy or edit lifecycle templates manually.
 4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If its commit differs, preserve the existing output and initialize a sibling output directory suffixed with the new short commit; never reuse old dossiers as current facts.
 5. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported stage. Treat its returned Candidate as the only writable output root for that stage.
+
+When resuming a same-commit analysis whose Register has no supported `register_schema_version`, preserve Dossiers and raw evidence but resume from `synthesis`. Archive and rebuild the Register through the stage transaction using the current template. Do not guess legacy columns by position or silently convert them into the current model.
 
 When resuming a same-commit analysis whose register lacks both `Endpoint evidence records` and `Endpoint reconciliation`, keep completed behavior dossiers but treat endpoint inventory and synthesis as stale. Rebuild the layered endpoint register, reset synthesis/publication to pending, regenerate affected formal documents, and do not publish the legacy flattened endpoint conclusions.
 
@@ -252,20 +255,21 @@ Do not classify inbound API contracts, event payloads, queue messages, persisten
 Begin only after every active behavior is `understood` or explicitly `blocked`, every executable entry point has a catalog disposition, and endpoint evidence candidates are registered.
 
 1. Begin the `synthesis` transaction and work only in its Candidate.
-2. Read all behavior dossiers and the repository register.
-3. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
-4. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
-5. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses and derive external reachability without upgrading missing layers.
-6. Classify each reconciled endpoint record as `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved`; record `publish`, `summarize`, or `publish-as-exception`, the classification basis, and any normalized route-group association. Ordinary protocol support requires proof that it has no application handler, business payload, state access, or business dependency call. Method or mock/static integration alone is insufficient.
-7. Associate a shared protocol-support operation with one normalized route group instead of copying it under every application method. Summarize ordinary support records; publish orphaned, conflicting, environment-inconsistent, and unresolved records as exceptions.
-8. Reconcile outbound HTTP observations into Remote Operations, Executable Usages, and Field Mappings. Merge Call IDs only from a complete Method + Logical Target + Client Operation match; preserve usage-specific conditions and transformations.
-9. Reconcile every `DEP-OBS-nnn` into a logical `DEP-nnn` Dependency or mark it `Unresolved`. Group only with executable binding, configuration, DI/wiring, or resource-identity evidence. Create `DEP-nnn-OPnn` Operations beneath each Dependency, link existing HTTP Call IDs instead of copying mappings, record dependent capabilities, and classify availability impact as `Required`, `Degradable`, `Optional`, or `Unknown` at Operation or Behavior usage level.
-10. Reconcile every `FO-nnn` into a `FAIL-nnn` Pattern or mark it `Unresolved`. Merge only when trigger/source, propagation, caller visibility, state outcome, retry safety, and recovery semantics are materially equivalent. Record recurring behaviors, dependency relationships, recovery gaps, and evidence-supported `High`, `Medium`, `Low`, or `Unknown` risk attention.
-11. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
-12. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
-13. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
-14. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-15. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. The executor runs the mechanical publishability gate before promotion.
+2. Reconcile observations inside the existing versioned Register tables. Preserve `register_schema_version: "1"` and every table header exactly as defined by `assets/register-schema.json`; change rows, not the mechanical contract.
+3. Read all behavior dossiers and the repository register.
+4. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
+5. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
+6. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses and derive external reachability without upgrading missing layers.
+7. Classify each reconciled endpoint record as `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved`; record `publish`, `summarize`, or `publish-as-exception`, the classification basis, and any normalized route-group association. Ordinary protocol support requires proof that it has no application handler, business payload, state access, or business dependency call. Method or mock/static integration alone is insufficient.
+8. Associate a shared protocol-support operation with one normalized route group instead of copying it under every application method. Summarize ordinary support records; publish orphaned, conflicting, environment-inconsistent, and unresolved records as exceptions.
+9. Reconcile outbound HTTP observations into Remote Operations, Executable Usages, and Field Mappings. Merge Call IDs only from a complete Method + Logical Target + Client Operation match; preserve usage-specific conditions and transformations.
+10. Reconcile every `DEP-OBS-nnn` into a logical `DEP-nnn` Dependency or mark it `Unresolved`. Group only with executable binding, configuration, DI/wiring, or resource-identity evidence. Create `DEP-nnn-OPnn` Operations beneath each Dependency, link existing HTTP Call IDs instead of copying mappings, record dependent capabilities, and classify availability impact as `Required`, `Degradable`, `Optional`, or `Unknown` at Operation or Behavior usage level.
+11. Reconcile every `FO-nnn` into a `FAIL-nnn` Pattern or mark it `Unresolved`. Merge only when trigger/source, propagation, caller visibility, state outcome, retry safety, and recovery semantics are materially equivalent. Record recurring behaviors, dependency relationships, recovery gaps, and evidence-supported `High`, `Medium`, `Low`, or `Unknown` risk attention.
+12. Merge, split, or rename behaviors when the combined evidence requires it; update the working catalog, state, dossiers, and register together.
+13. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
+14. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
+15. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
+16. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. The executor runs the mechanical publishability gate before promotion.
 
 ### 6. Publish the Tech Pack
 
@@ -354,7 +358,7 @@ For Repository Overview, verify that the context diagram and connection matrix m
 
 For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
-The finalization commit runs all applicable document, state, link, citation, and placeholder Validators and records their complete output in the Receipt. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
+The finalization commit runs all applicable document, state, link, citation, and placeholder Validators and records their complete output plus Register domain status in the Receipt. A result with any Primary Error or skipped necessary validation group is incomplete and cannot be reported as全面验证通过. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
 
 ### 10. Deliver
 
@@ -374,6 +378,7 @@ Do not modify application source code unless the user separately requests an imp
 Before delivering, confirm:
 
 - `.work` shows inventory, per-behavior understanding, repository registration, repository synthesis, and independent business modeling in that order.
+- The Register declares the supported Schema version, all table headers match the bundled Schema, and the final Receipt reports `valid` HTTP, Dependency, and Failure domains with zero skipped necessary validation groups.
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.

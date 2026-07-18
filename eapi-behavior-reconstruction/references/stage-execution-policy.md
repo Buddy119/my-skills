@@ -104,6 +104,16 @@ python3 <skill-root>/scripts/stage_executor.py recover \
 
 Do not infer completion from an agent message. A stage is complete only when its committed Receipt exists and status has advanced. Do not modify the executor or another Skill script during analysis. If the executor or a required Validator cannot run, retain the Candidate and stop publication; do not fall back to manual lifecycle updates.
 
+## Versioned Register contract
+
+`assets/register-schema.json` is the single source for the Register Schema version, sections, exact table columns, and mechanical domain prerequisites. `init` verifies that this Schema and `repository-register-template.md` are synchronized before creating output. Synthesis and later publication gates verify the Candidate Register against the same Schema.
+
+During a repository analysis, edit Register rows only. Do not repair a validation failure by changing table headers, the Schema, a Validator, the executor, or the template. If a Skill developer intentionally changes the Register model, publish the Schema, template, Validator, executor, and contract tests as one change set.
+
+A same-commit legacy Register with a missing or unsupported `register_schema_version` resumes from `synthesis`. Preserve Dossiers and raw evidence, archive the old Register transactionally, and rebuild the current structure. Do not infer legacy fields from their column positions.
+
+Pack validation reports HTTP, Dependency, and Failure domain states as `valid`, `partial`, `invalid`, or `skipped`. A Schema failure invalidates only its domain; downstream checks that require a complete index are reported as `SKIPPED`, while unrelated validation continues. A Receipt with Primary Errors or skipped necessary groups does not represent complete validation. Receipts record the Register Schema version, domain states, Primary Error count, skipped-group count, and suppressed-error count.
+
 ## Stage boundaries
 
 Use this sequence without reordering:

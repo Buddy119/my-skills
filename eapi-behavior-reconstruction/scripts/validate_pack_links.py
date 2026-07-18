@@ -4,10 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote
+
+from register_schema import (
+    RegisterSchema,
+    load_register_schema,
+    validate_register_file,
+)
 
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\((?P<target>[^)]+)\)")
@@ -117,104 +126,6 @@ FIELD_MAPPING_HEADERS = [
     "Status",
     "Evidence",
 ]
-REGISTER_OPERATION_HEADERS = [
-    "Call ID",
-    "Method",
-    "Logical Target",
-    "Client Operation",
-    "Observable Purpose",
-    "Related Behaviors",
-    "Aliases",
-    "Status",
-    "Evidence",
-]
-REGISTER_USAGE_HEADERS = [
-    "Usage ID",
-    "Call ID",
-    "Behavior ID",
-    "Executable Call Site",
-    "Invocation Condition or Config",
-    "Status",
-    "Evidence",
-]
-REGISTER_MAPPING_HEADERS = [
-    "Mapping ID",
-    "Call ID",
-    "Applies to Usage(s)",
-    "Direction",
-    "Source Field(s)",
-    "Target Field(s)",
-    "Transformation",
-    "Condition/Default",
-    "Lossy",
-    "Status",
-    "Evidence",
-]
-REGISTER_DEPENDENCY_OBSERVATION_HEADERS = [
-    "Observation ID",
-    "Candidate dependency",
-    "Boundary type",
-    "Behavior ID",
-    "Operation or resource",
-    "Exchanged concept or observed effect",
-    "Availability observation",
-    "Status",
-    "Evidence",
-    "Reconciliation",
-]
-REGISTER_DEPENDENCY_CONTRACT_HEADERS = [
-    "Dependency ID",
-    "Logical identity",
-    "Type",
-    "Repository-observed role",
-    "Related operations",
-    "Related behaviors or capabilities",
-    "Criticality by usage",
-    "Observation IDs",
-    "Aliases",
-    "Status",
-    "Unknowns or conflicts",
-]
-REGISTER_DEPENDENCY_OPERATION_HEADERS = [
-    "Operation ID",
-    "Dependency ID",
-    "Boundary reference",
-    "Invocation or resource",
-    "Exchanged concepts",
-    "Behaviors or capabilities",
-    "Criticality by usage",
-    "Unavailability, fallback, and state impact",
-    "Status",
-    "Evidence",
-]
-REGISTER_FAILURE_OBSERVATION_HEADERS = [
-    "Observation ID",
-    "Failure category",
-    "Behavior ID",
-    "Trigger or source",
-    "Handling and propagation",
-    "Caller-visible result",
-    "State outcome",
-    "Retry or recovery",
-    "Status",
-    "Evidence",
-    "Reconciliation",
-]
-REGISTER_FAILURE_PATTERN_HEADERS = [
-    "Pattern ID",
-    "Category",
-    "Trigger or source",
-    "Observation IDs",
-    "Behaviors or capabilities",
-    "Related dependencies",
-    "Caller visibility",
-    "State outcome",
-    "Retry safety",
-    "Recovery",
-    "Risk attention",
-    "Conflicts or unknowns",
-    "Evidence",
-]
 DEPENDENCY_LANDSCAPE_HEADERS = [
     "Dependency",
     "Type and repository-observed role",
@@ -242,6 +153,137 @@ FAILURE_PATTERN_INDEX_HEADERS = [
     "Risk attention",
     "Details",
 ]
+
+
+MAX_ERRORS_PER_GROUP = 10
+DOMAIN_STATUSES = {"valid", "partial", "invalid", "skipped"}
+
+
+@dataclass
+class DomainResult:
+    status: str
+    data: dict[str, Any] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.status not in DOMAIN_STATUSES:
+            raise ValueError(f"invalid domain status: {self.status}")
+
+
+class ValidationReport:
+    """Group, de-duplicate, budget, and summarize mechanical validation results."""
+
+    def __init__(self) -> None:
+        self.error_groups: dict[str, list[str]] = {}
+        self.skipped_groups: dict[str, str] = {}
+        self.warnings: list[str] = []
+        self.domain_statuses: dict[str, str] = {}
+        self.checked_links = 0
+        self.checked_documents = 0
+
+    def add_errors(self, code: str, messages: list[str]) -> None:
+        target = self.error_groups.setdefault(code, [])
+        seen = set(target)
+        for message in messages:
+            if message not in seen:
+                target.append(message)
+                seen.add(message)
+        if not target:
+            self.error_groups.pop(code, None)
+
+    def error(self, code: str, message: str) -> None:
+        self.add_errors(code, [message])
+
+    def skip(self, code: str, reason: str) -> None:
+        self.skipped_groups.setdefault(code, reason)
+
+    @property
+    def primary_error_count(self) -> int:
+        return sum(len(messages) for messages in self.error_groups.values())
+
+    @property
+    def suppressed_error_count(self) -> int:
+        return sum(max(0, len(messages) - MAX_ERRORS_PER_GROUP) for messages in self.error_groups.values())
+
+    @property
+    def failed(self) -> bool:
+        return bool(self.error_groups or self.skipped_groups)
+
+    def payload(self, markdown_count: int) -> dict[str, Any]:
+        visible_errors = {
+            code: messages[:MAX_ERRORS_PER_GROUP]
+            for code, messages in self.error_groups.items()
+        }
+        suppressed = {
+            code: len(messages) - MAX_ERRORS_PER_GROUP
+            for code, messages in self.error_groups.items()
+            if len(messages) > MAX_ERRORS_PER_GROUP
+        }
+        return {
+            "result": "failed" if self.failed else "ok",
+            "primary_errors": self.primary_error_count,
+            "warnings": len(self.warnings),
+            "skipped_validation_groups": len(self.skipped_groups),
+            "suppressed_row_errors": self.suppressed_error_count,
+            "checked_links": self.checked_links,
+            "checked_documents": self.checked_documents,
+            "markdown_files": markdown_count,
+            "domain_statuses": self.domain_statuses,
+            "errors": visible_errors,
+            "suppressed_by_group": suppressed,
+            "skipped": self.skipped_groups,
+            "warning_messages": self.warnings,
+        }
+
+    def render_text(self, markdown_count: int) -> None:
+        payload = self.payload(markdown_count)
+        for code, messages in payload["errors"].items():
+            for message in messages:
+                print(f"ERROR [{code}] {message}")
+            suppressed = payload["suppressed_by_group"].get(code, 0)
+            if suppressed:
+                print(f"ERROR [{code}] {suppressed} additional error(s) suppressed")
+        for code, reason in self.skipped_groups.items():
+            print(f"SKIPPED [{code}] {reason}")
+        for warning in self.warnings:
+            print(f"WARNING {warning}")
+        print(
+            "SUMMARY: "
+            f"primary_errors={payload['primary_errors']} "
+            f"warnings={payload['warnings']} "
+            f"skipped_groups={payload['skipped_validation_groups']} "
+            f"suppressed_errors={payload['suppressed_row_errors']} "
+            f"checked_links={payload['checked_links']} "
+            f"checked_documents={payload['checked_documents']}"
+        )
+        if not self.failed:
+            print(
+                f"OK: {markdown_count} Markdown file(s), "
+                f"{self.checked_links} local link(s) checked"
+            )
+
+
+def register_headers(schema: RegisterSchema, table_key: str) -> list[str]:
+    return list(schema.tables[table_key].headers)
+
+
+_REGISTER_SCHEMA = load_register_schema()
+REGISTER_OPERATION_HEADERS = register_headers(_REGISTER_SCHEMA, "http_operations")
+REGISTER_USAGE_HEADERS = register_headers(_REGISTER_SCHEMA, "http_usages")
+REGISTER_MAPPING_HEADERS = register_headers(_REGISTER_SCHEMA, "http_mappings")
+REGISTER_DEPENDENCY_OBSERVATION_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "dependency_observations"
+)
+REGISTER_DEPENDENCY_CONTRACT_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "dependency_contracts"
+)
+REGISTER_DEPENDENCY_OPERATION_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "dependency_operations"
+)
+REGISTER_FAILURE_OBSERVATION_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "failure_observations"
+)
+REGISTER_FAILURE_PATTERN_HEADERS = register_headers(_REGISTER_SCHEMA, "failure_patterns")
 
 
 def local_target(raw: str) -> str | None:
@@ -679,15 +721,15 @@ def validate_endpoint_matrix(matrix: Path, root: Path, errors: list[str]) -> Non
                 errors.append(f"Endpoint Matrix does not link API Contract: {contract.name}")
 
 
-def validate_http_register(
-    register: Path, errors: list[str]
-) -> tuple[set[str], dict[str, set[str]], dict[str, str], dict[str, str]]:
+def validate_http_register(register: Path) -> DomainResult:
+    errors: list[str] = []
+    partial = False
     call_ids: set[str] = set()
     usages_by_call: dict[str, set[str]] = {}
     usage_to_call: dict[str, str] = {}
     mapping_directions: dict[str, str] = {}
     if not register.is_file():
-        return call_ids, usages_by_call, usage_to_call, mapping_directions
+        return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
 
     text = register.read_text(encoding="utf-8")
     if section_value(text, "Proven outbound HTTP calls and mappings"):
@@ -697,53 +739,49 @@ def validate_http_register(
     usage_header, usage_rows = table_in_section(text, "Outbound HTTP operation usages")
     mapping_header, mapping_rows = table_in_section(text, "External HTTP field mapping records")
 
-    if operation_header and operation_header != REGISTER_OPERATION_HEADERS:
-        errors.append("repository register outbound operation columns are invalid")
-    if usage_header and usage_header != REGISTER_USAGE_HEADERS:
-        errors.append("repository register outbound usage columns are invalid")
-    if mapping_header and mapping_header != REGISTER_MAPPING_HEADERS:
-        errors.append("repository register outbound mapping columns are invalid")
-
     for row in operation_rows:
         if len(row) != len(REGISTER_OPERATION_HEADERS):
             errors.append("repository register outbound operation row has the wrong number of columns")
+            partial = True
             continue
         call_id = code_value(row[0])
         if not CALL_ID_RE.fullmatch(call_id):
             errors.append(f"invalid outbound Call ID in repository register: {call_id or '<empty>'}")
+            partial = True
             continue
         if call_id in call_ids:
             errors.append(f"duplicate outbound Call ID in repository register: {call_id}")
+            partial = True
+            continue
         call_ids.add(call_id)
         usages_by_call.setdefault(call_id, set())
 
+    usage_refs_by_id: dict[str, str] = {}
     for row in usage_rows:
         if len(row) != len(REGISTER_USAGE_HEADERS):
             errors.append("repository register outbound usage row has the wrong number of columns")
+            partial = True
             continue
         usage_id = code_value(row[0])
         call_id = code_value(row[1])
         if not USAGE_ID_RE.fullmatch(usage_id):
             errors.append(f"invalid outbound Usage ID in repository register: {usage_id or '<empty>'}")
+            partial = True
             continue
         if usage_id in usage_to_call:
             errors.append(f"duplicate outbound Usage ID in repository register: {usage_id}")
+            partial = True
             continue
         usage_to_call[usage_id] = call_id
-        if call_id not in call_ids:
-            errors.append(f"outbound Usage {usage_id} references unknown Call ID: {call_id}")
-            continue
+        usage_refs_by_id[usage_id] = call_id
         if not usage_id.startswith(f"{call_id}-U"):
             errors.append(f"outbound Usage ID does not belong to its Call ID: {usage_id} -> {call_id}")
-        usages_by_call.setdefault(call_id, set()).add(usage_id)
 
-    for call_id in sorted(call_ids):
-        if not usages_by_call.get(call_id):
-            errors.append(f"outbound Call has no executable Usage in repository register: {call_id}")
-
+    mapping_refs: list[tuple[str, str, str]] = []
     for row in mapping_rows:
         if len(row) != len(REGISTER_MAPPING_HEADERS):
             errors.append("repository register outbound mapping row has the wrong number of columns")
+            partial = True
             continue
         mapping_id = code_value(row[0])
         call_id = code_value(row[1])
@@ -751,15 +789,32 @@ def validate_http_register(
         direction = code_value(row[3]).lower()
         if not MAPPING_ID_RE.fullmatch(mapping_id):
             errors.append(f"invalid outbound Mapping ID in repository register: {mapping_id or '<empty>'}")
+            partial = True
             continue
         if mapping_id in mapping_directions:
             errors.append(f"duplicate outbound Mapping ID in repository register: {mapping_id}")
+            partial = True
+            continue
         mapping_directions[mapping_id] = direction
-        if call_id not in call_ids:
-            errors.append(f"outbound Mapping {mapping_id} references unknown Call ID: {call_id}")
+        mapping_refs.append((mapping_id, call_id, applies_to))
         if direction not in {"eapi-to-external", "external-to-eapi"}:
             errors.append(f"outbound Mapping {mapping_id} has an invalid direction: {direction}")
-        if applies_to.lower() != "all":
+
+    if not partial:
+        for usage_id, call_id in sorted(usage_refs_by_id.items()):
+            if call_id not in call_ids:
+                errors.append(f"outbound Usage {usage_id} references unknown Call ID: {call_id}")
+                continue
+            usages_by_call.setdefault(call_id, set()).add(usage_id)
+        for call_id in sorted(call_ids):
+            if not usages_by_call.get(call_id):
+                errors.append(f"outbound Call has no executable Usage in repository register: {call_id}")
+        for mapping_id, call_id, applies_to in mapping_refs:
+            if call_id not in call_ids:
+                errors.append(f"outbound Mapping {mapping_id} references unknown Call ID: {call_id}")
+                continue
+            if applies_to.lower() == "all":
+                continue
             usage_refs = set(USAGE_ID_RE.findall(applies_to))
             if not usage_refs:
                 errors.append(f"outbound Mapping {mapping_id} has no applicable Usage ID or all")
@@ -773,19 +828,29 @@ def validate_http_register(
                         f"outbound Mapping {mapping_id} references Usage {usage_id} from another Call"
                     )
 
-    return call_ids, usages_by_call, usage_to_call, mapping_directions
+    return DomainResult(
+        "partial" if partial else "valid",
+        {
+            "call_ids": call_ids,
+            "usages_by_call": usages_by_call,
+            "usage_to_call": usage_to_call,
+            "mapping_directions": mapping_directions,
+        },
+        errors,
+    )
 
 
 def validate_dependency_register(
     register: Path,
-    call_ids: set[str],
-    errors: list[str],
-) -> tuple[set[str], dict[str, set[str]], dict[str, set[str]]]:
+    call_ids: set[str] | None,
+) -> DomainResult:
+    errors: list[str] = []
+    partial = False
     dependency_ids: set[str] = set()
     operations_by_dependency: dict[str, set[str]] = {}
     http_refs_by_operation: dict[str, set[str]] = {}
     if not register.is_file():
-        return dependency_ids, operations_by_dependency, http_refs_by_operation
+        return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
 
     text = register.read_text(encoding="utf-8")
     if section_value(text, "External dependencies"):
@@ -797,26 +862,22 @@ def validate_dependency_register(
     contract_header, contract_rows = table_in_section(text, "Dependency contract records")
     operation_header, operation_rows = table_in_section(text, "Dependency operation records")
 
-    if observation_header and observation_header != REGISTER_DEPENDENCY_OBSERVATION_HEADERS:
-        errors.append("repository register Dependency Observation columns are invalid")
-    if contract_header and contract_header != REGISTER_DEPENDENCY_CONTRACT_HEADERS:
-        errors.append("repository register Dependency Contract columns are invalid")
-    if operation_header and operation_header != REGISTER_DEPENDENCY_OPERATION_HEADERS:
-        errors.append("repository register Dependency Operation columns are invalid")
-
     observation_assignments: dict[str, str] = {}
     for row in observation_rows:
         if len(row) != len(REGISTER_DEPENDENCY_OBSERVATION_HEADERS):
             errors.append("repository register Dependency Observation row has the wrong column count")
+            partial = True
             continue
         observation_id = code_value(row[0])
         if not DEPENDENCY_OBSERVATION_ID_RE.fullmatch(observation_id):
             errors.append(
                 f"invalid Dependency Observation ID: {observation_id or '<empty>'}"
             )
+            partial = True
             continue
         if observation_id in observation_assignments:
             errors.append(f"duplicate Dependency Observation ID: {observation_id}")
+            partial = True
             continue
         validate_exact_label(
             row[7], EVIDENCE_STATUSES, f"Dependency Observation {observation_id} Status", errors
@@ -834,13 +895,17 @@ def validate_dependency_register(
     for row in contract_rows:
         if len(row) != len(REGISTER_DEPENDENCY_CONTRACT_HEADERS):
             errors.append("repository register Dependency Contract row has the wrong column count")
+            partial = True
             continue
         dependency_id = code_value(row[0])
         if not DEPENDENCY_ID_RE.fullmatch(dependency_id):
             errors.append(f"invalid Dependency ID: {dependency_id or '<empty>'}")
+            partial = True
             continue
         if dependency_id in dependency_ids:
             errors.append(f"duplicate Dependency ID: {dependency_id}")
+            partial = True
+            continue
         dependency_ids.add(dependency_id)
         operations_by_dependency.setdefault(dependency_id, set())
         validate_exact_label(
@@ -859,14 +924,17 @@ def validate_dependency_register(
     for row in operation_rows:
         if len(row) != len(REGISTER_DEPENDENCY_OPERATION_HEADERS):
             errors.append("repository register Dependency Operation row has the wrong column count")
+            partial = True
             continue
         operation_id = code_value(row[0])
         dependency_id = code_value(row[1])
         if not DEPENDENCY_OPERATION_ID_RE.fullmatch(operation_id):
             errors.append(f"invalid Dependency Operation ID: {operation_id or '<empty>'}")
+            partial = True
             continue
         if operation_id in operation_parents:
             errors.append(f"duplicate Dependency Operation ID: {operation_id}")
+            partial = True
             continue
         operation_parents[operation_id] = dependency_id
         if not DEPENDENCY_ID_RE.fullmatch(dependency_id):
@@ -888,84 +956,91 @@ def validate_dependency_register(
         )
         http_refs = set(CALL_ID_RE.findall(row[2]))
         http_refs_by_operation[operation_id] = http_refs
-        for call_id in sorted(http_refs - call_ids):
-            errors.append(
-                f"Dependency Operation {operation_id} references unknown outbound Call ID: {call_id}"
-            )
 
-    for observation_id, reconciliation in sorted(observation_assignments.items()):
-        if DEPENDENCY_ID_RE.fullmatch(reconciliation) and reconciliation not in dependency_ids:
-            errors.append(
-                f"Dependency Observation {observation_id} references unknown Dependency: "
-                f"{reconciliation}"
-            )
-
-    for dependency_id, observation_refs in sorted(contract_observations.items()):
-        for observation_id in sorted(observation_refs):
-            if observation_id not in observation_assignments:
+    if not partial:
+        if call_ids is not None:
+            for operation_id, http_refs in sorted(http_refs_by_operation.items()):
+                for call_id in sorted(http_refs - call_ids):
+                    errors.append(
+                        f"Dependency Operation {operation_id} references unknown outbound Call ID: {call_id}"
+                    )
+        for observation_id, reconciliation in sorted(observation_assignments.items()):
+            if DEPENDENCY_ID_RE.fullmatch(reconciliation) and reconciliation not in dependency_ids:
                 errors.append(
-                    f"Dependency Contract {dependency_id} references unknown Observation: "
-                    f"{observation_id}"
+                    f"Dependency Observation {observation_id} references unknown Dependency: "
+                    f"{reconciliation}"
                 )
-            elif observation_assignments[observation_id] != dependency_id:
+        for dependency_id, observation_refs in sorted(contract_observations.items()):
+            for observation_id in sorted(observation_refs):
+                if observation_id not in observation_assignments:
+                    errors.append(
+                        f"Dependency Contract {dependency_id} references unknown Observation: "
+                        f"{observation_id}"
+                    )
+                elif observation_assignments[observation_id] != dependency_id:
+                    errors.append(
+                        f"Dependency Contract {dependency_id} references Observation assigned to "
+                        f"{observation_assignments[observation_id]}: {observation_id}"
+                    )
+        for operation_id, dependency_id in sorted(operation_parents.items()):
+            if dependency_id not in dependency_ids:
                 errors.append(
-                    f"Dependency Contract {dependency_id} references Observation assigned to "
-                    f"{observation_assignments[observation_id]}: {observation_id}"
+                    f"Dependency Operation {operation_id} references unknown Dependency: {dependency_id}"
+                )
+        for dependency_id in sorted(dependency_ids):
+            actual = operations_by_dependency.get(dependency_id, set())
+            declared = declared_operations.get(dependency_id, set())
+            if not actual:
+                errors.append(f"Dependency Contract has no Operation record: {dependency_id}")
+            for operation_id in sorted(declared - actual):
+                errors.append(
+                    f"Dependency Contract {dependency_id} declares unknown Operation: {operation_id}"
+                )
+            for operation_id in sorted(actual - declared):
+                errors.append(
+                    f"Dependency Operation is missing from its Contract record: "
+                    f"{dependency_id} -> {operation_id}"
                 )
 
-    for operation_id, dependency_id in sorted(operation_parents.items()):
-        if dependency_id not in dependency_ids:
-            errors.append(
-                f"Dependency Operation {operation_id} references unknown Dependency: {dependency_id}"
-            )
-
-    for dependency_id in sorted(dependency_ids):
-        actual = operations_by_dependency.get(dependency_id, set())
-        declared = declared_operations.get(dependency_id, set())
-        if not actual:
-            errors.append(f"Dependency Contract has no Operation record: {dependency_id}")
-        for operation_id in sorted(declared - actual):
-            errors.append(
-                f"Dependency Contract {dependency_id} declares unknown Operation: {operation_id}"
-            )
-        for operation_id in sorted(actual - declared):
-            errors.append(
-                f"Dependency Operation is missing from its Contract record: "
-                f"{dependency_id} -> {operation_id}"
-            )
-
-    return dependency_ids, operations_by_dependency, http_refs_by_operation
+    return DomainResult(
+        "partial" if partial else "valid",
+        {
+            "dependency_ids": dependency_ids,
+            "operations_by_dependency": operations_by_dependency,
+            "http_refs_by_operation": http_refs_by_operation,
+        },
+        errors,
+    )
 
 
 def validate_failure_register(
     register: Path,
-    dependency_ids: set[str],
-    errors: list[str],
-) -> set[str]:
+    dependency_ids: set[str] | None,
+) -> DomainResult:
+    errors: list[str] = []
+    partial = False
     pattern_ids: set[str] = set()
     if not register.is_file():
-        return pattern_ids
+        return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
 
     text = register.read_text(encoding="utf-8")
     observation_header, observation_rows = table_in_section(text, "Failure observations")
     pattern_header, pattern_rows = table_in_section(text, "Failure pattern reconciliation")
 
-    if observation_header and observation_header != REGISTER_FAILURE_OBSERVATION_HEADERS:
-        errors.append("repository register Failure Observation columns are invalid")
-    if pattern_header and pattern_header != REGISTER_FAILURE_PATTERN_HEADERS:
-        errors.append("repository register Failure Pattern columns are invalid")
-
     observation_assignments: dict[str, str] = {}
     for row in observation_rows:
         if len(row) != len(REGISTER_FAILURE_OBSERVATION_HEADERS):
             errors.append("repository register Failure Observation row has the wrong column count")
+            partial = True
             continue
         observation_id = code_value(row[0])
         if not FAILURE_OBSERVATION_ID_RE.fullmatch(observation_id):
             errors.append(f"invalid Failure Observation ID: {observation_id or '<empty>'}")
+            partial = True
             continue
         if observation_id in observation_assignments:
             errors.append(f"duplicate Failure Observation ID: {observation_id}")
+            partial = True
             continue
         validate_exact_label(
             row[8], EVIDENCE_STATUSES, f"Failure Observation {observation_id} Status", errors
@@ -982,22 +1057,27 @@ def validate_failure_register(
     for row in pattern_rows:
         if len(row) != len(REGISTER_FAILURE_PATTERN_HEADERS):
             errors.append("repository register Failure Pattern row has the wrong column count")
+            partial = True
             continue
         pattern_id = code_value(row[0])
         if not FAILURE_PATTERN_ID_RE.fullmatch(pattern_id):
             errors.append(f"invalid Failure Pattern ID: {pattern_id or '<empty>'}")
+            partial = True
             continue
         if pattern_id in pattern_ids:
             errors.append(f"duplicate Failure Pattern ID: {pattern_id}")
+            partial = True
+            continue
         pattern_ids.add(pattern_id)
         observation_refs = set(FAILURE_OBSERVATION_ID_RE.findall(row[3]))
         if not observation_refs:
             errors.append(f"Failure Pattern has no Observation IDs: {pattern_id}")
         pattern_observations[pattern_id] = observation_refs
-        for dependency_id in sorted(set(DEPENDENCY_ID_RE.findall(row[5])) - dependency_ids):
-            errors.append(
-                f"Failure Pattern {pattern_id} references unknown Dependency: {dependency_id}"
-            )
+        if dependency_ids is not None:
+            for dependency_id in sorted(set(DEPENDENCY_ID_RE.findall(row[5])) - dependency_ids):
+                errors.append(
+                    f"Failure Pattern {pattern_id} references unknown Dependency: {dependency_id}"
+                )
         validate_exact_label(
             row[6], CALLER_VISIBILITIES, f"Failure Pattern {pattern_id} Caller visibility", errors
         )
@@ -1012,25 +1092,29 @@ def validate_failure_register(
             row[10], RISK_ATTENTIONS, f"Failure Pattern {pattern_id} Risk attention", errors
         )
 
-    for observation_id, reconciliation in sorted(observation_assignments.items()):
-        if FAILURE_PATTERN_ID_RE.fullmatch(reconciliation) and reconciliation not in pattern_ids:
-            errors.append(
-                f"Failure Observation {observation_id} references unknown Pattern: {reconciliation}"
-            )
-
-    for pattern_id, observation_refs in sorted(pattern_observations.items()):
-        for observation_id in sorted(observation_refs):
-            if observation_id not in observation_assignments:
+    if not partial:
+        for observation_id, reconciliation in sorted(observation_assignments.items()):
+            if FAILURE_PATTERN_ID_RE.fullmatch(reconciliation) and reconciliation not in pattern_ids:
                 errors.append(
-                    f"Failure Pattern {pattern_id} references unknown Observation: {observation_id}"
+                    f"Failure Observation {observation_id} references unknown Pattern: {reconciliation}"
                 )
-            elif observation_assignments[observation_id] != pattern_id:
-                errors.append(
-                    f"Failure Pattern {pattern_id} references Observation assigned to "
-                    f"{observation_assignments[observation_id]}: {observation_id}"
-                )
+        for pattern_id, observation_refs in sorted(pattern_observations.items()):
+            for observation_id in sorted(observation_refs):
+                if observation_id not in observation_assignments:
+                    errors.append(
+                        f"Failure Pattern {pattern_id} references unknown Observation: {observation_id}"
+                    )
+                elif observation_assignments[observation_id] != pattern_id:
+                    errors.append(
+                        f"Failure Pattern {pattern_id} references Observation assigned to "
+                        f"{observation_assignments[observation_id]}: {observation_id}"
+                    )
 
-    return pattern_ids
+    return DomainResult(
+        "partial" if partial else "valid",
+        {"pattern_ids": pattern_ids},
+        errors,
+    )
 
 
 def validate_field_mapping_document(
@@ -1398,8 +1482,8 @@ def validate_failure_taxonomy_document(
 
 def validate_behavior_repository_links(
     root: Path,
-    dependency_ids: set[str],
-    pattern_ids: set[str],
+    dependency_ids: set[str] | None,
+    pattern_ids: set[str] | None,
     errors: list[str],
 ) -> None:
     behaviors_dir = root / "tech-pack" / "behaviors"
@@ -1414,60 +1498,63 @@ def validate_behavior_repository_links(
             continue
         frontmatter = text[4:end]
 
-        dependency_block = yaml_block(frontmatter, "external_dependencies")
-        behavior_dependencies = set(
-            re.findall(
-                r"^\s*-\s+dependency_id:\s*[\"']?(DEP-\d+)[\"']?\s*$",
-                dependency_block,
-                re.M,
+        if dependency_ids is not None:
+            dependency_block = yaml_block(frontmatter, "external_dependencies")
+            behavior_dependencies = set(
+                re.findall(
+                    r"^\s*-\s+dependency_id:\s*[\"']?(DEP-\d+)[\"']?\s*$",
+                    dependency_block,
+                    re.M,
+                )
             )
-        )
-        for dependency_id in sorted(behavior_dependencies):
-            if dependency_id not in dependency_ids:
-                errors.append(
-                    f"Tech Behavior references unknown Dependency: "
-                    f"{behavior.relative_to(root)} -> {dependency_id}"
-                )
-                continue
-            expected = f"../external-dependency-contracts.md#{dependency_id.lower()}"
-            if not re.search(rf"\]\({re.escape(expected)}\)", text):
-                errors.append(
-                    f"Tech Behavior does not link its Dependency anchor: "
-                    f"{behavior.relative_to(root)} -> {dependency_id}"
-                )
+            for dependency_id in sorted(behavior_dependencies):
+                if dependency_id not in dependency_ids:
+                    errors.append(
+                        f"Tech Behavior references unknown Dependency: "
+                        f"{behavior.relative_to(root)} -> {dependency_id}"
+                    )
+                    continue
+                expected = f"../external-dependency-contracts.md#{dependency_id.lower()}"
+                if not re.search(rf"\]\({re.escape(expected)}\)", text):
+                    errors.append(
+                        f"Tech Behavior does not link its Dependency anchor: "
+                        f"{behavior.relative_to(root)} -> {dependency_id}"
+                    )
+            for dependency_id in set(
+                re.findall(r"external-dependency-contracts\.md#(dep-\d+)", text, re.I)
+            ):
+                normalized = dependency_id.upper()
+                if normalized not in dependency_ids:
+                    errors.append(
+                        f"Tech Behavior links unknown Dependency anchor: "
+                        f"{behavior.relative_to(root)} -> {dependency_id}"
+                    )
 
-        failure_block = yaml_block(frontmatter, "failure_patterns")
-        behavior_patterns = set(FAILURE_PATTERN_ID_RE.findall(failure_block))
-        for pattern_id in sorted(behavior_patterns):
-            if pattern_id not in pattern_ids:
-                errors.append(
-                    f"Tech Behavior references unknown Failure Pattern: "
-                    f"{behavior.relative_to(root)} -> {pattern_id}"
-                )
-                continue
-            expected = f"../failure-taxonomy.md#{pattern_id.lower()}"
-            if not re.search(rf"\]\({re.escape(expected)}\)", text):
-                errors.append(
-                    f"Tech Behavior does not link its Failure Pattern anchor: "
-                    f"{behavior.relative_to(root)} -> {pattern_id}"
-                )
-
-        for dependency_id in set(
-            re.findall(r"external-dependency-contracts\.md#(dep-\d+)", text, re.I)
-        ):
-            normalized = dependency_id.upper()
-            if normalized not in dependency_ids:
-                errors.append(
-                    f"Tech Behavior links unknown Dependency anchor: "
-                    f"{behavior.relative_to(root)} -> {dependency_id}"
-                )
-        for pattern_id in set(re.findall(r"failure-taxonomy\.md#(fail-\d+)", text, re.I)):
-            normalized = pattern_id.upper()
-            if normalized not in pattern_ids:
-                errors.append(
-                    f"Tech Behavior links unknown Failure Pattern anchor: "
-                    f"{behavior.relative_to(root)} -> {pattern_id}"
-                )
+        if pattern_ids is not None:
+            failure_block = yaml_block(frontmatter, "failure_patterns")
+            behavior_patterns = set(FAILURE_PATTERN_ID_RE.findall(failure_block))
+            for pattern_id in sorted(behavior_patterns):
+                if pattern_id not in pattern_ids:
+                    errors.append(
+                        f"Tech Behavior references unknown Failure Pattern: "
+                        f"{behavior.relative_to(root)} -> {pattern_id}"
+                    )
+                    continue
+                expected = f"../failure-taxonomy.md#{pattern_id.lower()}"
+                if not re.search(rf"\]\({re.escape(expected)}\)", text):
+                    errors.append(
+                        f"Tech Behavior does not link its Failure Pattern anchor: "
+                        f"{behavior.relative_to(root)} -> {pattern_id}"
+                    )
+            for pattern_id in set(
+                re.findall(r"failure-taxonomy\.md#(fail-\d+)", text, re.I)
+            ):
+                normalized = pattern_id.upper()
+                if normalized not in pattern_ids:
+                    errors.append(
+                        f"Tech Behavior links unknown Failure Pattern anchor: "
+                        f"{behavior.relative_to(root)} -> {pattern_id}"
+                    )
 
 
 def main() -> int:
@@ -1477,6 +1564,11 @@ def main() -> int:
         "--repo",
         type=Path,
         help="optional repository root for validating source citations in repository reader documents",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit a machine-readable validation report",
     )
     args = parser.parse_args()
 
@@ -1489,30 +1581,31 @@ def main() -> int:
     if repo is not None and not repo.is_dir():
         print(f"ERROR: repository directory does not exist: {args.repo}")
         return 2
-    errors: list[str] = []
-    checked_links = 0
+    report = ValidationReport()
 
     markdown_files = sorted(
         path for path in root.rglob("*.md") if ".work" not in path.relative_to(root).parts
     )
     for document in markdown_files:
         text = document.read_text(encoding="utf-8")
+        document_errors: list[str] = []
         if any(placeholder in text for placeholder in PLACEHOLDERS):
-            errors.append(f"template placeholder remains: {document.relative_to(root)}")
+            document_errors.append(f"template placeholder remains: {document.relative_to(root)}")
         for match in MARKDOWN_LINK_RE.finditer(text):
             target = local_target(match.group("target"))
             if target is None:
                 continue
-            checked_links += 1
+            report.checked_links += 1
             resolved = (document.parent / target).resolve()
             if not within_root(resolved, root):
-                errors.append(
+                document_errors.append(
                     f"local link escapes pack root: {document.relative_to(root)} -> {match.group('target')}"
                 )
             elif not resolved.exists():
-                errors.append(
+                document_errors.append(
                     f"broken local link: {document.relative_to(root)} -> {match.group('target')}"
                 )
+        report.add_errors("MARKDOWN-LINK", document_errors)
 
     catalog = root / "tech-pack" / "behavior-catalog.yaml"
     if catalog.is_file():
@@ -1521,60 +1614,170 @@ def main() -> int:
             target = match.group("target").strip()
             if target.lower() in {"null", "none"}:
                 continue
-            checked_links += 1
+            report.checked_links += 1
             resolved = (catalog.parent / target).resolve()
             if not within_root(resolved, root):
-                errors.append(f"catalog path escapes pack root: {target}")
+                report.error("CATALOG-LINK", f"catalog path escapes pack root: {target}")
             elif not resolved.exists():
-                errors.append(f"broken catalog document path: {target}")
+                report.error("CATALOG-LINK", f"broken catalog document path: {target}")
 
     endpoint_matrix = root / "tech-pack" / "endpoint-matrix.md"
     if endpoint_matrix.is_file():
-        validate_endpoint_matrix(endpoint_matrix, root, errors)
+        endpoint_errors: list[str] = []
+        validate_endpoint_matrix(endpoint_matrix, root, endpoint_errors)
+        report.add_errors("ENDPOINT-DOCUMENT", endpoint_errors)
 
     register = root / ".work" / "repository-register.md"
-    call_ids, usages_by_call, usage_to_call, mapping_directions = validate_http_register(
-        register, errors
-    )
-    field_document = root / "tech-pack" / "field-validation-and-mapping.md"
-    published_call_ids = validate_field_mapping_document(
-        field_document,
-        call_ids,
-        usages_by_call,
-        usage_to_call,
-        mapping_directions,
-        errors,
-    )
-    validate_behavior_call_links(root, published_call_ids, errors)
+    schema_check = validate_register_file(register, _REGISTER_SCHEMA)
+    if schema_check.errors:
+        report.error("REG-SCHEMA-VERSION", "; ".join(schema_check.errors))
+    schema_codes = {
+        "http": "REG-HTTP-SCHEMA",
+        "dependency": "REG-DEP-SCHEMA",
+        "failure": "REG-FAIL-SCHEMA",
+    }
+    for domain, messages in schema_check.domain_errors.items():
+        report.error(
+            schema_codes.get(domain, f"REG-{domain.upper()}-SCHEMA"),
+            " | ".join(messages),
+        )
 
-    dependency_ids, operations_by_dependency, http_refs_by_operation = (
-        validate_dependency_register(register, call_ids, errors)
+    def domain_schema_valid(domain: str) -> bool:
+        return not schema_check.errors and not schema_check.domain_errors.get(domain)
+
+    def prerequisites_available(group: str) -> bool:
+        return all(
+            report.domain_statuses.get(domain) == "valid"
+            for domain in _REGISTER_SCHEMA.domain_dependencies[group]
+        )
+
+    if domain_schema_valid("http"):
+        http_result = validate_http_register(register)
+        report.add_errors("REG-HTTP-ROW", http_result.errors)
+    else:
+        http_result = DomainResult("invalid")
+    report.domain_statuses["http"] = http_result.status
+
+    published_call_ids: set[str] = set()
+    if prerequisites_available("http_document"):
+        http_document_errors: list[str] = []
+        published_call_ids = validate_field_mapping_document(
+            root / "tech-pack" / "field-validation-and-mapping.md",
+            http_result.data["call_ids"],
+            http_result.data["usages_by_call"],
+            http_result.data["usage_to_call"],
+            http_result.data["mapping_directions"],
+            http_document_errors,
+        )
+        report.add_errors("HTTP-DOCUMENT", http_document_errors)
+        behavior_http_errors: list[str] = []
+        validate_behavior_call_links(root, published_call_ids, behavior_http_errors)
+        report.add_errors("BEHAVIOR-HTTP-BACKLINK", behavior_http_errors)
+    else:
+        report.skip(
+            "HTTP-DOCUMENT",
+            f"prerequisite HTTP Register is {http_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-HTTP-BACKLINK",
+            f"prerequisite HTTP Register is {http_result.status}",
+        )
+
+    trusted_call_ids = (
+        http_result.data.get("call_ids") if http_result.status == "valid" else None
     )
-    pattern_ids = validate_failure_register(register, dependency_ids, errors)
-    validate_external_dependency_document(
-        root / "tech-pack" / "external-dependency-contracts.md",
+    if domain_schema_valid("dependency"):
+        dependency_result = validate_dependency_register(register, trusted_call_ids)
+        report.add_errors("REG-DEP-ROW", dependency_result.errors)
+    else:
+        dependency_result = DomainResult("invalid")
+    report.domain_statuses["dependency"] = dependency_result.status
+    if not prerequisites_available("dependency_http_cross_reference"):
+        report.skip(
+            "DEP-HTTP-XREF",
+            "prerequisite Dependency or HTTP Register index is unavailable",
+        )
+
+    if domain_schema_valid("failure"):
+        trusted_dependencies = (
+            dependency_result.data.get("dependency_ids")
+            if dependency_result.status == "valid"
+            else None
+        )
+        failure_result = validate_failure_register(register, trusted_dependencies)
+        report.add_errors("REG-FAIL-ROW", failure_result.errors)
+    else:
+        failure_result = DomainResult("invalid")
+    report.domain_statuses["failure"] = failure_result.status
+    if not prerequisites_available("failure_dependency_cross_reference"):
+        report.skip(
+            "FAIL-DEP-XREF",
+            "prerequisite Failure or Dependency Register index is unavailable",
+        )
+
+    dependency_ids: set[str] | None = None
+    pattern_ids: set[str] | None = None
+    if prerequisites_available("dependency_document"):
+        dependency_ids = dependency_result.data["dependency_ids"]
+        dependency_document_errors: list[str] = []
+        validate_external_dependency_document(
+            root / "tech-pack" / "external-dependency-contracts.md",
+            dependency_ids,
+            dependency_result.data["operations_by_dependency"],
+            dependency_result.data["http_refs_by_operation"],
+            repo,
+            dependency_document_errors,
+        )
+        report.add_errors("DEP-DOCUMENT", dependency_document_errors)
+    else:
+        report.skip(
+            "DEP-DOCUMENT",
+            f"prerequisite Dependency Register is {dependency_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-DEP-BACKLINK",
+            f"prerequisite Dependency Register is {dependency_result.status}",
+        )
+
+    if prerequisites_available("failure_document"):
+        pattern_ids = failure_result.data["pattern_ids"]
+        failure_document_errors: list[str] = []
+        validate_failure_taxonomy_document(
+            root / "tech-pack" / "failure-taxonomy.md",
+            pattern_ids,
+            repo,
+            failure_document_errors,
+        )
+        report.add_errors("FAIL-DOCUMENT", failure_document_errors)
+    else:
+        report.skip(
+            "FAIL-DOCUMENT",
+            f"prerequisite Failure Register is {failure_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-FAIL-BACKLINK",
+            f"prerequisite Failure Register is {failure_result.status}",
+        )
+
+    behavior_repository_errors: list[str] = []
+    validate_behavior_repository_links(
+        root,
         dependency_ids,
-        operations_by_dependency,
-        http_refs_by_operation,
-        repo,
-        errors,
-    )
-    validate_failure_taxonomy_document(
-        root / "tech-pack" / "failure-taxonomy.md",
         pattern_ids,
-        repo,
-        errors,
+        behavior_repository_errors,
     )
-    validate_behavior_repository_links(root, dependency_ids, pattern_ids, errors)
-    validate_ba_traceability(root, errors)
+    report.add_errors("BEHAVIOR-REPOSITORY-BACKLINK", behavior_repository_errors)
 
-    for error in errors:
-        print(f"ERROR: {error}")
-    if errors:
-        print(f"FAILED: {len(errors)} error(s), {checked_links} local link(s) checked")
-        return 1
-    print(f"OK: {len(markdown_files)} Markdown file(s), {checked_links} local link(s) checked")
-    return 0
+    ba_errors: list[str] = []
+    validate_ba_traceability(root, ba_errors)
+    report.add_errors("BA-LINK", ba_errors)
+
+    report.checked_documents = len(markdown_files)
+    if args.json:
+        print(json.dumps(report.payload(len(markdown_files)), indent=2, sort_keys=True))
+    else:
+        report.render_text(len(markdown_files))
+    return 1 if report.failed else 0
 
 
 if __name__ == "__main__":

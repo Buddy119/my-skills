@@ -22,6 +22,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from register_schema import (
+    RegisterSchemaError,
+    load_register_schema,
+    validate_bundled_contract,
+    validate_register_file,
+)
+
 
 WORKFLOW_SCHEMA_VERSION = "2"
 STAGES = (
@@ -557,6 +564,21 @@ def temporary_paths(output: Path) -> list[str]:
 def command_init(args: argparse.Namespace) -> int:
     repo = args.repo.expanduser().resolve()
     output = args.output.expanduser().resolve()
+    template = template_root() / "repository-register-template.md"
+    try:
+        bundled_check = validate_bundled_contract(template)
+    except RegisterSchemaError as exc:
+        raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
+    if not bundled_check.valid:
+        details = list(bundled_check.errors)
+        details.extend(
+            message
+            for messages in bundled_check.domain_errors.values()
+            for message in messages
+        )
+        raise ExecutorError(
+            "bundled Register Schema and template are out of sync: " + " | ".join(details)
+        )
     if not repo.is_dir():
         raise ExecutorError(f"repository directory does not exist: {repo}")
     if output.exists() and any(output.iterdir()):
@@ -572,6 +594,11 @@ def command_init(args: argparse.Namespace) -> int:
     )
     receipt = {
         "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+        "register_schema_version": bundled_check.version,
+        "validator_domain_statuses": {},
+        "primary_error_count": 0,
+        "skipped_group_count": 0,
+        "suppressed_error_count": 0,
         "kind": "initialization",
         "repository": str(repo),
         "source_commit": commit,
@@ -673,7 +700,14 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
 
     if stage in {"api-contract-publication", "ba-publication", "finalization"}:
         commands.append(
-            [python, str(scripts / "validate_pack_links.py"), str(candidate), "--repo", str(repo)]
+            [
+                python,
+                str(scripts / "validate_pack_links.py"),
+                str(candidate),
+                "--repo",
+                str(repo),
+                "--json",
+            ]
         )
     return commands
 
@@ -709,8 +743,26 @@ def stage_gates(stage: str, candidate: Path, repo: Path) -> tuple[list[str], lis
             if incomplete:
                 errors.append("behavior tracing is incomplete: " + ", ".join(incomplete))
     if stage in {"synthesis", "tech-publication", "api-contract-publication", "business-model", "ba-publication", "finalization"}:
+        register = candidate / ".work" / "repository-register.md"
+        try:
+            schema = load_register_schema()
+            register_check = validate_register_file(register, schema)
+        except RegisterSchemaError as exc:
+            errors.append(f"bundled Register Schema is invalid: {exc}")
+        else:
+            schema_errors = list(register_check.errors)
+            schema_errors.extend(
+                message
+                for messages in register_check.domain_errors.values()
+                for message in messages
+            )
+            if schema_errors:
+                errors.append(
+                    "repository register does not match Register Schema "
+                    f"{schema.version}: " + " | ".join(schema_errors)
+                )
         validate_heading_set(
-            candidate / ".work" / "repository-register.md",
+            register,
             REGISTER_HEADINGS,
             "repository register",
             errors,
@@ -1134,9 +1186,43 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
     commands: list[list[str]] = []
     if stage in {"api-contract-publication", "ba-publication", "finalization"}:
         commands.append(
-            [sys.executable, str(scripts / "validate_pack_links.py"), str(output), "--repo", str(repo)]
+            [
+                sys.executable,
+                str(scripts / "validate_pack_links.py"),
+                str(output),
+                "--repo",
+                str(repo),
+                "--json",
+            ]
         )
     return [run_validator(command, output) for command in commands]
+
+
+def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the last structured Pack validation result for a stage Receipt."""
+    summary: dict[str, Any] = {
+        "validator_domain_statuses": {},
+        "primary_error_count": 0,
+        "skipped_group_count": 0,
+        "suppressed_error_count": 0,
+    }
+    for result in results:
+        command = [str(item) for item in result.get("command", [])]
+        if not any(Path(item).name == "validate_pack_links.py" for item in command):
+            continue
+        try:
+            payload = json.loads(result.get("stdout", ""))
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        summary = {
+            "validator_domain_statuses": payload.get("domain_statuses", {}),
+            "primary_error_count": payload.get("primary_errors", 0),
+            "skipped_group_count": payload.get("skipped_validation_groups", 0),
+            "suppressed_error_count": payload.get("suppressed_row_errors", 0),
+        }
+    return summary
 
 
 def command_commit(args: argparse.Namespace) -> int:
@@ -1231,8 +1317,15 @@ def command_commit(args: argparse.Namespace) -> int:
             raise ExecutorError("post-promotion validation failed; published content was rolled back")
 
         sequence = receipt_count(output)
+        validation_summary = pack_validation_summary(validators + post_results)
+        register_schema_version = scalar_value(
+            (candidate / ".work" / "repository-register.md").read_text(encoding="utf-8"),
+            "register_schema_version",
+        )
         receipt_payload = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+            "register_schema_version": register_schema_version,
+            **validation_summary,
             "transaction_id": args.transaction,
             "stage": stage,
             "stage_result": "skipped" if args.skip else "committed",
@@ -1473,6 +1566,19 @@ def earliest_legacy_stage(output: Path, text: str) -> tuple[str, list[str]]:
     dossier_dir = output / ".work" / "behavior-dossiers"
     if any(not (dossier_dir / f"{entry.get('behavior_id')}.md").is_file() and not entry.get("dossier") for entry in entries):
         return "tracing", ["one or more behavior dossiers are missing"]
+    try:
+        register_schema = load_register_schema()
+    except RegisterSchemaError as exc:
+        reasons.append(f"bundled Register Schema is invalid: {exc}")
+    else:
+        if scalar_value(register_text, "register_schema_version") != register_schema.version:
+            reasons.append(
+                "repository register has no supported register_schema_version; rebuild it from synthesis"
+            )
+        else:
+            register_check = validate_register_file(register, register_schema)
+            if not register_check.valid:
+                reasons.append("repository register does not match the current Register Schema")
     if REGISTER_HEADINGS - headings(register):
         reasons.append("repository register uses an incomplete or legacy structure")
     if "## Proven outbound HTTP calls and mappings" in register_text:

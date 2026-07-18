@@ -1,0 +1,241 @@
+{
+  "register_schema_version": "1",
+  "tables": {
+    "endpoint_evidence": {
+      "domain": "endpoint",
+      "section": "Endpoint evidence records",
+      "headers": [
+        "Evidence ID",
+        "Evidence layer",
+        "Observed method/route/handler/target",
+        "Environment or scope",
+        "Related candidate",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "endpoint_reconciliation": {
+      "domain": "endpoint",
+      "section": "Endpoint reconciliation",
+      "headers": [
+        "Endpoint or Exposure ID",
+        "Operation Role",
+        "Publication Disposition",
+        "Related Route Group",
+        "Application Route",
+        "External Entry Declaration",
+        "Environment Deployment Intent",
+        "Observed Runtime Deployment",
+        "External Reachability",
+        "Behavior",
+        "Contract",
+        "Classification basis",
+        "Correlation, conflict, or gap"
+      ]
+    },
+    "data_state_changes": {
+      "domain": "data",
+      "section": "Business objects, data resources, and state changes",
+      "headers": [
+        "Object or resource",
+        "Behavior ID",
+        "Operation",
+        "From state/source",
+        "To state/destination",
+        "Condition",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "field_validation": {
+      "domain": "field",
+      "section": "Field validation and internal transformation observations",
+      "headers": [
+        "Boundary or model",
+        "Field(s)",
+        "Behavior ID",
+        "Rule or transformation",
+        "Result when violated",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "http_operations": {
+      "domain": "http",
+      "section": "Outbound HTTP operation records",
+      "headers": [
+        "Call ID",
+        "Method",
+        "Logical Target",
+        "Client Operation",
+        "Observable Purpose",
+        "Related Behaviors",
+        "Aliases",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "http_usages": {
+      "domain": "http",
+      "section": "Outbound HTTP operation usages",
+      "headers": [
+        "Usage ID",
+        "Call ID",
+        "Behavior ID",
+        "Executable Call Site",
+        "Invocation Condition or Config",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "http_mappings": {
+      "domain": "http",
+      "section": "External HTTP field mapping records",
+      "headers": [
+        "Mapping ID",
+        "Call ID",
+        "Applies to Usage(s)",
+        "Direction",
+        "Source Field(s)",
+        "Target Field(s)",
+        "Transformation",
+        "Condition/Default",
+        "Lossy",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "runtime_config": {
+      "domain": "config",
+      "section": "Runtime configuration effects",
+      "headers": [
+        "Config",
+        "Behavior ID",
+        "Read/wiring location",
+        "Effective value or source",
+        "Behavioral effect",
+        "Scope/condition",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "dependency_observations": {
+      "domain": "dependency",
+      "section": "External dependency observations",
+      "headers": [
+        "Observation ID",
+        "Candidate dependency",
+        "Boundary type",
+        "Behavior ID",
+        "Operation or resource",
+        "Exchanged concept or observed effect",
+        "Availability observation",
+        "Status",
+        "Evidence",
+        "Reconciliation"
+      ]
+    },
+    "dependency_contracts": {
+      "domain": "dependency",
+      "section": "Dependency contract records",
+      "headers": [
+        "Dependency ID",
+        "Logical identity",
+        "Type",
+        "Repository-observed role",
+        "Related operations",
+        "Related behaviors or capabilities",
+        "Criticality by usage",
+        "Observation IDs",
+        "Aliases",
+        "Status",
+        "Unknowns or conflicts"
+      ]
+    },
+    "dependency_operations": {
+      "domain": "dependency",
+      "section": "Dependency operation records",
+      "headers": [
+        "Operation ID",
+        "Dependency ID",
+        "Boundary reference",
+        "Invocation or resource",
+        "Exchanged concepts",
+        "Behaviors or capabilities",
+        "Criticality by usage",
+        "Unavailability, fallback, and state impact",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "failure_observations": {
+      "domain": "failure",
+      "section": "Failure observations",
+      "headers": [
+        "Observation ID",
+        "Failure category",
+        "Behavior ID",
+        "Trigger or source",
+        "Handling and propagation",
+        "Caller-visible result",
+        "State outcome",
+        "Retry or recovery",
+        "Status",
+        "Evidence",
+        "Reconciliation"
+      ]
+    },
+    "failure_patterns": {
+      "domain": "failure",
+      "section": "Failure pattern reconciliation",
+      "headers": [
+        "Pattern ID",
+        "Category",
+        "Trigger or source",
+        "Observation IDs",
+        "Behaviors or capabilities",
+        "Related dependencies",
+        "Caller visibility",
+        "State outcome",
+        "Retry safety",
+        "Recovery",
+        "Risk attention",
+        "Conflicts or unknowns",
+        "Evidence"
+      ]
+    },
+    "cross_behavior_relationships": {
+      "domain": "relationship",
+      "section": "Cross-behavior relationships",
+      "headers": [
+        "Source behavior",
+        "Relationship",
+        "Target behavior",
+        "Connecting object/event/state",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "unresolved_items": {
+      "domain": "common",
+      "section": "Register conflicts and unresolved items",
+      "headers": [
+        "Item",
+        "Affected behaviors",
+        "Conflict or unknown",
+        "Why it matters",
+        "Evidence needed"
+      ]
+    }
+  },
+  "domain_dependencies": {
+    "http_document": ["http"],
+    "behavior_http_backlinks": ["http"],
+    "dependency_http_cross_reference": ["dependency", "http"],
+    "failure_dependency_cross_reference": ["failure", "dependency"],
+    "dependency_document": ["dependency"],
+    "failure_document": ["failure"],
+    "behavior_dependency_backlinks": ["dependency"],
+    "behavior_failure_backlinks": ["failure"]
+  }
+}

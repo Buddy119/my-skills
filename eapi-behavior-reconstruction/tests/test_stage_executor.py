@@ -111,6 +111,10 @@ class StageExecutorTests(unittest.TestCase):
             EXECUTOR,
             SKILL_ROOT / "scripts" / "validate_analysis_state.py",
             SKILL_ROOT / "scripts" / "build_evidence_index.py",
+            SKILL_ROOT / "scripts" / "register_schema.py",
+            SKILL_ROOT / "scripts" / "validate_pack_links.py",
+            SKILL_ROOT / "assets" / "register-schema.json",
+            SKILL_ROOT / "assets" / "repository-register-template.md",
         ]
         before = {
             path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected
@@ -299,6 +303,26 @@ class StageExecutorTests(unittest.TestCase):
         self.assertIn('workflow_schema_version: "2"', upgraded)
         self.assertNotIn('current_stage: "completed"', upgraded)
 
+    def test_legacy_register_without_schema_version_resumes_from_synthesis(self) -> None:
+        executor = load_executor_module()
+        (self.output / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        register = self.output / ".work" / "repository-register.md"
+        register.write_text(
+            "\n".join(
+                line
+                for line in register.read_text(encoding="utf-8").splitlines()
+                if not line.startswith("register_schema_version:")
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        stage, reasons = executor.earliest_legacy_stage(
+            self.output,
+            (self.output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(stage, "synthesis")
+        self.assertIn("register_schema_version", " ".join(reasons))
+
     def test_recover_rolls_back_an_interrupted_promotion(self) -> None:
         transaction, _candidate = self.begin("inventory")
         partial = self.output / "partial-publication.md"
@@ -469,9 +493,29 @@ class StageExecutorTests(unittest.TestCase):
 
         synthesis, candidate = self.begin("synthesis")
         executor = load_executor_module()
-        register_text = "# Repository register\n\n" + "\n\n".join(
-            f"## {heading}" for heading in sorted(executor.REGISTER_HEADINGS)
-        ) + "\n"
+        register_schema = json.loads(
+            (SKILL_ROOT / "assets" / "register-schema.json").read_text(encoding="utf-8")
+        )
+        tables_by_section = {
+            table["section"]: table["headers"]
+            for table in register_schema["tables"].values()
+        }
+        register_parts = [
+            "---",
+            'repository: "sample-repo"',
+            'source_commit: "unknown"',
+            'register_schema_version: "1"',
+            'register_status: "reconciled"',
+            "---",
+            "",
+            "# Repository register",
+        ]
+        for heading in sorted(executor.REGISTER_HEADINGS):
+            register_parts.extend(["", f"## {heading}", ""])
+            headers = tables_by_section[heading]
+            register_parts.append("| " + " | ".join(headers) + " |")
+            register_parts.append("|" + "|".join("---" for _ in headers) + "|")
+        register_text = "\n".join(register_parts) + "\n"
         synthesis_text = "# Repository synthesis\n\n" + "\n\n".join(
             f"## {heading}" for heading in sorted(executor.SYNTHESIS_HEADINGS)
         ) + "\n"
@@ -560,6 +604,54 @@ class StageExecutorTests(unittest.TestCase):
         receipt_payload = json.loads(final_receipt.read_text(encoding="utf-8"))
         self.assertEqual(receipt_payload["stage"], "finalization")
         self.assertEqual(receipt_payload["result"], "committed")
+        self.assertEqual(receipt_payload["register_schema_version"], "1")
+        self.assertEqual(
+            receipt_payload["validator_domain_statuses"],
+            {"dependency": "valid", "failure": "valid", "http": "valid"},
+        )
+        self.assertEqual(receipt_payload["primary_error_count"], 0)
+        self.assertEqual(receipt_payload["skipped_group_count"], 0)
+
+    def test_synthesis_commit_rejects_register_schema_drift(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
+
+        tracing, _candidate = self.begin("tracing")
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", tracing)
+
+        synthesis, candidate = self.begin("synthesis")
+        executor = load_executor_module()
+        register = candidate / ".work" / "repository-register.md"
+        register.write_text(
+            register.read_text(encoding="utf-8").replace(
+                "| Dependency ID | Logical identity |",
+                "| Dependency Identifier | Logical identity |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        synthesis_text = "# Repository synthesis\n\n" + "\n\n".join(
+            f"## {heading}" for heading in sorted(executor.SYNTHESIS_HEADINGS)
+        ) + "\n"
+        (candidate / ".work" / "repository-synthesis.md").write_text(
+            synthesis_text,
+            encoding="utf-8",
+        )
+        result = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            synthesis,
+            "--semantic-result",
+            "complete",
+            expected=1,
+        )
+        payload = json.loads(result.stdout)
+        self.assertIn("Register Schema", " ".join(payload["errors"]))
+        formal = (self.output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8")
+        self.assertIn('current_stage: "synthesis"', formal)
 
     def test_archive_helper_detects_checksum_complete_tree(self) -> None:
         module = load_executor_module()
