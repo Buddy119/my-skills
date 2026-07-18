@@ -20,7 +20,7 @@ from typing import Any, Iterable
 
 
 DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "assets" / "artifact-schema.json"
-CURRENT_WORKFLOW_SCHEMA_VERSION = "3"
+CURRENT_WORKFLOW_SCHEMA_VERSION = "4"
 FORMAL_PREFIXES = (".work/", "tech-pack/", "ba-pack/")
 SNAPSHOT_EXCLUDES = (
     ".work/execution/",
@@ -32,6 +32,7 @@ DISCOVERY_EXCLUDES = (
     ".work/execution/active.lock",
     ".work/execution/transactions/",
     ".work/execution/archive/",
+    ".work/execution/generations/",
     ".work/legacy-artifacts/",
     ".work/legacy-ba-pack/",
 )
@@ -648,6 +649,11 @@ def build_migration_plan(
 
     state_path = root / ".work" / "analysis-state.yaml"
     state_text = state_path.read_text(encoding="utf-8") if state_path.is_file() else ""
+    explicit_stage = scalar_value(state_text, "current_stage")
+    if explicit_stage not in set(NORMAL_STAGES) | {"completed"}:
+        blocked_reasons.append(
+            "analysis state has no valid explicit current_stage; coarse phase or document text cannot choose a recovery point"
+        )
     if not (root / ".work" / "evidence-index.json").is_file():
         resume_stage = "inventory"
     else:

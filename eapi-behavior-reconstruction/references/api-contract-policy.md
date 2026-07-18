@@ -45,6 +45,10 @@ Organize the body in this order:
 
 Always include Quick reference, Request, Responses, Related documents, and Source notes. When no caller-supplied input exists, say so briefly under Request. Remove empty input-location subsections, empty tables, template instructions, and optional sections that add no reader value.
 
+`assets/api-contract-structure.json` is the mechanical table contract shared by the template and Validator. Quick reference uses exactly `Property | Value`. Responses uses exactly `HTTP status | When | Body/schema | Relevant headers`. When present, Header, Path/Query, Body, Validation, and Response-field tables use the registered headers for their caller-facing role. A no-input Request may use a short sentence instead of an empty table. Do not rename columns during an analysis; changing the structure contract is Skill development and must update the JSON contract, template, Validator, Artifact version, and tests together.
+
+Generic Markdown structure validation runs before this specialized contract. If Frontmatter, headings, fences, anchors, or a table is malformed, specialized API checks are skipped for that document so one structural defect does not create a cascade of missing-section, field, or backlink errors.
+
 ## Analysis evidence versus published contract
 
 Use these layers while reconstructing fields, but do not publish them as fixed L1/L2/L3 sections:

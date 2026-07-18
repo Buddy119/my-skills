@@ -43,7 +43,7 @@ python3 <skill-root>/scripts/stage_executor.py resume \
   --json
 ```
 
-For a current Workflow 3 pack with a complete valid Artifact Manifest, resume the recorded normal stage and do not create a plan.
+For a current Workflow 4 pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a plan.
 
 Otherwise inspect `.work/migration-plan.yaml` before continuing. Confirm:
 
@@ -52,6 +52,8 @@ Otherwise inspect `.work/migration-plan.yaml` before continuing. Confirm:
 - Each planned action and path.
 - Invalidated Artifact types and their responsible rebuild stages.
 - Expected archives, blocked reasons, and post-migration recovery stage.
+
+The current release targets Workflow Schema `4`, Artifact Registry `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`. Generation Manifest and Checkpoint Ledger start at Artifact Schema `1`.
 
 The plan is JSON-compatible YAML so the standard-library executor can parse it deterministically. The plan may not contain repository knowledge conclusions.
 
@@ -94,6 +96,8 @@ python3 <skill-root>/scripts/stage_executor.py commit \
 
 Do not pass `--semantic-result` or `--skip`. A successful Migration Receipt records preserved/migrated/archived/invalidated files and the next normal stage. Publication remains `stale` or `pending`.
 
+Workflow 3 migration uses only the explicit old `current_stage`. Do not infer the recovery point from the retired `phase` field or document content. If `current_stage` is absent or invalid, the plan is `blocked`. Preserve the old formal Pack as the published baseline, archive historical Receipts without rewriting them, and create a new Working Generation only when the post-migration Synthesis stage begins. API Contract Schema `1` is invalidated and rebuilt from `api-contract-publication`; Migration itself does not rewrite it as a Reader document.
+
 ## Unknown legacy Packs
 
 When a Pack has no Artifact Manifest or explicit versions:
@@ -110,6 +114,8 @@ Do not infer a specific historical schema version.
 
 - Migration Planning, Migration, Synthesis, Tech/API Publication, Business Model, BA Publication, and Finalization have distinct Receipts.
 - A Migration Receipt must not claim reader documents were published.
-- A Publication Receipt must not contain migration/archive decisions outside its normal file replacement archive.
+- A pre-Finalization Publication Receipt has `promotion_scope: generation` and must not claim that formal Reader documents were published.
+- A Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true` only after post-promotion validation succeeds.
+- A Publication Receipt must not contain migration decisions outside its normal release archive.
 - `completed` requires a committed Finalization Receipt and zero unresolved invalidated Artifact types.
 - A current `completed` State without its Finalization Receipt is an integrity failure. Do not rewrite State to manufacture a recovery point.

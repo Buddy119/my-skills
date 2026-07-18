@@ -44,9 +44,14 @@ from register_schema import (
     validate_bundled_contract,
     validate_register_file,
 )
+from markdown_structure import (
+    load_api_contract_structure,
+    parse_markdown,
+    validate_api_contract_tables,
+)
 
 
-WORKFLOW_SCHEMA_VERSION = "3"
+WORKFLOW_SCHEMA_VERSION = "4"
 MIGRATION_STAGE = "migration"
 STAGES = (
     "inventory",
@@ -62,6 +67,59 @@ STAGES = (
 STAGE_INDEX = {stage: index for index, stage in enumerate(STAGES)}
 ALLOWED_STAGE_STATUS = {"pending", "in-progress", "failed", "committed", "skipped"}
 ALLOWED_BEHAVIOR_STATUS = {"discovered", "tracing", "understood", "blocked"}
+ALLOWED_CHECKPOINT_STATUS = {"pending", "in-progress", "complete", "skipped", "blocked", "failed"}
+TERMINAL_CHECKPOINT_STATUS = {"complete", "skipped", "blocked"}
+STAGE_CHECKPOINTS: dict[str, tuple[str, ...]] = {
+    "inventory": ("project-detection", "entrypoint-inventory", "evidence-index"),
+    "tracing": ("behavior-tracing", "coverage-review"),
+    "synthesis": (
+        "endpoint-reconciliation",
+        "outbound-http-reconciliation",
+        "dependency-reconciliation",
+        "failure-reconciliation",
+        "lifecycle-config-reconciliation",
+        "connection-shared-model",
+        "synthesis-review",
+    ),
+    "tech-publication": (
+        "tech-behaviors",
+        "repository-overview",
+        "repository-reference-docs",
+        "tech-cross-links",
+        "tech-validation",
+    ),
+    "api-contract-publication": (
+        "endpoint-matrix",
+        "api-contracts",
+        "api-backlinks",
+        "api-validation",
+    ),
+    "business-model": (
+        "capability-object-model",
+        "journey-scenario-model",
+        "tech-coverage",
+        "business-model-review",
+    ),
+    "ba-publication": (
+        "journeys",
+        "scenarios",
+        "ba-overview-catalog",
+        "ba-backlinks",
+        "ba-validation",
+    ),
+    "finalization": (
+        "mechanical-review",
+        "fact-sampling",
+        "readability-review",
+        "release-readiness",
+    ),
+    "migration": (
+        "plan-verification",
+        "evidence-preservation",
+        "artifact-migration",
+        "migration-validation",
+    ),
+}
 REGISTER_HEADINGS = {
     "Endpoint evidence records",
     "Endpoint reconciliation",
@@ -111,10 +169,24 @@ SNAPSHOT_EXCLUDED_PREFIXES = {
     ".work/execution/active.lock",
     ".work/execution/transactions",
     ".work/execution/archive",
+    ".work/execution/generations",
     ".work/legacy-ba-pack",
     ".work/legacy-artifacts",
 }
 STATE_FILE = Path(".work/analysis-state.yaml")
+GENERATION_STAGES = {
+    "synthesis",
+    "tech-publication",
+    "api-contract-publication",
+    "business-model",
+    "ba-publication",
+    "finalization",
+}
+FORMAL_DRIFT_EXCLUDES = {
+    ".work/analysis-state.yaml",
+    ".work/artifact-manifest.json",
+    ".work/migration-plan.yaml",
+}
 
 
 class ExecutorError(RuntimeError):
@@ -167,6 +239,10 @@ def set_scalar(text: str, key: str, value: str | None) -> str:
     if behavior_match:
         return text[: behavior_match.start()] + line + "\n" + text[behavior_match.start() :]
     return text.rstrip() + "\n" + line + "\n"
+
+
+def remove_scalar(text: str, key: str) -> str:
+    return re.sub(rf"^{re.escape(key)}:\s*[^\n]*(?:\n|$)", "", text, count=1, flags=re.M)
 
 
 def behavior_entries(text: str) -> list[dict[str, str | None]]:
@@ -279,14 +355,6 @@ def source_commit(repo: Path) -> str:
     return current_git_commit(repo) or "unknown"
 
 
-def phase_for_stage(stage: str) -> str:
-    if stage in {"inventory", "tracing", "synthesis"}:
-        return stage
-    if stage == "completed":
-        return "completed"
-    return "publishing"
-
-
 def previous_stage(stage: str) -> str | None:
     index = STAGE_INDEX[stage]
     return STAGES[index - 1] if index > 0 else None
@@ -350,6 +418,119 @@ def file_manifest(root: Path) -> dict[str, dict[str, Any]]:
             "sha256": sha256_file(path),
         }
     return manifest
+
+
+def knowledge_manifest(root: Path) -> dict[str, dict[str, Any]]:
+    """Manifest only knowledge artifacts; executor lifecycle files are excluded."""
+
+    manifest: dict[str, dict[str, Any]] = {}
+    if not root.exists():
+        return manifest
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative.startswith(".work/execution/") or relative in FORMAL_DRIFT_EXCLUDES:
+            continue
+        if not relative.startswith((".work/", "tech-pack/", "ba-pack/")):
+            continue
+        stat = path.stat()
+        manifest[relative] = {"size": stat.st_size, "sha256": sha256_file(path)}
+    return manifest
+
+
+def restore_formal_drift(output: Path, baseline: Path, expected: dict[str, Any]) -> list[str]:
+    current = knowledge_manifest(output)
+    diff = manifest_diff(expected, current)
+    changed = sorted(set(diff["added"] + diff["changed"] + diff["deleted"]))
+    for relative in diff["added"]:
+        target = output / relative
+        if target.is_file():
+            target.unlink()
+    for relative in sorted(set(diff["changed"] + diff["deleted"])):
+        source = baseline / relative
+        target = output / relative
+        if not source.is_file():
+            raise ExecutorError(f"baseline cannot restore formal artifact: {relative}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.parent / f".{target.name}.formal-drift.tmp"
+        shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+    if knowledge_manifest(output) != expected:
+        raise ExecutorError("formal drift restoration did not reproduce the baseline manifest")
+    return changed
+
+
+def generations_root(output: Path) -> Path:
+    return execution_root(output) / "generations"
+
+
+def generation_dir(output: Path, generation_id: str) -> Path:
+    return generations_root(output) / generation_id
+
+
+def generation_candidate_root(output: Path, generation_id: str) -> Path:
+    return generation_dir(output, generation_id) / "candidate-root"
+
+
+def create_generation(output: Path, formal_state: str) -> tuple[str, Path]:
+    generation_id = f"gen-{now_utc().replace(':', '').replace('+00:00', 'Z')}-{uuid.uuid4().hex[:8]}"
+    root = generation_candidate_root(output, generation_id)
+    root.parent.mkdir(parents=True, exist_ok=False)
+    snapshot_copy(output, root)
+    payload = {
+        "artifact_type": "generation-manifest",
+        "artifact_schema_version": "1",
+        "generation_id": generation_id,
+        "repository": scalar_value(formal_state, "repository"),
+        "source_commit": scalar_value(formal_state, "source_commit"),
+        "status": "staging",
+        "created_at": now_utc(),
+        "last_committed_stage": scalar_value(formal_state, "last_committed_stage"),
+        "candidate_manifest": manifest_summary(file_manifest(root)),
+        "stage_history": [],
+    }
+    atomic_write_json(generation_dir(output, generation_id) / "generation-manifest.json", payload)
+    atomic_write_json(generation_dir(output, generation_id) / "stage-history.json", {"stages": []})
+    return generation_id, root
+
+
+def load_generation_manifest(output: Path, generation_id: str) -> dict[str, Any]:
+    path = generation_dir(output, generation_id) / "generation-manifest.json"
+    payload = read_json(path)
+    if payload.get("artifact_type") != "generation-manifest" or payload.get("artifact_schema_version") != "1":
+        raise ExecutorError("working generation has an unsupported manifest")
+    if payload.get("generation_id") != generation_id:
+        raise ExecutorError("working generation identity mismatch")
+    if not generation_candidate_root(output, generation_id).is_dir():
+        raise ExecutorError("working generation candidate root is missing")
+    return payload
+
+
+def update_generation_manifest(
+    output: Path,
+    generation_id: str,
+    stage: str,
+    transaction_id: str,
+    candidate_root: Path,
+) -> None:
+    directory = generation_dir(output, generation_id)
+    manifest = load_generation_manifest(output, generation_id)
+    manifest["status"] = "published" if stage == "finalization" else "staging"
+    manifest["last_committed_stage"] = stage
+    manifest["last_transaction"] = transaction_id
+    manifest["updated_at"] = now_utc()
+    manifest["candidate_manifest"] = manifest_summary(file_manifest(candidate_root))
+    if stage == "finalization":
+        manifest["published_source_commit"] = scalar_value(state_text(output), "source_commit")
+        manifest["published_knowledge_manifest"] = knowledge_manifest(output)
+    history_path = directory / "stage-history.json"
+    history = read_json(history_path)
+    stages = history.setdefault("stages", [])
+    stages.append({"stage": stage, "transaction_id": transaction_id, "committed_at": now_utc()})
+    atomic_write_json(history_path, history)
+    manifest["stage_history"] = stages
+    atomic_write_json(directory / "generation-manifest.json", manifest)
 
 
 def directory_set(root: Path) -> set[str]:
@@ -479,17 +660,22 @@ def render_template(name: str, repository: str, commit: str) -> str:
 def initial_state(repository: str, repository_path: Path, commit: str, output: Path) -> str:
     return (
         f"artifact_type: {yaml_scalar('analysis-state')}\n"
-        f"artifact_schema_version: {yaml_scalar('1')}\n"
+        f"artifact_schema_version: {yaml_scalar('2')}\n"
         f"workflow_schema_version: {yaml_scalar(WORKFLOW_SCHEMA_VERSION)}\n"
         f"repository: {yaml_scalar(repository)}\n"
         f"repository_path: {yaml_scalar(str(repository_path))}\n"
         f"source_commit: {yaml_scalar(commit)}\n"
         f"analysis_mode: {yaml_scalar('automatic')}\n"
-        f"phase: {yaml_scalar('inventory')}\n"
         f"current_stage: {yaml_scalar('inventory')}\n"
         f"stage_status: {yaml_scalar('pending')}\n"
+        "current_checkpoint: null\n"
+        f"checkpoint_status: {yaml_scalar('pending')}\n"
         "active_transaction: null\n"
         "last_committed_stage: null\n"
+        "working_generation_id: null\n"
+        "published_generation_id: null\n"
+        "published_source_commit: null\n"
+        f"formal_drift_status: {yaml_scalar('clean')}\n"
         f"migration_status: {yaml_scalar('not-required')}\n"
         f"synthesis_status: {yaml_scalar('pending')}\n"
         f"business_model_status: {yaml_scalar('pending')}\n"
@@ -523,11 +709,77 @@ def write_receipt(output: Path, sequence: int, stage: str, payload: dict[str, An
     path = receipts / f"{sequence:03d}-{stage}.json"
     payload = {
         "artifact_type": "stage-receipt",
-        "artifact_schema_version": "1",
+        "artifact_schema_version": "2",
         **payload,
     }
     atomic_write_json(path, payload)
     return path
+
+
+def checkpoint_path(tx_dir: Path) -> Path:
+    return tx_dir / "checkpoints.json"
+
+
+def initialize_checkpoints(tx_dir: Path, transaction_id: str, stage: str) -> dict[str, Any]:
+    names = STAGE_CHECKPOINTS[stage]
+    entries = [
+        {
+            "checkpoint_id": name,
+            "status": "in-progress" if index == 0 else "pending",
+            "reason": None,
+            "updated_at": now_utc() if index == 0 else None,
+        }
+        for index, name in enumerate(names)
+    ]
+    payload = {
+        "artifact_type": "checkpoint-ledger",
+        "artifact_schema_version": "1",
+        "transaction_id": transaction_id,
+        "stage": stage,
+        "checkpoints": entries,
+    }
+    atomic_write_json(checkpoint_path(tx_dir), payload)
+    return payload
+
+
+def load_checkpoints(tx_dir: Path, transaction_id: str, stage: str) -> dict[str, Any]:
+    payload = read_json(checkpoint_path(tx_dir))
+    if payload.get("artifact_type") != "checkpoint-ledger" or payload.get("artifact_schema_version") != "1":
+        raise ExecutorError("checkpoint ledger has an unsupported schema")
+    if payload.get("transaction_id") != transaction_id or payload.get("stage") != stage:
+        raise ExecutorError("checkpoint ledger identity mismatch")
+    entries = payload.get("checkpoints")
+    if not isinstance(entries, list) or [item.get("checkpoint_id") for item in entries if isinstance(item, dict)] != list(STAGE_CHECKPOINTS[stage]):
+        raise ExecutorError("checkpoint ledger does not match the stage checkpoint contract")
+    return payload
+
+
+def checkpoint_summary(payload: dict[str, Any]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for item in payload.get("checkpoints", []):
+        status = str(item.get("status"))
+        summary[status] = summary.get(status, 0) + 1
+    return summary
+
+
+def checkpoint_ledger_sha256(path: Path) -> str:
+    return sha256_file(path)
+
+
+def checkpoint_commit_gate(payload: dict[str, Any]) -> list[str]:
+    return [
+        str(item.get("checkpoint_id"))
+        for item in payload.get("checkpoints", [])
+        if item.get("status") not in TERMINAL_CHECKPOINT_STATUS
+    ]
+
+
+def skip_all_checkpoints(payload: dict[str, Any], reason: str) -> dict[str, Any]:
+    for item in payload.get("checkpoints", []):
+        item["status"] = "skipped"
+        item["reason"] = reason
+        item["updated_at"] = now_utc()
+    return payload
 
 
 def receipt_count(output: Path) -> int:
@@ -558,7 +810,14 @@ def committed_finalization_receipt(output: Path) -> Path | None:
             payload = read_json(path)
         except ExecutorError:
             continue
-        if payload.get("stage") == "finalization" and payload.get("result") == "committed":
+        if (
+            payload.get("artifact_type") == "stage-receipt"
+            and payload.get("artifact_schema_version") == "2"
+            and payload.get("stage") == "finalization"
+            and payload.get("result") == "committed"
+            and payload.get("promotion_scope") == "formal-pack"
+            and payload.get("formal_pack_published") is True
+        ):
             return path
     return None
 
@@ -617,6 +876,24 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(
             "bundled Artifact Schema and templates are out of sync: "
             + " | ".join(template_errors)
+        )
+    try:
+        contract_structure = load_api_contract_structure(
+            template_root() / "api-contract-structure.json"
+        )
+        contract_template = parse_markdown(
+            (template_root() / "api-contract-document-template.md").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ExecutorError(f"bundled API Contract structure contract is invalid: {exc}") from exc
+    contract_structure_errors = list(contract_template.issues)
+    contract_structure_errors.extend(
+        validate_api_contract_tables(contract_template, contract_structure)
+    )
+    if contract_structure_errors:
+        raise ExecutorError(
+            "API Contract template and structure contract are out of sync: "
+            + " | ".join(issue.message for issue in contract_structure_errors)
         )
     if not repo.is_dir():
         raise ExecutorError(f"repository directory does not exist: {repo}")
@@ -712,6 +989,28 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
     catalog = candidate / ".work" / "behavior-catalog.yaml"
     dossiers = candidate / ".work" / "behavior-dossiers"
     commands: list[list[str]] = []
+    publication_stages = {
+        "tech-publication",
+        "api-contract-publication",
+        "business-model",
+        "ba-publication",
+        "finalization",
+    }
+    if stage in publication_stages:
+        commands.append(
+            [
+                python,
+                str(scripts / "validate_markdown_structure.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+
+    def structurally_valid(document: Path) -> bool:
+        try:
+            return not parse_markdown(document.read_text(encoding="utf-8")).issues
+        except OSError:
+            return False
     if stage in {"tracing", "synthesis", "business-model", "finalization"}:
         command = [
             python,
@@ -734,6 +1033,8 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
 
     if stage in {"tech-publication", "api-contract-publication", "ba-publication", "finalization"}:
         for document in sorted((candidate / "tech-pack" / "behaviors").glob("*.md")):
+            if not structurally_valid(document):
+                continue
             command = [python, str(scripts / "validate_behavior_doc.py"), str(document), "--repo", str(repo)]
             if stage in {"tech-publication", "api-contract-publication"}:
                 command.append("--allow-missing-ba")
@@ -741,14 +1042,20 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
 
     if stage in {"api-contract-publication", "ba-publication", "finalization"}:
         for document in sorted((candidate / "tech-pack" / "contracts").glob("*.api-contract.md")):
+            if not structurally_valid(document):
+                continue
             commands.append(
                 [python, str(scripts / "validate_api_contract.py"), str(document), "--repo", str(repo)]
             )
 
     if stage in {"ba-publication", "finalization"}:
         for document in sorted((candidate / "ba-pack" / "journeys").glob("*.md")):
+            if not structurally_valid(document):
+                continue
             commands.append([python, str(scripts / "validate_ba_journey.py"), str(document)])
         for document in sorted((candidate / "ba-pack" / "scenarios").glob("*.md")):
+            if not structurally_valid(document):
+                continue
             commands.append([python, str(scripts / "validate_ba_scenario.py"), str(document)])
 
     if stage in {"api-contract-publication", "ba-publication", "finalization"}:
@@ -910,17 +1217,20 @@ def candidate_state_for_commit(
     upcoming = next_stage(stage)
     text = set_scalar(text, "last_committed_stage", stage)
     text = set_scalar(text, "active_transaction", None)
+    text = set_scalar(text, "current_checkpoint", None)
+    text = set_scalar(text, "checkpoint_status", "pending")
     if stage == "finalization":
         text = set_scalar(text, "current_stage", "completed")
         text = set_scalar(text, "stage_status", "committed")
-        text = set_scalar(text, "phase", "completed")
         text = set_scalar(text, "publication_status", "complete")
+        generation_id = scalar_value(text, "working_generation_id")
+        text = set_scalar(text, "published_generation_id", generation_id)
+        text = set_scalar(text, "published_source_commit", scalar_value(text, "source_commit"))
     else:
         text = set_scalar(text, "current_stage", upcoming)
         text = set_scalar(text, "stage_status", "pending")
-        text = set_scalar(text, "phase", phase_for_stage(upcoming))
-        if upcoming in {"tech-publication", "api-contract-publication", "business-model", "ba-publication", "finalization"}:
-            text = set_scalar(text, "publication_status", "in-progress")
+        if upcoming in {"tech-publication", "api-contract-publication", "business-model", "ba-publication", "finalization"} or stage == "synthesis":
+            text = set_scalar(text, "publication_status", "staging")
         else:
             text = set_scalar(text, "publication_status", "pending")
     return text
@@ -1038,14 +1348,23 @@ def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
         candidate_state_path = candidate / STATE_FILE
         if not candidate_state_path.is_file():
             raise ExecutorError("Migration Candidate has no analysis state")
-        add_artifact_metadata(candidate_state_path, "analysis-state", "1")
+        add_artifact_metadata(candidate_state_path, "analysis-state", "2")
         candidate_state = candidate_state_path.read_text(encoding="utf-8")
+        candidate_state = remove_scalar(candidate_state, "phase")
         candidate_state = set_scalar(candidate_state, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
         candidate_state = set_scalar(candidate_state, "repository_path", str(repo))
         candidate_state = set_scalar(candidate_state, "migration_status", "in-progress")
         candidate_state = set_scalar(candidate_state, "publication_status", "stale")
         candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
+        first_checkpoint = STAGE_CHECKPOINTS[MIGRATION_STAGE][0]
+        candidate_state = set_scalar(candidate_state, "current_checkpoint", first_checkpoint)
+        candidate_state = set_scalar(candidate_state, "checkpoint_status", "in-progress")
+        candidate_state = set_scalar(candidate_state, "working_generation_id", None)
+        candidate_state = set_scalar(candidate_state, "published_generation_id", None)
+        candidate_state = set_scalar(candidate_state, "published_source_commit", None)
+        candidate_state = set_scalar(candidate_state, "formal_drift_status", "clean")
         atomic_write_text(candidate_state_path, candidate_state)
+        initialize_checkpoints(tx_dir, transaction_id, MIGRATION_STAGE)
 
         transaction = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
@@ -1137,15 +1456,37 @@ def command_begin(args: argparse.Namespace) -> int:
     )
     tx_dir = transaction_dir(output, transaction_id)
     candidate = tx_dir / "candidate"
+    generation_id = scalar_value(formal_state, "working_generation_id")
+    generation_created = False
     try:
         tx_dir.mkdir(parents=True, exist_ok=False)
-        snapshot_copy(output, candidate)
+        baseline = tx_dir / "baseline"
+        snapshot_copy(output, baseline)
+        atomic_write_json(tx_dir / "baseline-manifest.json", knowledge_manifest(output))
+        source_root = output
+        if current_stage in GENERATION_STAGES:
+            if generation_id is None:
+                if current_stage != "synthesis":
+                    raise ExecutorError("a working generation must exist before this stage")
+                generation_id, source_root = create_generation(output, formal_state)
+                generation_created = True
+            else:
+                load_generation_manifest(output, generation_id)
+                source_root = generation_candidate_root(output, generation_id)
+        snapshot_copy(source_root, candidate)
         automatic_actions: list[str] = []
         candidate_state = (candidate / STATE_FILE).read_text(encoding="utf-8")
         candidate_state = set_scalar(candidate_state, "stage_status", "in-progress")
         candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
-        candidate_state = set_scalar(candidate_state, "phase", phase_for_stage(current_stage))
+        first_checkpoint = STAGE_CHECKPOINTS[current_stage][0]
+        candidate_state = set_scalar(candidate_state, "current_checkpoint", first_checkpoint)
+        candidate_state = set_scalar(candidate_state, "checkpoint_status", "in-progress")
+        candidate_state = set_scalar(candidate_state, "working_generation_id", generation_id)
+        candidate_state = set_scalar(candidate_state, "formal_drift_status", "clean")
+        if current_stage in GENERATION_STAGES:
+            candidate_state = set_scalar(candidate_state, "publication_status", "staging")
         atomic_write_text(candidate / STATE_FILE, candidate_state)
+        initialize_checkpoints(tx_dir, transaction_id, current_stage)
         transaction = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
             "transaction_id": transaction_id,
@@ -1155,6 +1496,10 @@ def command_begin(args: argparse.Namespace) -> int:
             "source_commit": commit,
             "output": str(output),
             "candidate": str(candidate),
+            "baseline": str(baseline),
+            "generation_id": generation_id,
+            "generation_created": generation_created,
+            "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "created_at": now_utc(),
             "automatic_actions": automatic_actions,
         }
@@ -1166,11 +1511,18 @@ def command_begin(args: argparse.Namespace) -> int:
         )
         formal_state = set_scalar(formal_state, "stage_status", "in-progress")
         formal_state = set_scalar(formal_state, "active_transaction", transaction_id)
-        formal_state = set_scalar(formal_state, "phase", phase_for_stage(current_stage))
+        formal_state = set_scalar(formal_state, "current_checkpoint", first_checkpoint)
+        formal_state = set_scalar(formal_state, "checkpoint_status", "in-progress")
+        formal_state = set_scalar(formal_state, "working_generation_id", generation_id)
+        formal_state = set_scalar(formal_state, "formal_drift_status", "clean")
+        if current_stage in GENERATION_STAGES:
+            formal_state = set_scalar(formal_state, "publication_status", "staging")
         atomic_write_text(state_path(output), formal_state)
     except Exception:
         if tx_dir.exists():
             shutil.rmtree(tx_dir, ignore_errors=True)
+        if generation_created and generation_id:
+            shutil.rmtree(generation_dir(output, generation_id), ignore_errors=True)
         release_lock(output, transaction_id)
         raise
     emit(
@@ -1179,7 +1531,86 @@ def command_begin(args: argparse.Namespace) -> int:
             "stage": current_stage,
             "transaction_id": transaction_id,
             "candidate": str(candidate),
+            "generation_id": generation_id,
+            "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "instruction": "write every stage artifact under candidate, then run commit",
+        },
+        args.json,
+    )
+    return 0
+
+
+def command_checkpoint(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    tx_dir, transaction, candidate = load_transaction(output, args.transaction)
+    stage = str(transaction.get("stage"))
+    if stage == MIGRATION_STAGE:
+        formal = state_text(output)
+    else:
+        formal = state_text(output)
+        if scalar_value(formal, "active_transaction") != args.transaction:
+            raise ExecutorError("analysis state does not own this transaction")
+    ledger = load_checkpoints(tx_dir, args.transaction, stage)
+    entries = ledger["checkpoints"]
+    target = next((item for item in entries if item["checkpoint_id"] == args.checkpoint), None)
+    if target is None:
+        raise ExecutorError(f"checkpoint is not valid for {stage}: {args.checkpoint}")
+    if args.status not in ALLOWED_CHECKPOINT_STATUS - {"pending"}:
+        raise ExecutorError("checkpoint status cannot be set to pending")
+    if args.status in {"skipped", "blocked", "failed"} and not (args.reason or "").strip():
+        raise ExecutorError(f"checkpoint status {args.status} requires --reason")
+    first_open = next(
+        (item for item in entries if item.get("status") in {"pending", "in-progress", "failed"}),
+        entries[-1],
+    )
+    if target is not first_open and target.get("status") not in TERMINAL_CHECKPOINT_STATUS:
+        raise ExecutorError(f"checkpoint order violation; current checkpoint is {first_open['checkpoint_id']}")
+
+    target["status"] = args.status
+    target["reason"] = args.reason
+    target["updated_at"] = now_utc()
+    if args.status in TERMINAL_CHECKPOINT_STATUS:
+        target_index = entries.index(target)
+        next_item = next(
+            (item for item in entries[target_index + 1 :] if item.get("status") == "pending"),
+            None,
+        )
+        if next_item is not None:
+            next_item["status"] = "in-progress"
+            next_item["updated_at"] = now_utc()
+            current_id = next_item["checkpoint_id"]
+            current_status = "in-progress"
+        else:
+            current_id = target["checkpoint_id"]
+            current_status = target["status"]
+    else:
+        current_id = target["checkpoint_id"]
+        current_status = target["status"]
+    atomic_write_json(checkpoint_path(tx_dir), ledger)
+
+    candidate_state_path = candidate / STATE_FILE
+    candidate_state = candidate_state_path.read_text(encoding="utf-8")
+    candidate_state = set_scalar(candidate_state, "current_checkpoint", current_id)
+    candidate_state = set_scalar(candidate_state, "checkpoint_status", current_status)
+    candidate_state = set_scalar(
+        candidate_state,
+        "stage_status",
+        "failed" if args.status == "failed" else "in-progress",
+    )
+    atomic_write_text(candidate_state_path, candidate_state)
+    if stage != MIGRATION_STAGE:
+        formal = set_scalar(formal, "current_checkpoint", current_id)
+        formal = set_scalar(formal, "checkpoint_status", current_status)
+        formal = set_scalar(formal, "stage_status", "failed" if args.status == "failed" else "in-progress")
+        atomic_write_text(state_path(output), formal)
+    emit(
+        {
+            "result": "checkpoint-updated",
+            "stage": stage,
+            "checkpoint": args.checkpoint,
+            "checkpoint_status": args.status,
+            "current_checkpoint": current_id,
+            "summary": checkpoint_summary(ledger),
         },
         args.json,
     )
@@ -1192,7 +1623,12 @@ def load_transaction(output: Path, transaction_id: str) -> tuple[Path, dict[str,
     if transaction.get("transaction_id") != transaction_id:
         raise ExecutorError("transaction identity mismatch")
     candidate = Path(str(transaction.get("candidate", ""))).resolve()
-    if candidate != (tx_dir / "candidate").resolve() or not candidate.is_dir():
+    generation_move_in_progress = (
+        transaction.get("status") == "generation-promoting" and not candidate.exists()
+    )
+    if candidate != (tx_dir / "candidate").resolve() or (
+        not candidate.is_dir() and not generation_move_in_progress
+    ):
         raise ExecutorError("transaction candidate is missing or outside its transaction")
     return tx_dir, transaction, candidate
 
@@ -1440,11 +1876,21 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
                 "--skip-artifact-manifest",
             ]
         )
+    if stage == "finalization":
+        commands.insert(
+            0,
+            [
+                sys.executable,
+                str(scripts / "validate_markdown_structure.py"),
+                str(output),
+                "--json",
+            ],
+        )
     return [run_validator(command, output) for command in commands]
 
 
 def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return the last structured Pack validation result for a stage Receipt."""
+    """Merge structured domain summaries without treating unavailable indexes as empty."""
     summary: dict[str, Any] = {
         "validator_domain_statuses": {},
         "primary_error_count": 0,
@@ -1452,21 +1898,23 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "suppressed_error_count": 0,
     }
     for result in results:
-        command = [str(item) for item in result.get("command", [])]
-        if not any(Path(item).name == "validate_pack_links.py" for item in command):
-            continue
         try:
             payload = json.loads(result.get("stdout", ""))
         except (TypeError, json.JSONDecodeError):
             continue
         if not isinstance(payload, dict):
             continue
-        summary = {
-            "validator_domain_statuses": payload.get("domain_statuses", {}),
-            "primary_error_count": payload.get("primary_errors", 0),
-            "skipped_group_count": payload.get("skipped_validation_groups", 0),
-            "suppressed_error_count": payload.get("suppressed_row_errors", 0),
-        }
+        domain_statuses = payload.get("domain_statuses", {})
+        if isinstance(domain_statuses, dict):
+            summary["validator_domain_statuses"].update(domain_statuses)
+        for source_key, target_key in (
+            ("primary_errors", "primary_error_count"),
+            ("skipped_validation_groups", "skipped_group_count"),
+            ("suppressed_row_errors", "suppressed_error_count"),
+        ):
+            value = payload.get(source_key, 0)
+            if isinstance(value, int):
+                summary[target_key] += value
     return summary
 
 
@@ -1520,8 +1968,9 @@ def _finalize_migration_candidate_state(
     candidate: Path, plan: dict[str, Any], repo: Path
 ) -> str:
     path = candidate / STATE_FILE
-    add_artifact_metadata(path, "analysis-state", "1")
+    add_artifact_metadata(path, "analysis-state", "2")
     text = path.read_text(encoding="utf-8")
+    text = remove_scalar(text, "phase")
     target = str(plan["resume_stage_after_migration"])
     text = set_scalar(text, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
     text = set_scalar(text, "repository_path", str(repo))
@@ -1529,7 +1978,12 @@ def _finalize_migration_candidate_state(
     text = set_scalar(text, "stage_status", "pending")
     text = set_scalar(text, "active_transaction", None)
     text = set_scalar(text, "last_committed_stage", previous_stage(target))
-    text = set_scalar(text, "phase", phase_for_stage(target))
+    text = set_scalar(text, "current_checkpoint", None)
+    text = set_scalar(text, "checkpoint_status", "pending")
+    text = set_scalar(text, "working_generation_id", None)
+    text = set_scalar(text, "published_generation_id", None)
+    text = set_scalar(text, "published_source_commit", None)
+    text = set_scalar(text, "formal_drift_status", "clean")
     text = set_scalar(text, "migration_status", "committed")
     target_index = STAGE_INDEX[target]
     if target_index <= STAGE_INDEX["synthesis"]:
@@ -1647,6 +2101,12 @@ def command_commit_migration(
 ) -> int:
     if args.skip or args.semantic_result is not None:
         raise ExecutorError("Migration cannot use --skip or --semantic-result")
+    checkpoints = load_checkpoints(tx_dir, args.transaction, MIGRATION_STAGE)
+    incomplete_checkpoints = checkpoint_commit_gate(checkpoints)
+    if incomplete_checkpoints:
+        raise ExecutorError(
+            "migration has incomplete checkpoints: " + ", ".join(incomplete_checkpoints)
+        )
     lock = read_json(lock_path(output)) if lock_path(output).is_file() else {}
     if lock.get("transaction_id") != args.transaction or lock.get("stage") != MIGRATION_STAGE:
         raise ExecutorError("migration execution lock does not own this transaction")
@@ -1728,6 +2188,8 @@ def command_commit_migration(
             "directory_changes": directories,
             "started_at": transaction.get("created_at"),
             "completed_at": now_utc(),
+            "checkpoint_summary": checkpoint_summary(checkpoints),
+            "checkpoint_ledger_sha256": checkpoint_ledger_sha256(checkpoint_path(tx_dir)),
             "validators": [
                 {
                     "group": "artifact-schema-and-manifest",
@@ -1791,6 +2253,182 @@ def command_commit_migration(
     return 0
 
 
+def commit_generation_stage(
+    *,
+    output: Path,
+    tx_dir: Path,
+    transaction: dict[str, Any],
+    candidate: Path,
+    candidate_state: str,
+    stage: str,
+    repo: Path,
+    commit: str,
+    registry: Any,
+    invalidated: list[dict[str, Any]],
+    validators: list[dict[str, Any]],
+    checkpoints: dict[str, Any],
+    skipped: bool,
+    skip_reason: str | None,
+    as_json: bool,
+) -> int:
+    generation_id = str(transaction.get("generation_id") or "")
+    if not generation_id:
+        raise ExecutorError(f"stage {stage} has no working generation")
+    current_root = generation_candidate_root(output, generation_id)
+    load_generation_manifest(output, generation_id)
+    if not current_root.is_dir():
+        raise ExecutorError("working generation root is missing")
+
+    sequence = receipt_count(output)
+    input_manifest = file_manifest(current_root)
+    diff = manifest_diff(input_manifest, file_manifest(candidate))
+    directories = directory_diff(current_root, candidate)
+    validation_summary = pack_validation_summary(validators)
+    receipt_payload = {
+        "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+        "artifact_schema_registry_version": registry.registry_version,
+        "repository_register_artifact_schema_version": scalar_value(
+            (candidate / ".work" / "repository-register.md").read_text(encoding="utf-8"),
+            "artifact_schema_version",
+        ),
+        **validation_summary,
+        "transaction_id": transaction["transaction_id"],
+        "stage": stage,
+        "stage_result": "skipped" if skipped else "committed",
+        "skip_reason": skip_reason if skipped else None,
+        "repository": str(repo),
+        "source_commit": commit,
+        "generation_id": generation_id,
+        "promotion_scope": "generation",
+        "formal_pack_published": False,
+        "started_at": transaction.get("created_at"),
+        "completed_at": now_utc(),
+        "checkpoint_summary": checkpoint_summary(checkpoints),
+        "checkpoint_ledger_sha256": checkpoint_ledger_sha256(checkpoint_path(tx_dir)),
+        "baseline_manifest": manifest_summary(read_json(tx_dir / "baseline-manifest.json")),
+        "candidate_manifest": manifest_summary(file_manifest(candidate)),
+        "input_manifest": manifest_summary(input_manifest),
+        "output_manifest": manifest_summary(file_manifest(candidate)),
+        "changes": diff,
+        "directory_changes": directories,
+        "archive": None,
+        "archive_summary": None,
+        "validators": validators,
+        "result": "committed",
+    }
+    candidate_receipt = write_receipt(candidate, sequence, stage, receipt_payload)
+    write_artifact_manifest(
+        candidate,
+        registry,
+        str(repo),
+        commit,
+        stage,
+        transaction["transaction_id"],
+        invalidated,
+    )
+    candidate_errors = validate_artifact_manifest(candidate, registry)
+    if candidate_errors:
+        raise ExecutorError(
+            "Generation Candidate manifest is invalid: " + " | ".join(candidate_errors)
+        )
+
+    previous = generation_dir(output, generation_id) / f"previous-{transaction['transaction_id']}"
+    formal_receipt = execution_root(output) / "receipts" / candidate_receipt.name
+    formal_pre_state = (tx_dir / "pre-state.yaml").read_text(encoding="utf-8")
+    journal_path = tx_dir / "promotion-journal.json"
+    journal = {
+        "transaction_id": transaction["transaction_id"],
+        "stage": stage,
+        "phase": "generation-promoting",
+        "generation_id": generation_id,
+        "current_root": str(current_root),
+        "previous_root": str(previous),
+        "candidate": str(candidate),
+        "formal_receipt": str(formal_receipt),
+        "operations": [],
+        "updated_at": now_utc(),
+    }
+    transaction["status"] = "generation-promoting"
+    atomic_write_json(tx_dir / "transaction.json", transaction)
+    atomic_write_json(journal_path, journal)
+    try:
+        os.replace(current_root, previous)
+        journal["phase"] = "generation-old-moved"
+        journal["updated_at"] = now_utc()
+        atomic_write_json(journal_path, journal)
+        os.replace(candidate, current_root)
+        journal["phase"] = "generation-promoted"
+        journal["updated_at"] = now_utc()
+        atomic_write_json(journal_path, journal)
+        update_generation_manifest(
+            output, generation_id, stage, transaction["transaction_id"], current_root
+        )
+        formal_receipt.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(current_root / candidate_receipt.relative_to(candidate), formal_receipt)
+        atomic_write_text(state_path(output), candidate_state)
+        write_artifact_manifest(
+            output,
+            registry,
+            str(repo),
+            commit,
+            stage,
+            transaction["transaction_id"],
+            invalidated,
+        )
+        manifest_errors = validate_artifact_manifest(output, registry)
+        if manifest_errors:
+            raise ExecutorError(
+                "formal operational manifest is invalid after Generation commit: "
+                + " | ".join(manifest_errors)
+            )
+        journal["phase"] = "generation-committed"
+        journal["updated_at"] = now_utc()
+        atomic_write_json(journal_path, journal)
+        shutil.rmtree(previous)
+        release_lock(output, transaction["transaction_id"])
+        shutil.rmtree(tx_dir)
+    except Exception:
+        if candidate.exists():
+            shutil.rmtree(candidate, ignore_errors=True)
+        if current_root.exists():
+            os.replace(current_root, candidate)
+        if previous.exists():
+            os.replace(previous, current_root)
+        if formal_receipt.exists():
+            formal_receipt.unlink()
+        atomic_write_text(state_path(output), formal_pre_state)
+        write_artifact_manifest(
+            output,
+            registry,
+            str(repo),
+            commit,
+            previous_stage(stage) or "init",
+            None,
+            invalidated,
+        )
+        transaction["status"] = "failed"
+        atomic_write_json(tx_dir / "transaction.json", transaction)
+        journal["phase"] = "rolled-back-generation"
+        journal["updated_at"] = now_utc()
+        atomic_write_json(journal_path, journal)
+        raise
+
+    emit(
+        {
+            "result": "skipped" if skipped else "committed",
+            "stage": stage,
+            "transaction_id": transaction["transaction_id"],
+            "generation_id": generation_id,
+            "promotion_scope": "generation",
+            "formal_pack_published": False,
+            "next_stage": scalar_value(candidate_state, "current_stage"),
+            "receipt": str(formal_receipt),
+        },
+        as_json,
+    )
+    return 0
+
+
 def command_commit(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
     tx_dir, transaction, candidate = load_transaction(output, args.transaction)
@@ -1801,8 +2439,50 @@ def command_commit(args: argparse.Namespace) -> int:
     if scalar_value(formal_text, "active_transaction") != args.transaction:
         raise ExecutorError("analysis state does not own this transaction")
     repo, commit = verify_repo_and_commit(formal_text)
+    baseline_manifest_path = tx_dir / "baseline-manifest.json"
+    baseline_root = tx_dir / "baseline"
+    if not baseline_manifest_path.is_file() or not baseline_root.is_dir():
+        raise ExecutorError("transaction baseline is missing")
+    expected_formal = read_json(baseline_manifest_path)
+    if knowledge_manifest(output) != expected_formal:
+        transaction["status"] = "failed"
+        transaction["last_attempt_at"] = now_utc()
+        try:
+            drifted = restore_formal_drift(output, baseline_root, expected_formal)
+        except Exception as exc:
+            formal_text = set_scalar(formal_text, "stage_status", "failed")
+            formal_text = set_scalar(formal_text, "formal_drift_status", "recovery-required")
+            atomic_write_text(state_path(output), formal_text)
+            transaction["errors"] = [f"FORMAL-DRIFT-RECOVERY-REQUIRED: {exc}"]
+            atomic_write_json(tx_dir / "transaction.json", transaction)
+            raise ExecutorError(f"formal artifact drift could not be restored: {exc}") from exc
+        formal_text = set_scalar(formal_text, "stage_status", "failed")
+        formal_text = set_scalar(formal_text, "formal_drift_status", "restored")
+        atomic_write_text(state_path(output), formal_text)
+        transaction["errors"] = ["FORMAL-DRIFT-RESTORED: " + ", ".join(drifted)]
+        atomic_write_json(tx_dir / "transaction.json", transaction)
+        emit(
+            {
+                "result": "failed",
+                "stage": stage,
+                "transaction_id": args.transaction,
+                "errors": transaction["errors"],
+                "candidate": str(candidate),
+                "formal_drift_status": "restored",
+            },
+            args.json,
+        )
+        return 1
+    checkpoints = load_checkpoints(tx_dir, args.transaction, stage)
     if args.skip:
         stage_skip_allowed(stage, candidate, args.reason)
+        checkpoints = skip_all_checkpoints(checkpoints, str(args.reason))
+        atomic_write_json(checkpoint_path(tx_dir), checkpoints)
+    incomplete_checkpoints = checkpoint_commit_gate(checkpoints)
+    if incomplete_checkpoints:
+        raise ExecutorError(
+            f"stage {stage} has incomplete checkpoints: " + ", ".join(incomplete_checkpoints)
+        )
     candidate_state_path = candidate / STATE_FILE
     candidate_state = candidate_state_path.read_text(encoding="utf-8")
     candidate_state = candidate_state_for_commit(
@@ -1811,6 +2491,7 @@ def command_commit(args: argparse.Namespace) -> int:
         args.semantic_result,
         args.skip,
     )
+    candidate_state = set_scalar(candidate_state, "formal_drift_status", "clean")
     atomic_write_text(candidate_state_path, candidate_state)
 
     try:
@@ -1881,6 +2562,25 @@ def command_commit(args: argparse.Namespace) -> int:
         )
         return 1
 
+    if stage in GENERATION_STAGES and stage != "finalization":
+        return commit_generation_stage(
+            output=output,
+            tx_dir=tx_dir,
+            transaction=transaction,
+            candidate=candidate,
+            candidate_state=candidate_state,
+            stage=stage,
+            repo=repo,
+            commit=commit,
+            registry=registry,
+            invalidated=invalidated if isinstance(invalidated, list) else [],
+            validators=validators,
+            checkpoints=checkpoints,
+            skipped=args.skip,
+            skip_reason=args.reason,
+            as_json=args.json,
+        )
+
     current_manifest = file_manifest(output)
     candidate_manifest = file_manifest(candidate)
     diff = manifest_diff(current_manifest, candidate_manifest)
@@ -1936,8 +2636,15 @@ def command_commit(args: argparse.Namespace) -> int:
             "skip_reason": args.reason if args.skip else None,
             "repository": str(repo),
             "source_commit": commit,
+            "generation_id": transaction.get("generation_id"),
+            "promotion_scope": "formal-pack",
+            "formal_pack_published": stage == "finalization",
             "started_at": transaction.get("created_at"),
             "completed_at": now_utc(),
+            "checkpoint_summary": checkpoint_summary(checkpoints),
+            "checkpoint_ledger_sha256": checkpoint_ledger_sha256(checkpoint_path(tx_dir)),
+            "baseline_manifest": manifest_summary(expected_formal),
+            "candidate_manifest": manifest_summary(candidate_manifest),
             "input_manifest": manifest_summary(current_manifest),
             "output_manifest": manifest_summary(candidate_manifest),
             "changes": diff,
@@ -1947,7 +2654,6 @@ def command_commit(args: argparse.Namespace) -> int:
             "validators": validators + post_results,
             "result": "committed",
         }
-        receipt_path = write_receipt(output, sequence, stage, receipt_payload)
         atomic_write_text(state_path(output), candidate_state)
         write_artifact_manifest(
             output,
@@ -1964,7 +2670,55 @@ def command_commit(args: argparse.Namespace) -> int:
                 "post-commit Artifact Manifest validation failed: "
                 + " | ".join(manifest_errors)
             )
+        if stage == "finalization" and transaction.get("generation_id"):
+            generation_manifest_path = generation_dir(
+                output, str(transaction["generation_id"])
+            ) / "generation-manifest.json"
+            shutil.copy2(
+                generation_manifest_path,
+                tx_dir / "generation-manifest-before-finalization.json",
+            )
+            update_generation_manifest(
+                output,
+                str(transaction["generation_id"]),
+                stage,
+                args.transaction,
+                generation_candidate_root(output, str(transaction["generation_id"])),
+            )
         state_check = run_validator(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parent / "validate_analysis_state.py"),
+                str(state_path(output)),
+                "--repo",
+                str(repo),
+                "--catalog",
+                str(output / ".work" / "behavior-catalog.yaml"),
+                "--dossiers-dir",
+                str(output / ".work" / "behavior-dossiers"),
+                "--allow-missing-final-receipt",
+            ],
+            output,
+        )
+        if state_check["exit_code"] != 0:
+            raise ExecutorError("pre-receipt state validation failed")
+        receipt_path = write_receipt(output, sequence, stage, receipt_payload)
+        write_artifact_manifest(
+            output,
+            registry,
+            str(repo),
+            commit,
+            stage,
+            args.transaction,
+            invalidated if isinstance(invalidated, list) else [],
+        )
+        manifest_errors = validate_artifact_manifest(output, registry)
+        if manifest_errors:
+            raise ExecutorError(
+                "post-receipt Artifact Manifest validation failed: "
+                + " | ".join(manifest_errors)
+            )
+        final_state_check = run_validator(
             [
                 sys.executable,
                 str(Path(__file__).resolve().parent / "validate_analysis_state.py"),
@@ -1978,8 +2732,8 @@ def command_commit(args: argparse.Namespace) -> int:
             ],
             output,
         )
-        if state_check["exit_code"] != 0:
-            raise ExecutorError("post-commit state validation failed")
+        if final_state_check["exit_code"] != 0:
+            raise ExecutorError("post-receipt state validation failed")
         commit_recorded = True
         journal["phase"] = "committed"
         journal["receipt"] = str(receipt_path)
@@ -1997,6 +2751,13 @@ def command_commit(args: argparse.Namespace) -> int:
             pass
         elif journal is not None and journal.get("phase") == "content-promoted":
             rollback_promotion(output, archive, journal)
+            generation_backup = tx_dir / "generation-manifest-before-finalization.json"
+            generation_id = transaction.get("generation_id")
+            if generation_id and generation_backup.is_file():
+                shutil.copy2(
+                    generation_backup,
+                    generation_dir(output, str(generation_id)) / "generation-manifest.json",
+                )
             journal["phase"] = "rolled-back-after-commit-error"
             journal["updated_at"] = now_utc()
             atomic_write_json(journal_path, journal)
@@ -2060,12 +2821,24 @@ def command_abort(args: argparse.Namespace) -> int:
         "rolled-back-after-state-validation",
         "rolled-back-after-commit-error",
         "rolled-back-by-recover",
+        "rolled-back-generation",
     }:
         raise ExecutorError("transaction has promotion work; run recover instead of abort")
     if not is_migration:
-        formal = set_scalar(formal, "stage_status", "pending")
-        formal = set_scalar(formal, "active_transaction", None)
+        pre_state = tx_dir / "pre-state.yaml"
+        if pre_state.is_file():
+            formal = pre_state.read_text(encoding="utf-8")
+        else:
+            formal = set_scalar(formal, "stage_status", "pending")
+            formal = set_scalar(formal, "active_transaction", None)
+            formal = set_scalar(formal, "current_checkpoint", None)
+            formal = set_scalar(formal, "checkpoint_status", "pending")
         atomic_write_text(state_path(output), formal)
+        if transaction.get("generation_created") and transaction.get("generation_id"):
+            shutil.rmtree(
+                generation_dir(output, str(transaction["generation_id"])),
+                ignore_errors=True,
+            )
     release_lock(output, args.transaction)
     shutil.rmtree(tx_dir)
     emit(
@@ -2086,14 +2859,21 @@ def status_payload(output: Path) -> dict[str, Any]:
         "repository": scalar_value(text, "repository"),
         "repository_path": scalar_value(text, "repository_path"),
         "source_commit": scalar_value(text, "source_commit"),
-        "phase": scalar_value(text, "phase"),
         "current_stage": scalar_value(text, "current_stage"),
         "stage_status": scalar_value(text, "stage_status"),
+        "current_checkpoint": scalar_value(text, "current_checkpoint"),
+        "checkpoint_status": scalar_value(text, "checkpoint_status"),
         "active_transaction": scalar_value(text, "active_transaction"),
         "last_committed_stage": scalar_value(text, "last_committed_stage"),
         "synthesis_status": scalar_value(text, "synthesis_status"),
         "business_model_status": scalar_value(text, "business_model_status"),
         "publication_status": scalar_value(text, "publication_status"),
+        "working_generation_id": scalar_value(text, "working_generation_id"),
+        "working_generation_status": "none",
+        "published_generation_id": scalar_value(text, "published_generation_id"),
+        "published_source_commit": scalar_value(text, "published_source_commit"),
+        "formal_drift_status": scalar_value(text, "formal_drift_status") or "unknown",
+        "release_readiness": "not-ready",
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
@@ -2105,6 +2885,8 @@ def status_payload(output: Path) -> dict[str, Any]:
         "transaction": None,
         "candidate_diff": None,
         "candidate_directory_diff": None,
+        "checkpoint_summary": {},
+        "checkpoints": [],
         "requirements": [],
         "integrity_errors": [],
         "validator_summary": [],
@@ -2147,6 +2929,36 @@ def status_payload(output: Path) -> dict[str, Any]:
         payload["artifact_manifest_status"] = "invalid"
         payload["artifact_manifest_errors"] = [str(exc)]
 
+    working_generation_id = payload.get("working_generation_id")
+    if working_generation_id:
+        try:
+            generation = load_generation_manifest(output, str(working_generation_id))
+            payload["working_generation_status"] = generation.get("status", "unknown")
+            payload["working_generation_manifest"] = generation
+            if generation.get("status") == "published":
+                published_manifest = generation.get("published_knowledge_manifest")
+                if not isinstance(published_manifest, dict):
+                    payload["integrity_errors"].append(
+                        "Published Generation has no knowledge manifest"
+                    )
+                elif published_manifest != knowledge_manifest(output):
+                    payload["integrity_errors"].append(
+                        "Published Generation does not match the formal knowledge Pack"
+                    )
+                elif payload.get("published_generation_id") != working_generation_id:
+                    payload["integrity_errors"].append(
+                        "published_generation_id does not match working_generation_id"
+                    )
+                elif generation.get("published_source_commit") != payload.get("published_source_commit"):
+                    payload["integrity_errors"].append(
+                        "Published Generation source commit does not match analysis state"
+                    )
+                else:
+                    payload["release_readiness"] = "ready"
+        except ExecutorError as exc:
+            payload["working_generation_status"] = "invalid"
+            payload["integrity_errors"].append(f"Working Generation invalid: {exc}")
+
     active = payload["active_transaction"]
     if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
         active = payload["lock"].get("transaction_id")
@@ -2155,9 +2967,21 @@ def status_payload(output: Path) -> dict[str, Any]:
             tx_dir, transaction, candidate = load_transaction(output, str(active))
             payload["transaction"] = transaction
             payload["candidate_manifest"] = manifest_summary(file_manifest(candidate))
-            payload["candidate_diff"] = manifest_diff(file_manifest(output), file_manifest(candidate))
-            payload["candidate_directory_diff"] = directory_diff(output, candidate)
+            comparison_root = output
+            transaction_generation = transaction.get("generation_id")
+            if transaction_generation:
+                candidate_root = generation_candidate_root(output, str(transaction_generation))
+                if candidate_root.is_dir():
+                    comparison_root = candidate_root
+            payload["candidate_diff"] = manifest_diff(file_manifest(comparison_root), file_manifest(candidate))
+            payload["candidate_directory_diff"] = directory_diff(comparison_root, candidate)
             stage = str(transaction.get("stage"))
+            try:
+                ledger = load_checkpoints(tx_dir, str(active), stage)
+                payload["checkpoint_summary"] = checkpoint_summary(ledger)
+                payload["checkpoints"] = ledger.get("checkpoints", [])
+            except ExecutorError as exc:
+                payload["integrity_errors"].append(f"Checkpoint ledger invalid: {exc}")
             try:
                 repo, _commit = verify_repo_and_commit(text)
                 requirements, status_validators = stage_gates(stage, candidate, repo)
@@ -2310,6 +3134,82 @@ def command_resume(args: argparse.Namespace) -> int:
     return 1 if plan["status"] == "blocked" else 0
 
 
+def rollback_generation_transaction(
+    output: Path,
+    tx_dir: Path,
+    transaction: dict[str, Any],
+    journal: dict[str, Any],
+    state_text_value: str,
+) -> None:
+    candidate = tx_dir / "candidate"
+    current_root = Path(str(journal.get("current_root", "")))
+    previous = Path(str(journal.get("previous_root", "")))
+    if current_root.is_dir() and not candidate.exists():
+        os.replace(current_root, candidate)
+    if previous.is_dir():
+        if current_root.exists():
+            shutil.rmtree(current_root)
+        os.replace(previous, current_root)
+    formal_receipt_value = journal.get("formal_receipt")
+    if formal_receipt_value:
+        formal_receipt = Path(str(formal_receipt_value))
+        if formal_receipt.is_file():
+            formal_receipt.unlink()
+    pre_state = tx_dir / "pre-state.yaml"
+    recovered = pre_state.read_text(encoding="utf-8") if pre_state.is_file() else state_text_value
+    recovered = set_scalar(recovered, "stage_status", "failed")
+    recovered = set_scalar(recovered, "active_transaction", str(transaction["transaction_id"]))
+    current_checkpoint = STAGE_CHECKPOINTS[str(transaction["stage"])][-1]
+    recovered = set_scalar(recovered, "current_checkpoint", current_checkpoint)
+    recovered = set_scalar(recovered, "checkpoint_status", "failed")
+    atomic_write_text(state_path(output), recovered)
+    transaction["status"] = "failed"
+    atomic_write_json(tx_dir / "transaction.json", transaction)
+    journal["phase"] = "rolled-back-generation"
+    journal["updated_at"] = now_utc()
+    atomic_write_json(tx_dir / "promotion-journal.json", journal)
+
+
+def restore_finalization_generation_manifest(
+    output: Path, tx_dir: Path, transaction: dict[str, Any]
+) -> None:
+    generation_id = transaction.get("generation_id")
+    backup = tx_dir / "generation-manifest-before-finalization.json"
+    if not generation_id or not backup.is_file():
+        return
+    destination = generation_dir(output, str(generation_id)) / "generation-manifest.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(backup, destination)
+
+
+def repair_operational_manifest_after_receipt(
+    output: Path, transaction: dict[str, Any]
+) -> None:
+    registry = load_registry()
+    repo = Path(str(transaction.get("repository", ""))).expanduser().resolve()
+    commit = str(transaction.get("source_commit") or "unknown")
+    invalidated: list[dict[str, Any]] = []
+    manifest_path = output / ".work" / "artifact-manifest.json"
+    if manifest_path.is_file():
+        observed = read_json(manifest_path).get("invalidated_artifacts", [])
+        if isinstance(observed, list):
+            invalidated = [item for item in observed if isinstance(item, dict)]
+    write_artifact_manifest(
+        output,
+        registry,
+        str(repo),
+        commit,
+        str(transaction.get("stage")),
+        str(transaction.get("transaction_id")),
+        invalidated,
+    )
+    errors = validate_artifact_manifest(output, registry)
+    if errors:
+        raise ExecutorError(
+            "cannot recover the operational Artifact Manifest: " + " | ".join(errors)
+        )
+
+
 def command_recover(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
     text = state_text(output)
@@ -2320,7 +3220,32 @@ def command_recover(args: argparse.Namespace) -> int:
             transaction_id = str(lock.get("transaction_id", ""))
             tx_dir = transaction_dir(output, transaction_id)
             receipt = receipt_for_transaction(output, transaction_id)
+            if receipt is not None and tx_dir.is_dir():
+                orphan_transaction = read_json(tx_dir / "transaction.json")
+                orphan_journal = read_json(tx_dir / "promotion-journal.json")
+                if orphan_journal.get("phase") in {
+                    "generation-promoting",
+                    "generation-old-moved",
+                    "generation-promoted",
+                }:
+                    rollback_generation_transaction(
+                        output, tx_dir, orphan_transaction, orphan_journal, text
+                    )
+                    emit(
+                        {
+                            "result": "rolled-back-orphan-generation",
+                            "transaction_id": transaction_id,
+                        },
+                        args.json,
+                    )
+                    return 0
             if receipt is not None:
+                recovery_record = (
+                    orphan_transaction
+                    if tx_dir.is_dir()
+                    else read_json(receipt)
+                )
+                repair_operational_manifest_after_receipt(output, recovery_record)
                 lock_path(output).unlink()
                 if tx_dir.exists():
                     shutil.rmtree(tx_dir)
@@ -2336,6 +3261,21 @@ def command_recover(args: argparse.Namespace) -> int:
             if tx_dir.is_dir():
                 transaction = read_json(tx_dir / "transaction.json")
                 journal = read_json(tx_dir / "promotion-journal.json")
+                if journal.get("phase") in {
+                    "generation-promoting",
+                    "generation-old-moved",
+                    "generation-promoted",
+                }:
+                    rollback_generation_transaction(output, tx_dir, transaction, journal, text)
+                    emit(
+                        {
+                            "result": "rolled-back-orphan-generation",
+                            "transaction_id": transaction_id,
+                            "instruction": "inspect the restored Candidate, then commit again or abort",
+                        },
+                        args.json,
+                    )
+                    return 0
                 archive_value = journal.get("archive")
                 archive = Path(archive_value) if archive_value else None
                 rollback_promotion(
@@ -2343,6 +3283,7 @@ def command_recover(args: argparse.Namespace) -> int:
                     archive,
                     {"operations": journal.get("completed_operations", [])},
                 )
+                restore_finalization_generation_manifest(output, tx_dir, transaction)
                 pre_state = tx_dir / "pre-state.yaml"
                 if transaction.get("stage") == MIGRATION_STAGE:
                     if pre_state.is_file():
@@ -2379,9 +3320,34 @@ def command_recover(args: argparse.Namespace) -> int:
     journal = read_json(journal_path)
     phase = journal.get("phase")
     receipt = receipt_for_transaction(output, active)
+    if phase in {"generation-promoting", "generation-old-moved", "generation-promoted"}:
+        rollback_generation_transaction(output, tx_dir, transaction, journal, text)
+        emit(
+            {
+                "result": "rolled-back-generation",
+                "transaction_id": active,
+                "stage": transaction.get("stage"),
+                "instruction": "inspect the restored Candidate, then commit again or abort",
+            },
+            args.json,
+        )
+        return 0
+    if phase == "generation-committed" and receipt is not None:
+        release_lock(output, active)
+        shutil.rmtree(tx_dir)
+        emit(
+            {
+                "result": "cleaned-committed-generation",
+                "transaction_id": active,
+                "receipt": str(receipt),
+            },
+            args.json,
+        )
+        return 0
     if receipt is not None:
         candidate_state = (candidate / STATE_FILE).read_text(encoding="utf-8")
         atomic_write_text(state_path(output), candidate_state)
+        repair_operational_manifest_after_receipt(output, transaction)
         journal["phase"] = "committed"
         journal["receipt"] = str(receipt)
         journal["updated_at"] = now_utc()
@@ -2404,6 +3370,7 @@ def command_recover(args: argparse.Namespace) -> int:
         "rolled-back-after-state-validation",
         "rolled-back-after-commit-error",
         "rolled-back-by-recover",
+        "rolled-back-generation",
     }:
         emit(
             {
@@ -2418,6 +3385,7 @@ def command_recover(args: argparse.Namespace) -> int:
     archive_value = journal.get("archive")
     archive = Path(archive_value) if archive_value else None
     rollback_promotion(output, archive, {"operations": journal.get("completed_operations", [])})
+    restore_finalization_generation_manifest(output, tx_dir, transaction)
     journal["phase"] = "rolled-back-by-recover"
     journal["updated_at"] = now_utc()
     atomic_write_json(journal_path, journal)
@@ -2477,6 +3445,19 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--notes")
     mark.add_argument("--json", action="store_true")
     mark.set_defaults(handler=command_mark_behavior)
+
+    checkpoint = subparsers.add_parser("checkpoint")
+    checkpoint.add_argument("--output", type=Path, required=True)
+    checkpoint.add_argument("--transaction", required=True)
+    checkpoint.add_argument("--checkpoint", required=True)
+    checkpoint.add_argument(
+        "--status",
+        choices=sorted(ALLOWED_CHECKPOINT_STATUS - {"pending"}),
+        required=True,
+    )
+    checkpoint.add_argument("--reason")
+    checkpoint.add_argument("--json", action="store_true")
+    checkpoint.set_defaults(handler=command_checkpoint)
 
     commit = subparsers.add_parser("commit")
     commit.add_argument("--output", type=Path, required=True)

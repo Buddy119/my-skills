@@ -1,6 +1,19 @@
 # Stage Execution Policy
 
-Use the bundled stage executor for every analysis. It is the sole owner of workflow lifecycle fields, transaction archives, promotion, receipts, and recovery. AI remains responsible for semantic understanding and prose.
+Use the bundled stage executor for every analysis. It is the sole owner of workflow lifecycle fields, Checkpoint Ledgers, Working Generations, archives, promotion, Receipts, and recovery. AI remains responsible for semantic understanding and readable prose.
+
+## Lifecycle authority
+
+Workflow Schema 4 uses `current_stage` as the only stage fact. Never add, restore, or consult `phase`. The executor alone updates:
+
+- `current_stage` and `stage_status`.
+- `current_checkpoint` and `checkpoint_status`.
+- `active_transaction`.
+- `working_generation_id` and `published_generation_id`.
+- `publication_status` and `formal_drift_status`.
+- Synthesis, Business Model, and publication lifecycle results.
+
+Natural-language status, a subagent response, a file count, or a partially populated directory never advances lifecycle state.
 
 ## Core protocol
 
@@ -30,8 +43,8 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 
 Resume has two outcomes:
 
-- A current Workflow 3 Pack with a valid Artifact Manifest resumes its recorded normal stage.
-- Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Pack, or Archive.
+- A current Workflow 4 Pack with a valid Artifact Manifest resumes its explicit `current_stage`.
+- Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Reader Packs, or Archive.
 
 For a planned migration, begin the conditional stage before any normal stage:
 
@@ -43,7 +56,7 @@ python3 <skill-root>/scripts/stage_executor.py begin \
   --json
 ```
 
-Migration and publication never share a transaction. Migration Candidate changes are limited by the Plan; commit it without `--semantic-result` or `--skip`. Read the Artifact Migration Policy for the full trust and adoption rules.
+Migration and publication never share a transaction. Migration Candidate changes are limited by the Plan. Read the Artifact Migration Policy before adopting or invalidating any artifact.
 
 Begin the exact `current_stage` reported by status:
 
@@ -54,9 +67,40 @@ python3 <skill-root>/scripts/stage_executor.py begin \
   --json
 ```
 
-The command returns a transaction ID and Candidate root. Perform every write for that stage under the Candidate root. Do not write the same artifacts directly under the formal output root.
+The response includes a transaction ID, Candidate root, Generation information when applicable, and the stage Checkpoint Ledger. Perform every write for that stage under the returned Candidate. Do not write the corresponding files directly under the formal output root.
 
-Commit only after semantic work and review are complete:
+## Checkpoint protocol
+
+Every stage has a fixed ordered Checkpoint contract. After completing and reviewing one item, record it through:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py checkpoint \
+  --output <output-dir> \
+  --transaction <transaction-id> \
+  --checkpoint <checkpoint-id> \
+  --status complete \
+  --json
+```
+
+Allowed statuses are `in-progress`, `complete`, `skipped`, `blocked`, and `failed`. `skipped`, `blocked`, and `failed` require `--reason`. Update checkpoints in order. A commit is rejected while a necessary checkpoint is `pending`, `in-progress`, or `failed`. A stage-level `--skip` marks that stage's checkpoints skipped using the stage reason.
+
+Checkpoint Ledgers are operational progress records, not business evidence. They do not judge whether a Dependency, Failure Pattern, Journey, or prose conclusion is semantically correct.
+
+Fixed Checkpoints:
+
+| Stage | Ordered checkpoints |
+|---|---|
+| `migration` | `plan-verification`, `evidence-preservation`, `artifact-migration`, `migration-validation` |
+| `inventory` | `project-detection`, `entrypoint-inventory`, `evidence-index` |
+| `tracing` | `behavior-tracing`, `coverage-review` |
+| `synthesis` | `endpoint-reconciliation`, `outbound-http-reconciliation`, `dependency-reconciliation`, `failure-reconciliation`, `lifecycle-config-reconciliation`, `connection-shared-model`, `synthesis-review` |
+| `tech-publication` | `tech-behaviors`, `repository-overview`, `repository-reference-docs`, `tech-cross-links`, `tech-validation` |
+| `api-contract-publication` | `endpoint-matrix`, `api-contracts`, `api-backlinks`, `api-validation` |
+| `business-model` | `capability-object-model`, `journey-scenario-model`, `tech-coverage`, `business-model-review` |
+| `ba-publication` | `journeys`, `scenarios`, `ba-overview-catalog`, `ba-backlinks`, `ba-validation` |
+| `finalization` | `mechanical-review`, `fact-sampling`, `readability-review`, `release-readiness` |
+
+Commit only after semantic work, checkpoints, and review are complete:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -65,7 +109,7 @@ python3 <skill-root>/scripts/stage_executor.py commit \
   --json
 ```
 
-Use `--semantic-result complete` for synthesis. Use `--semantic-result complete|partial|blocked` for the Business Model. Skip only the API Contract stage when no application contracts exist or the BA publication stage when the Business Model is blocked:
+Use `--semantic-result complete` for Synthesis. Use `--semantic-result complete|partial|blocked` for the Business Model. Skip only the API Contract stage when no application contracts exist or the BA publication stage when the Business Model is blocked:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -76,9 +120,35 @@ python3 <skill-root>/scripts/stage_executor.py commit \
   --json
 ```
 
+## Working Generation and formal publication
+
+Inventory and Tracing commit their working navigation and Behavior artifacts normally. Beginning with Synthesis, the executor creates one Working Generation:
+
+```text
+.work/execution/generations/<generation-id>/
+├── candidate-root/
+├── generation-manifest.json
+└── stage-history.json
+```
+
+Synthesis, Tech Publication, API Contract Publication, Business Model, and BA Publication each start from the current Generation and atomically replace only the Generation snapshot on commit. They do not replace the previously published `.work` knowledge artifacts, `tech-pack/`, or `ba-pack/`. On a first run, formal Reader Packs may remain absent until Finalization.
+
+Each transaction records an immutable `baseline-manifest.json` and necessary baseline snapshot. Except for executor-owned State, lock, Receipt, journal, plan, and Manifest paths, the formal output is immutable while a Generation is in progress. If an agent bypasses Candidate and changes formal knowledge artifacts, commit:
+
+1. detects the drift;
+2. restores the formal baseline;
+3. marks the transaction failed with `FORMAL-DRIFT-RESTORED`; and
+4. retains the Candidate for correction.
+
+If restoration cannot complete, status requires `recover`; do not continue publication or manually edit State.
+
+Finalization starts from the complete Working Generation. It is the only normal stage that promotes repository-wide knowledge artifacts into the public `.work`, `tech-pack/`, and `ba-pack/` paths. It validates the complete Candidate, archives every replaced formal artifact with hashes, records each promotion in a Journal, validates the promoted result, and then writes the completed State and Finalization Receipt. An interruption must be recovered or rolled back from the Journal; partial directory movement is never treated as completion.
+
+Public paths remain stable. This release protocol guarantees no persistent mixed Generation: a failed or interrupted promotion restores the complete previous published pack.
+
 ## Behavior status ownership
 
-During tracing, add Behavior entries to the Candidate state and catalog as part of inventory. After reviewing a dossier semantically, update its lifecycle through:
+During Tracing, the main agent updates Behavior lifecycle only through:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py mark-behavior \
@@ -90,9 +160,9 @@ python3 <skill-root>/scripts/stage_executor.py mark-behavior \
   --json
 ```
 
-Use `blocked` only with a precise note. A subagent may write an assigned dossier but must not call `mark-behavior`, alter lifecycle fields, commit, abort, recover, archive, or write to formal Pack directories. The main agent reviews the artifact before changing its state.
+Use `blocked` only with a precise note. A subagent may write an assigned Candidate file but must not call `mark-behavior`, update checkpoints, alter State, commit, abort, recover, archive, change a Generation, or write formal Pack directories. The main agent reviews the artifact before changing status.
 
-## Failure and recovery
+## Status, failure, and recovery
 
 Use one status call instead of reconstructing progress manually:
 
@@ -102,7 +172,15 @@ python3 <skill-root>/scripts/stage_executor.py status \
   --json
 ```
 
-`failed` means the Candidate is retained and the formal Pack was not advanced. Correct the Candidate and retry the same transaction, or abort it:
+Read at least:
+
+- Stage, stage status, current Checkpoint, and Checkpoint summary.
+- Working Generation ID/status and published Generation ID/commit.
+- Formal drift status.
+- Release readiness.
+- Active transaction, failed Validators, and recovery requirement.
+
+`failed` means the Candidate is retained and neither the current Generation nor formal Pack was advanced. Correct the Candidate and retry the same transaction, or abort it:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py abort \
@@ -111,7 +189,7 @@ python3 <skill-root>/scripts/stage_executor.py abort \
   --json
 ```
 
-When status reports an interrupted promotion or an inconsistent lock/journal, run:
+When status reports an interrupted Generation swap, formal promotion, or inconsistent lock/journal, run:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py recover \
@@ -119,35 +197,30 @@ python3 <skill-root>/scripts/stage_executor.py recover \
   --json
 ```
 
-Do not infer completion from an agent message. A stage is complete only when its committed Receipt exists and status has advanced. Do not modify the executor or another Skill script during analysis. If the executor or a required Validator cannot run, retain the Candidate and stop publication; do not fall back to manual lifecycle updates.
+Do not infer completion from an agent message. A stage is complete only when its committed Receipt exists and status advances. If the executor or a required Validator cannot run, retain the Candidate and stop; do not patch Skill scripts, install dependencies, or manually advance lifecycle state.
 
 ## Versioned Artifact and Register contracts
 
-`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records its path, identity, version, checksum, producing stage, invalidations, and latest transaction. `init` validates the registry against all active templates. Every successful commit atomically refreshes the Manifest.
+`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records path, identity, version, checksum, producing stage, invalidation, and latest transaction. `init` validates the Registry, Register Schema, API Contract structure contract, and active templates as one release set.
 
-Do not use headings, directory names, old fields, or prose to detect a legacy generation. Only explicit Artifact metadata, the Manifest, file existence, hashes, and registry migration chains may drive Resume.
+Never use headings, directories, old fields, or prose to detect a legacy generation. Only explicit Artifact metadata, Manifest entries, file existence, hashes, and registry migration chains may drive Resume.
 
-`assets/register-schema.json` is the single source for the Register Schema version, sections, exact table columns, and mechanical domain prerequisites. `init` verifies that this Schema and `repository-register-template.md` are synchronized before creating output. Synthesis and later publication gates verify the Candidate Register against the same Schema.
+`assets/register-schema.json` is the only mechanical source for Register Schema version, sections, exact table columns, and domain prerequisites. During an analysis, edit Register rows only. A Schema failure invalidates only its domain; downstream checks report `SKIPPED` instead of treating an unavailable index as empty. Unrelated validation continues. Primary Errors or skipped necessary groups mean validation is incomplete.
 
-During a repository analysis, edit Register rows only. Do not repair a validation failure by changing table headers, the Schema, a Validator, the executor, or the template. If a Skill developer intentionally changes the Register model, publish the Schema, template, Validator, executor, and contract tests as one change set.
+The generic Markdown structure contract runs before frontmatter, specialized document, and cross-link validation. A malformed document reports its structural root cause and specialized checks for that document are `SKIPPED`; an invalid table must not become hundreds of missing-field or backlink errors.
 
-A Repository Register declares `artifact_type: repository-register` and its registry-backed `artifact_schema_version`. A missing version is `unknown`; the Migration Plan uses `review-and-adopt`, preserves the raw Register, and resumes no later than `synthesis`. Never infer legacy fields from column positions.
-
-Pack validation reports HTTP, Dependency, and Failure domain states as `valid`, `partial`, `invalid`, or `skipped`. A Schema failure invalidates only its domain; downstream checks that require a complete index are reported as `SKIPPED`, while unrelated validation continues. A Receipt with Primary Errors or skipped necessary groups does not represent complete validation. Receipts record Artifact Registry/Register versions, domain states, Primary Error count, skipped-group count, and suppressed-error count.
-
-## Stage boundaries
+## Stage sequence and trust boundary
 
 Use this sequence without reordering:
 
-0. `migration` (conditional Resume-only): version upgrade, raw-artifact preservation, incompatible-file archive, invalidation, and recovery-stage selection. It never publishes reader documents.
+0. `migration` (conditional Resume-only): version upgrade, evidence preservation, incompatible archive, invalidation, and recovery-stage selection. It never publishes reader documents.
+1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
+2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
+3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
+4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation.
+5. `api-contract-publication`: Endpoint Matrix and application Contracts in the Generation, or evidence-based skip.
+6. `business-model`: independent Business Model in the Generation.
+7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip.
+8. `finalization`: Markdown-first mechanical validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.
 
-1. `inventory`: evidence index, working state, catalog, register, and entry-point inventory.
-2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated Register observations.
-3. `synthesis`: reconciled Register and repository synthesis; commit with `--semantic-result complete`.
-4. `tech-publication`: Tech Behaviors, overview, catalog, and applicable repository-level documents.
-5. `api-contract-publication`: Endpoint Matrix and application API Contracts, or an evidence-based skip.
-6. `business-model`: independent Business Model; commit with its reviewed semantic result.
-7. `ba-publication`: BA overview, catalog, Journeys, Scenarios, and many-to-many backlinks, or a blocked-model skip.
-8. `finalization`: three-pass review and complete mechanical validation.
-
-All paths mentioned in workflow instructions are relative to the active Candidate root until the stage commits.
+All workflow paths are relative to the active Candidate root. A normal stage Receipt uses `promotion_scope: generation` until Finalization. Only a successful Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true`.

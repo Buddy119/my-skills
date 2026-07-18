@@ -19,11 +19,16 @@ REQUIRED_KEYS = {
     "repository_path",
     "source_commit",
     "analysis_mode",
-    "phase",
     "current_stage",
     "stage_status",
+    "current_checkpoint",
+    "checkpoint_status",
     "active_transaction",
     "last_committed_stage",
+    "working_generation_id",
+    "published_generation_id",
+    "published_source_commit",
+    "formal_drift_status",
     "migration_status",
     "synthesis_status",
     "business_model_status",
@@ -32,7 +37,6 @@ REQUIRED_KEYS = {
     "behaviors",
 }
 ALLOWED_MODES = {"automatic"}
-ALLOWED_PHASES = {"inventory", "tracing", "synthesis", "publishing", "completed"}
 ALLOWED_STAGES = {
     "inventory",
     "tracing",
@@ -45,9 +49,11 @@ ALLOWED_STAGES = {
     "completed",
 }
 ALLOWED_STAGE_STATUS = {"pending", "in-progress", "failed", "committed", "skipped"}
+ALLOWED_CHECKPOINT_STATUS = {"pending", "in-progress", "complete", "skipped", "blocked", "failed"}
 ALLOWED_SYNTHESIS = {"pending", "complete", "partial"}
 ALLOWED_BUSINESS_MODEL = {"pending", "complete", "partial", "blocked"}
-ALLOWED_PUBLICATION = {"pending", "in-progress", "stale", "complete"}
+ALLOWED_PUBLICATION = {"pending", "staging", "ready", "publishing", "failed", "stale", "complete"}
+ALLOWED_DRIFT = {"clean", "detected", "restored", "recovery-required"}
 ALLOWED_MIGRATION = {"not-required", "planned", "in-progress", "committed", "blocked"}
 ALLOWED_BEHAVIOR_STATUS = {"discovered", "tracing", "understood", "blocked"}
 CATALOG_WITHOUT_DOSSIER = {"duplicate", "excluded"}
@@ -177,7 +183,6 @@ def main() -> int:
         errors.append("analysis state is missing keys: " + ", ".join(missing_keys))
 
     mode = scalar_value(state_text, "analysis_mode")
-    phase = scalar_value(state_text, "phase")
     synthesis = scalar_value(state_text, "synthesis_status")
     business_model = scalar_value(state_text, "business_model_status")
     publication = scalar_value(state_text, "publication_status")
@@ -186,24 +191,34 @@ def main() -> int:
     repository_path = scalar_value(state_text, "repository_path")
     current_stage = scalar_value(state_text, "current_stage")
     stage_status = scalar_value(state_text, "stage_status")
+    current_checkpoint = scalar_value(state_text, "current_checkpoint")
+    checkpoint_status = scalar_value(state_text, "checkpoint_status")
     active_transaction = scalar_value(state_text, "active_transaction")
     last_committed_stage = scalar_value(state_text, "last_committed_stage")
     migration_status = scalar_value(state_text, "migration_status")
+    formal_drift_status = scalar_value(state_text, "formal_drift_status")
+    working_generation_id = scalar_value(state_text, "working_generation_id")
+    published_generation_id = scalar_value(state_text, "published_generation_id")
+    published_source_commit = scalar_value(state_text, "published_source_commit")
 
     if scalar_value(state_text, "artifact_type") != "analysis-state":
         errors.append("artifact_type must be analysis-state")
-    if scalar_value(state_text, "artifact_schema_version") != "1":
-        errors.append("analysis-state artifact_schema_version must be 1")
-    if schema_version != "3":
-        errors.append("workflow_schema_version must be 3; run stage_executor.py resume for legacy state")
+    if "phase" in top_level_keys(state_text):
+        errors.append("analysis state must not contain the retired phase field")
+    if scalar_value(state_text, "artifact_schema_version") != "2":
+        errors.append("analysis-state artifact_schema_version must be 2")
+    if schema_version != "4":
+        errors.append("workflow_schema_version must be 4; run stage_executor.py resume for legacy state")
     if mode not in ALLOWED_MODES:
         errors.append("analysis_mode must be automatic; targeted analysis is not supported")
-    if phase not in ALLOWED_PHASES:
-        errors.append("phase must be inventory, tracing, synthesis, publishing, or completed")
     if current_stage not in ALLOWED_STAGES:
         errors.append("current_stage is not a supported workflow stage")
     if stage_status not in ALLOWED_STAGE_STATUS:
         errors.append("stage_status must be pending, in-progress, failed, committed, or skipped")
+    if checkpoint_status not in ALLOWED_CHECKPOINT_STATUS:
+        errors.append("checkpoint_status has an unsupported value")
+    if formal_drift_status not in ALLOWED_DRIFT:
+        errors.append("formal_drift_status has an unsupported value")
     if synthesis not in ALLOWED_SYNTHESIS:
         errors.append("synthesis_status must be pending, complete, or partial")
     if business_model not in ALLOWED_BUSINESS_MODEL:
@@ -233,15 +248,10 @@ def main() -> int:
         except OSError:
             errors.append("repository_path could not be resolved")
 
-    expected_phase = (
-        current_stage
-        if current_stage in {"inventory", "tracing", "synthesis"}
-        else "completed"
-        if current_stage == "completed"
-        else "publishing"
-    )
-    if current_stage in ALLOWED_STAGES and phase != expected_phase:
-        errors.append(f"phase {phase} is inconsistent with current_stage {current_stage}")
+    if stage_status in {"in-progress", "failed"} and not current_checkpoint:
+        errors.append(f"stage_status {stage_status} requires current_checkpoint")
+    if stage_status in {"pending", "committed", "skipped"} and current_checkpoint:
+        errors.append(f"stage_status {stage_status} cannot retain current_checkpoint")
     if stage_status in {"in-progress", "failed"} and not active_transaction:
         errors.append(f"stage_status {stage_status} requires active_transaction")
     if stage_status in {"pending", "committed", "skipped"} and active_transaction:
@@ -295,8 +305,16 @@ def main() -> int:
             errors.append(f"analysis-state behavior is missing from catalog: {behavior_id}")
 
     if args.require_publishable:
-        if phase not in {"synthesis", "publishing", "completed"}:
-            errors.append("publishable state requires phase synthesis, publishing, or completed")
+        if current_stage not in {
+            "synthesis",
+            "tech-publication",
+            "api-contract-publication",
+            "business-model",
+            "ba-publication",
+            "finalization",
+            "completed",
+        }:
+            errors.append("publishable state requires synthesis or a later stage")
         incomplete = sorted(
             behavior_id
             for behavior_id, entry in state_by_id.items()
@@ -308,8 +326,8 @@ def main() -> int:
             errors.append("full-repository publication requires synthesis_status: complete")
 
     if args.require_ba_publishable:
-        if phase not in {"publishing", "completed"}:
-            errors.append("BA publication requires phase publishing or completed")
+        if current_stage not in {"ba-publication", "finalization", "completed"}:
+            errors.append("BA publication requires ba-publication or a later stage")
         incomplete = sorted(
             behavior_id
             for behavior_id, entry in state_by_id.items()
@@ -324,18 +342,38 @@ def main() -> int:
                 "BA publication requires business_model_status: complete or partial"
             )
 
-    if phase == "completed" and publication != "complete":
-        errors.append("phase completed requires publication_status: complete")
-    if phase == "completed" and business_model == "pending":
-        errors.append("phase completed requires the Business Model to be complete, partial, or blocked")
-    if publication == "complete" and phase != "completed":
-        errors.append("publication_status complete requires phase: completed")
+    if current_stage == "completed" and publication != "complete":
+        errors.append("completed stage requires publication_status: complete")
+    if current_stage == "completed" and business_model == "pending":
+        errors.append("completed stage requires the Business Model to be complete, partial, or blocked")
+    if publication == "complete" and current_stage != "completed":
+        errors.append("publication_status complete requires current_stage: completed")
+
+    if current_stage in {
+        "tech-publication",
+        "api-contract-publication",
+        "business-model",
+        "ba-publication",
+        "finalization",
+        "completed",
+    } and not working_generation_id:
+        errors.append(f"current_stage {current_stage} requires working_generation_id")
 
     if current_stage == "completed":
         if stage_status != "committed":
             errors.append("current_stage completed requires stage_status: committed")
         if last_committed_stage != "finalization":
             errors.append("current_stage completed requires last_committed_stage: finalization")
+        if not published_generation_id:
+            errors.append("completed workflow requires published_generation_id")
+        elif published_generation_id != working_generation_id:
+            errors.append(
+                "completed workflow requires published_generation_id to match working_generation_id"
+            )
+        if published_source_commit != source_commit:
+            errors.append("completed workflow requires published_source_commit to match source_commit")
+        if formal_drift_status != "clean":
+            errors.append("completed workflow requires formal_drift_status: clean")
         receipts = args.state.parent / "execution" / "receipts"
         final_receipt_found = False
         if receipts.is_dir():
@@ -344,7 +382,15 @@ def main() -> int:
                     payload = json.loads(receipt.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
                     continue
-                if payload.get("stage") == "finalization" and payload.get("result") == "committed":
+                if (
+                    payload.get("artifact_type") == "stage-receipt"
+                    and payload.get("artifact_schema_version") == "2"
+                    and payload.get("stage") == "finalization"
+                    and payload.get("result") == "committed"
+                    and payload.get("promotion_scope") == "formal-pack"
+                    and payload.get("formal_pack_published") is True
+                    and payload.get("generation_id") == published_generation_id
+                ):
                     final_receipt_found = True
                     break
         if not final_receipt_found and not args.allow_missing_final_receipt:
@@ -363,7 +409,7 @@ def main() -> int:
         return 1
     print(
         f"OK: {len(state_entries)} state behavior(s), {len(catalog_entries)} catalog behavior(s), "
-        f"phase={phase}, stage={current_stage}, stage_status={stage_status}, "
+        f"stage={current_stage}, stage_status={stage_status}, checkpoint={current_checkpoint}, "
         f"synthesis={synthesis}, business_model={business_model}, "
         f"{len(warnings)} warning(s)"
     )

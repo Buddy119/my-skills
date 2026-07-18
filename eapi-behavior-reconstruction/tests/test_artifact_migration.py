@@ -27,6 +27,35 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def run_cmd(self, *args: str, expected: int = 0) -> dict:
+        if args and args[0] == "commit":
+            values = list(args)
+            output = Path(values[values.index("--output") + 1])
+            transaction = values[values.index("--transaction") + 1]
+            ledger_path = output / ".work" / "execution" / "transactions" / transaction / "checkpoints.json"
+            if ledger_path.is_file():
+                ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+                for item in ledger["checkpoints"]:
+                    if item["status"] in {"complete", "skipped", "blocked"}:
+                        continue
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(EXECUTOR),
+                            "checkpoint",
+                            "--output",
+                            str(output),
+                            "--transaction",
+                            transaction,
+                            "--checkpoint",
+                            item["checkpoint_id"],
+                            "--status",
+                            "complete",
+                            "--json",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         result = subprocess.run(
             [sys.executable, str(EXECUTOR), *args, "--json"],
             capture_output=True,
@@ -102,7 +131,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         template = copied / "assets" / "api-contract-document-template.md"
         template.write_text(
             template.read_text().replace(
-                'artifact_schema_version: "1"', 'artifact_schema_version: "99"', 1
+                'artifact_schema_version: "2"', 'artifact_schema_version: "99"', 1
             )
         )
         output = self.root / "drift-output"
@@ -209,7 +238,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(step["source_version"], "0")
         self.assertEqual(step["action"], "archive-and-rebuild")
 
-    def test_current_api_schema_with_legacy_words_is_preserved(self) -> None:
+    def test_previous_api_schema_is_republished_even_with_current_words(self) -> None:
         self.add_evidence()
         contracts = self.output / "tech-pack" / "contracts"
         contracts.mkdir(parents=True)
@@ -219,9 +248,9 @@ class ArtifactMigrationTests(unittest.TestCase):
             encoding="utf-8",
         )
         payload = self.resume()
-        self.assertEqual(payload["resume_stage_after_migration"], "finalization")
+        self.assertEqual(payload["resume_stage_after_migration"], "api-contract-publication")
         step = next(step for step in self.plan()["steps"] if step["artifact_type"] == "api-contract")
-        self.assertEqual(step["action"], "preserve")
+        self.assertEqual(step["action"], "archive-and-rebuild")
 
     def test_unversioned_new_looking_contract_remains_unknown(self) -> None:
         self.add_evidence()

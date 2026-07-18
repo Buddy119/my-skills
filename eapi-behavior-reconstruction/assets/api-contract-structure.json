@@ -1,0 +1,40 @@
+{
+  "api_contract_structure_schema_version": "1",
+  "tables": {
+    "quick-reference": {
+      "section": "Quick reference",
+      "required": true,
+      "headers": ["Property", "Value"]
+    },
+    "request-headers": {
+      "section": "Request",
+      "required": false,
+      "headers": ["Header", "Type/format", "Required", "Nullable", "Default", "Rules"]
+    },
+    "request-fields": {
+      "section": "Request",
+      "required": false,
+      "headers": ["Field", "Type/format", "Required", "Nullable", "Default", "Rules"]
+    },
+    "request-body": {
+      "section": "Request",
+      "required": false,
+      "headers": ["Field path", "Type/format", "Required", "Nullable", "Default", "Rules"]
+    },
+    "validation-rules": {
+      "section": "Request",
+      "required": false,
+      "headers": ["Condition", "Caller-visible result"]
+    },
+    "responses": {
+      "section": "Responses",
+      "required": true,
+      "headers": ["HTTP status", "When", "Body/schema", "Relevant headers"]
+    },
+    "response-fields": {
+      "section": "Responses",
+      "required": false,
+      "headers": ["Field path", "Type/format", "Present when", "Nullable", "Rules"]
+    }
+  }
+}

@@ -41,6 +41,36 @@ class StageExecutorTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def run_cmd(self, *arguments: str, expected: int = 0) -> subprocess.CompletedProcess[str]:
+        if arguments and arguments[0] == "commit":
+            values = list(arguments)
+            output = Path(values[values.index("--output") + 1])
+            transaction = values[values.index("--transaction") + 1]
+            tx_dir = output / ".work" / "execution" / "transactions" / transaction
+            ledger_path = tx_dir / "checkpoints.json"
+            if ledger_path.is_file():
+                ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+                for item in ledger["checkpoints"]:
+                    if item["status"] in {"complete", "skipped", "blocked"}:
+                        continue
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(EXECUTOR),
+                            "checkpoint",
+                            "--output",
+                            str(output),
+                            "--transaction",
+                            transaction,
+                            "--checkpoint",
+                            item["checkpoint_id"],
+                            "--status",
+                            "complete",
+                            "--json",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         result = subprocess.run(
             [sys.executable, str(EXECUTOR), *arguments, "--json"],
             capture_output=True,
@@ -96,6 +126,128 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "committed")
         self.assertEqual(receipt["stage"], "inventory")
         self.assertFalse(candidate.exists())
+
+    def test_state_uses_stage_and_checkpoint_without_legacy_phase(self) -> None:
+        state = (self.output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("\nphase:", "\n" + state)
+        transaction, _candidate = self.begin("inventory")
+        status = json.loads(self.run_cmd("status", "--output", str(self.output)).stdout)
+        self.assertEqual(status["current_stage"], "inventory")
+        self.assertEqual(status["current_checkpoint"], "project-detection")
+        self.assertEqual(status["checkpoint_status"], "in-progress")
+        self.assertEqual(len(status["checkpoints"]), 3)
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
+
+    def test_commit_rejects_incomplete_checkpoints(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "commit",
+                "--output",
+                str(self.output),
+                "--transaction",
+                transaction,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("incomplete checkpoints", result.stderr)
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
+
+    def test_formal_drift_is_restored_and_commit_is_rejected(self) -> None:
+        original = (self.output / ".work" / "repository-register.md").read_bytes()
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        (self.output / ".work" / "repository-register.md").write_text(
+            "unauthorized formal write\n", encoding="utf-8"
+        )
+        result = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            expected=1,
+        )
+        payload = json.loads(result.stdout)
+        self.assertIn("FORMAL-DRIFT-RESTORED", " ".join(payload["errors"]))
+        self.assertEqual(
+            (self.output / ".work" / "repository-register.md").read_bytes(), original
+        )
+        self.assertTrue(candidate.is_dir())
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
+
+    def test_recover_restores_interrupted_generation_swap(self) -> None:
+        module = load_executor_module()
+        transaction_id = "03-synthesis-interrupted"
+        generation_id = "gen-interrupted"
+        generation = self.output / ".work" / "execution" / "generations" / generation_id
+        current_root = generation / "candidate-root"
+        current_root.mkdir(parents=True)
+        (current_root / "old.md").write_text("old generation\n", encoding="utf-8")
+        tx_dir = self.output / ".work" / "execution" / "transactions" / transaction_id
+        candidate = tx_dir / "candidate"
+        candidate.mkdir(parents=True)
+        (candidate / "new.md").write_text("new generation\n", encoding="utf-8")
+        previous = generation / f"previous-{transaction_id}"
+        current_root.rename(previous)
+        state_path = self.output / ".work" / "analysis-state.yaml"
+        original_state = state_path.read_text(encoding="utf-8")
+        state = original_state
+        state = module.set_scalar(state, "current_stage", "synthesis")
+        state = module.set_scalar(state, "stage_status", "in-progress")
+        state = module.set_scalar(state, "active_transaction", transaction_id)
+        state = module.set_scalar(state, "current_checkpoint", "endpoint-reconciliation")
+        state = module.set_scalar(state, "checkpoint_status", "in-progress")
+        state_path.write_text(state, encoding="utf-8")
+        (tx_dir / "pre-state.yaml").write_text(original_state, encoding="utf-8")
+        (tx_dir / "transaction.json").write_text(
+            json.dumps(
+                {
+                    "transaction_id": transaction_id,
+                    "stage": "synthesis",
+                    "status": "generation-promoting",
+                    "candidate": str(candidate),
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tx_dir / "promotion-journal.json").write_text(
+            json.dumps(
+                {
+                    "transaction_id": transaction_id,
+                    "phase": "generation-old-moved",
+                    "generation_id": generation_id,
+                    "current_root": str(current_root),
+                    "previous_root": str(previous),
+                    "candidate": str(candidate),
+                    "operations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        module.acquire_lock(
+            self.output,
+            {"transaction_id": transaction_id, "stage": "synthesis"},
+        )
+        recovered = self.run_cmd("recover", "--output", str(self.output))
+        self.assertEqual(json.loads(recovered.stdout)["result"], "rolled-back-generation")
+        self.assertEqual((current_root / "old.md").read_text(), "old generation\n")
+        self.assertEqual((candidate / "new.md").read_text(), "new generation\n")
+        recovered_state = state_path.read_text(encoding="utf-8")
+        self.assertIn('stage_status: "failed"', recovered_state)
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction_id)
 
     def test_second_begin_is_rejected_until_active_transaction_finishes(self) -> None:
         transaction, _candidate = self.begin("inventory")
@@ -329,9 +481,12 @@ class StageExecutorTests(unittest.TestCase):
         text = text.replace('publication_status: "pending"', 'publication_status: "complete"')
         state.write_text(text, encoding="utf-8")
         before = state.read_bytes()
-        result = self.run_cmd("resume", "--repo", str(self.repo), "--state", str(state))
+        result = self.run_cmd(
+            "resume", "--repo", str(self.repo), "--state", str(state), expected=1
+        )
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["result"], "migration-planned")
+        self.assertEqual(payload["result"], "migration-blocked")
+        self.assertIn("current_stage", " ".join(payload["blocked_reasons"]))
         self.assertEqual(state.read_bytes(), before)
         self.assertTrue((self.output / ".work" / "migration-plan.yaml").is_file())
 
@@ -398,7 +553,6 @@ class StageExecutorTests(unittest.TestCase):
         module = load_executor_module()
         text = state.read_text(encoding="utf-8")
         for key, value in (
-            ("phase", "completed"),
             ("current_stage", "completed"),
             ("stage_status", "committed"),
             ("active_transaction", None),
@@ -406,6 +560,9 @@ class StageExecutorTests(unittest.TestCase):
             ("synthesis_status", "complete"),
             ("business_model_status", "blocked"),
             ("publication_status", "complete"),
+            ("working_generation_id", "gen-completed"),
+            ("published_generation_id", "gen-completed"),
+            ("published_source_commit", "unknown"),
         ):
             text = module.set_scalar(text, key, value)
         state.write_text(text, encoding="utf-8")
@@ -426,7 +583,17 @@ class StageExecutorTests(unittest.TestCase):
         self.assertIn("finalization receipt", missing.stdout)
         receipt = self.output / ".work" / "execution" / "receipts" / "999-finalization.json"
         receipt.write_text(
-            json.dumps({"stage": "finalization", "result": "committed"}),
+            json.dumps(
+                {
+                    "artifact_type": "stage-receipt",
+                    "artifact_schema_version": "2",
+                    "stage": "finalization",
+                    "result": "committed",
+                    "promotion_scope": "formal-pack",
+                    "formal_pack_published": True,
+                    "generation_id": "gen-completed",
+                }
+            ),
             encoding="utf-8",
         )
         valid = subprocess.run(command, capture_output=True, text=True)
@@ -436,7 +603,6 @@ class StageExecutorTests(unittest.TestCase):
         state = self.output / ".work" / "analysis-state.yaml"
         module = load_executor_module()
         text = state.read_text(encoding="utf-8")
-        text = module.set_scalar(text, "phase", "completed")
         text = module.set_scalar(text, "current_stage", "completed")
         text = module.set_scalar(text, "stage_status", "committed")
         text = module.set_scalar(text, "last_committed_stage", "finalization")
@@ -508,19 +674,12 @@ class StageExecutorTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(index.returncode, 0, index.stderr)
-                committed = subprocess.run(
-                    [
-                        sys.executable,
-                        str(EXECUTOR),
-                        "commit",
-                        "--output",
-                        str(output),
-                        "--transaction",
-                        begin_payload["transaction_id"],
-                        "--json",
-                    ],
-                    capture_output=True,
-                    text=True,
+                committed = self.run_cmd(
+                    "commit",
+                    "--output",
+                    str(output),
+                    "--transaction",
+                    begin_payload["transaction_id"],
                 )
                 self.assertEqual(committed.returncode, 0, committed.stdout + committed.stderr)
                 state = (output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8")
@@ -580,7 +739,7 @@ class StageExecutorTests(unittest.TestCase):
         (candidate / ".work" / "repository-synthesis.md").write_text(
             synthesis_text, encoding="utf-8"
         )
-        self.run_cmd(
+        synthesis_result = self.run_cmd(
             "commit",
             "--output",
             str(self.output),
@@ -588,6 +747,25 @@ class StageExecutorTests(unittest.TestCase):
             synthesis,
             "--semantic-result",
             "complete",
+        )
+        synthesis_receipt = json.loads(
+            Path(json.loads(synthesis_result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        generation_id = synthesis_receipt["generation_id"]
+        self.assertEqual(synthesis_receipt["promotion_scope"], "generation")
+        self.assertFalse(synthesis_receipt["formal_pack_published"])
+        self.assertFalse((self.output / ".work" / "repository-synthesis.md").exists())
+        self.assertTrue(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "generations"
+                / generation_id
+                / "candidate-root"
+                / ".work"
+                / "repository-synthesis.md"
+            ).is_file()
         )
 
         tech, candidate = self.begin("tech-publication")
@@ -613,6 +791,7 @@ class StageExecutorTests(unittest.TestCase):
             catalog_text, encoding="utf-8"
         )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", tech)
+        self.assertFalse((self.output / "tech-pack" / "repository-overview.md").exists())
 
         api, _candidate = self.begin("api-contract-publication")
         self.run_cmd(
@@ -674,17 +853,29 @@ class StageExecutorTests(unittest.TestCase):
         final_status = json.loads(self.run_cmd("status", "--output", str(self.output)).stdout)
         self.assertEqual(final_status["current_stage"], "completed")
         self.assertEqual(final_status["stage_status"], "committed")
+        self.assertEqual(final_status["working_generation_status"], "published")
+        self.assertEqual(final_status["working_generation_id"], generation_id)
+        self.assertEqual(final_status["published_generation_id"], generation_id)
+        self.assertEqual(final_status["release_readiness"], "ready")
         self.assertEqual(final_status["integrity_errors"], [])
         final_receipt = Path(completed_payload["receipt"])
         receipt_payload = json.loads(final_receipt.read_text(encoding="utf-8"))
         self.assertEqual(receipt_payload["stage"], "finalization")
         self.assertEqual(receipt_payload["result"], "committed")
+        self.assertEqual(receipt_payload["promotion_scope"], "formal-pack")
+        self.assertTrue(receipt_payload["formal_pack_published"])
+        self.assertTrue((self.output / "tech-pack" / "repository-overview.md").is_file())
         self.assertEqual(
             receipt_payload["repository_register_artifact_schema_version"], "1"
         )
         self.assertEqual(
             receipt_payload["validator_domain_statuses"],
-            {"dependency": "valid", "failure": "valid", "http": "valid"},
+            {
+                "dependency": "valid",
+                "failure": "valid",
+                "http": "valid",
+                "markdown": "valid",
+            },
         )
         self.assertEqual(receipt_payload["primary_error_count"], 0)
         self.assertEqual(receipt_payload["skipped_group_count"], 0)

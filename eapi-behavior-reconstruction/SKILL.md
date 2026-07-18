@@ -117,6 +117,7 @@ behavior-docs/<repository-name>/
 │   ├── migration-plan.yaml                 # only when a version migration is required
 │   ├── legacy-artifacts/                   # verified raw-artifact preservation by Plan ID
 │   └── execution/
+│       ├── generations/                    # unpublished repository-wide working generations
 │       ├── transactions/
 │       ├── receipts/
 │       └── archive/
@@ -157,6 +158,21 @@ Resume and migration decisions come only from explicit `artifact_type`, `artifac
 The generated Migration Plan is the complete scope contract. It explicitly lists preserved, mechanically migrated, review-and-adopted, archived/rebuilt, and blocked Artifacts plus the earliest safe recovery stage. Do not add an undeclared migration because a document "looks old". Old BA directories, stale Contracts, and other incompatible reader files are archived only by the Migration transaction, never as a side effect of `business-model` or another publication stage.
 
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register. Never edit lifecycle fields directly; only the stage executor may update them.
+
+`current_stage` is the only stage fact. Do not add or consult a `phase` field. Each `begin` creates a versioned Checkpoint Ledger. Complete the returned checkpoints in order through the executor after performing and reviewing the named work:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py checkpoint \
+  --output <output-dir> \
+  --transaction <transaction-id> \
+  --checkpoint <checkpoint-id> \
+  --status complete \
+  --json
+```
+
+Use `skipped`, `blocked`, or `failed` only with `--reason`. A stage cannot commit while a required checkpoint is `pending`, `in-progress`, or `failed`. Checkpoints record progress and gates; they never replace semantic review and never publish files.
+
+From `synthesis` onward, the executor creates or resumes one Working Generation under `.work/execution/generations/<generation-id>/candidate-root/`. Synthesis, Tech, API, Business Model, and BA stage commits update that Generation only. The previously published Register and Reader Packs remain byte-for-byte unchanged until `finalization`; on a first run they may be absent. Never bypass the Candidate to update the formal `.work` knowledge files, `tech-pack/`, or `ba-pack/`. The executor detects formal drift, restores the immutable baseline, and rejects the transaction.
 
 ### 2. Build a navigation index and inventory entry points
 
@@ -201,7 +217,7 @@ Group trigger, handler, controller, service, and orchestration code into one beh
 
 Create stable behavior IDs and catalog every executable application or framework entry point. Keep external-only and configuration-only endpoint candidates out of the behavior catalog and in the endpoint register. Mirror active behaviors in `analysis-state.yaml` with status `discovered`.
 
-Commit the inventory transaction only after the evidence index is valid and every discovered entry point has a catalog disposition. Then begin `tracing` and continue in its new Candidate.
+Complete `project-detection`, `entrypoint-inventory`, and `evidence-index` in order. Commit the inventory transaction only after the evidence index is valid and every discovered entry point has a catalog disposition. Then begin `tracing` and continue in its new Candidate.
 
 ### 3. Trace behaviors into working dossiers
 
@@ -227,7 +243,7 @@ Process at most five behaviors per internal batch. For each behavior:
 
 Do not write formal Tech documents, the Business Model, Journeys, or Scenarios during this phase.
 
-Commit `tracing` only when status reports no undiscovered or tracing Behavior. Natural-language progress reports do not satisfy this gate.
+Complete `behavior-tracing` and `coverage-review`. Commit `tracing` only when status reports no undiscovered or tracing Behavior. Natural-language progress reports do not satisfy this gate.
 
 ### 4. Record external HTTP mappings only when proven
 
@@ -263,7 +279,7 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 13. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
 14. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
 15. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-16. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. The executor runs the mechanical publishability gate before promotion.
+16. Complete the synthesis checkpoints in their executor-provided order: Endpoint, Outbound HTTP, Dependency, Failure, Lifecycle/Config, Connection/Shared Model, and synthesis review. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. This commit advances only the Working Generation; it does not replace the formal Pack.
 
 ### 6. Publish the Tech Pack
 
@@ -287,7 +303,7 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
-Commit `tech-publication` only after its Behavior and repository-document gates pass.
+Complete all Tech publication checkpoints through the executor. Commit `tech-publication` only after its Behavior, cross-link, and repository-document gates pass. This commit advances only the Working Generation.
 
 ### 7. Publish endpoint evidence and application API contracts
 
@@ -318,7 +334,7 @@ Do not generate a contract or behavior for an external-only, configuration-only,
 
 Validate each endpoint contract and its backlink before continuing.
 
-Commit this stage after the executor validates application Contracts and Matrix links. When the repository has no application API Contract, commit it with `--skip` and an evidence-based reason; do not create empty Contracts.
+Complete the Endpoint Matrix, Contract, backlink, and validation checkpoints. Commit this stage after the executor validates application Contracts and Matrix links. When the repository has no application API Contract, commit it with `--skip` and an evidence-based reason; do not create empty Contracts. Either result advances only the Working Generation.
 
 ### 8. Build an independent Business Model and publish the BA Pack
 
@@ -328,21 +344,21 @@ Begin only after repository synthesis and the related Tech documents are complet
 2. Reconstruct Capabilities, actors, business objects, Journeys, Scenarios, shared business rules, business-visible exceptions, and Journey–Scenario relationships across all completed Tech facts. Do not iterate through Tech Behaviors and generate one BA document per row.
 3. Account for every active Tech Behavior in the Business Model as `scenario-support`, `business-visible-support`, `no-business-visible-role`, or `unknown`. An Entry Point, technical branch, validation, Dependency, or exception does not automatically become a Scenario, business decision, rule, participant, or exception.
 4. Assign semantic Journey and Scenario IDs from supported business goals and contexts. Merge and split by actor goal, business context, decision meaning, business-object lifecycle, and visible outcome—not by endpoint, handler, event, or Behavior identity.
-5. Review the Business Model semantically and commit `business-model` with `--semantic-result complete`, `partial`, or `blocked`. Only the executor updates `business_model_status`.
+5. Complete the Capability/Object, Journey/Scenario, Tech Coverage, and Business Model review checkpoints. Review the Business Model semantically and commit `business-model` with `--semantic-result complete`, `partial`, or `blocked`. Only the executor updates `business_model_status`; the commit advances only the Working Generation.
 6. When status is `complete` or `partial`, begin `ba-publication` and build `business-overview.md` with [assets/ba-overview-template.md](assets/ba-overview-template.md), `business-catalog.md` with [assets/ba-business-catalog-template.md](assets/ba-business-catalog-template.md), Journey documents with [assets/ba-journey-document-template.md](assets/ba-journey-document-template.md), and Scenario documents with [assets/ba-scenario-document-template.md](assets/ba-scenario-document-template.md).
 7. Maintain direct many-to-many Scenario/Tech traceability: each Scenario lists all supporting Tech Behaviors; each supporting Tech Behavior and catalog entry lists the Scenario in `ba_scenarios`. A Journey links its Scenarios and their supporting Tech Behaviors, but Tech documents do not maintain Journey backlinks. `ba_scenarios: []` is valid for every Behavior category.
 8. Preserve evidence confidence without exposing raw source citations. Include only business-visible participants, interactions, shared rules, degradation, partial success, state risk, and recovery limitations. Do not copy the technical context diagram, connection matrix, internal components, Dependency tables, Failure tables, or Tech flows.
 9. When status is `blocked`, begin `ba-publication` only to commit it with `--skip` and the blocker reason; omit invented Journey and Scenario documents and keep the supported Tech Pack complete.
 
-Commit `ba-publication` only after the executor verifies Journey, Scenario, backlink, and Pack-link mechanics.
+Complete the Journey, Scenario, BA Overview/Catalog, backlink, and validation checkpoints. Commit `ba-publication` only after the executor verifies Journey, Scenario, backlink, and Pack-link mechanics. This commit advances only the Working Generation.
 
 ### 9. Review in three passes
 
-Begin `finalization` and review its Candidate snapshot.
+Begin `finalization` from the complete Working Generation and review its Candidate snapshot. This is the only normal stage authorized to replace formal knowledge Artifacts and Reader Packs.
 
 Apply the editorial policy in this order:
 
-1. Mechanical review: state, structure, links, endpoint identity, commit, placeholders, and citation bounds.
+1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
 3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack.
 
@@ -352,11 +368,13 @@ For Repository Overview, verify that the context diagram and connection matrix m
 
 For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
-The finalization commit runs all applicable document, state, link, citation, and placeholder Validators and records their complete output plus Register domain status in the Receipt. A result with any Primary Error or skipped necessary validation group is incomplete and cannot be reported as全面验证通过. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
+Complete `mechanical-review`, `fact-sampling`, `readability-review`, and `release-readiness` in order. Generic Markdown validation covers every formal Tech and BA Markdown file. A structurally invalid file produces one root-cause group and its specialized checks are `SKIPPED`, preventing cascades.
+
+The finalization commit validates the complete Generation, computes a release Manifest, archives the previously published knowledge Artifacts, promotes the complete Generation under a recovery Journal, validates the result again, and only then writes the final Receipt and completed State. A result with any Primary Error or skipped necessary validation group is incomplete and cannot be reported as全面验证通过. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
 
 ### 10. Deliver
 
-Commit `finalization`. Deliver only when `status --json` reports `current_stage: completed`, `stage_status: committed`, and a successful finalization Receipt. Report:
+Commit `finalization`. Deliver only when `status --json` reports `current_stage: completed`, `stage_status: committed`, `working_generation_status: published`, matching `working_generation_id` and `published_generation_id`, `formal_drift_status: clean`, `release_readiness: ready`, and a successful finalization Receipt with `formal_pack_published: true`. Report:
 
 - Repository path and commit.
 - Full-repository coverage and any blocked areas.

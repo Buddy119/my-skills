@@ -1,17 +1,17 @@
 {
-  "artifact_schema_registry_version": "1",
-  "manifest_schema_version": "1",
+  "artifact_schema_registry_version": "2",
+  "manifest_schema_version": "2",
   "migration_plan_schema_version": "1",
   "artifact_types": {
     "analysis-state": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/analysis-state.yaml"],
       "template": "analysis-state-template.yaml",
       "producing_stage": "init",
       "rebuild_stage": "finalization",
       "unknown_action": "mechanical-migrate",
       "dependencies": [],
-      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+      "migrations": {"1": {"to": "2", "action": "mechanical-migrate"}}
     },
     "evidence-index": {
       "current_version": "1",
@@ -113,14 +113,17 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "api-contract": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": ["tech-pack/contracts/*.api-contract.md"],
       "template": "api-contract-document-template.md",
       "producing_stage": "api-contract-publication",
       "rebuild_stage": "api-contract-publication",
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis", "repository-register", "tech-behavior", "endpoint-matrix"],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "data-lifecycle": {
       "current_version": "1",
@@ -213,13 +216,13 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "artifact-manifest": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/artifact-manifest.json"],
       "producing_stage": "stage-executor",
       "rebuild_stage": "finalization",
       "unknown_action": "mechanical-migrate",
       "dependencies": [],
-      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+      "migrations": {"1": {"to": "2", "action": "mechanical-migrate"}}
     },
     "migration-plan": {
       "current_version": "1",
@@ -231,13 +234,31 @@
       "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
     },
     "stage-receipt": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/execution/receipts/*.json"],
       "producing_stage": "stage-executor",
       "rebuild_stage": "finalization",
       "unknown_action": "archive-and-rebuild",
       "dependencies": [],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {"1": {"to": "2", "action": "archive-and-rebuild"}}
+    },
+    "generation-manifest": {
+      "current_version": "1",
+      "paths": [".work/execution/generations/*/generation-manifest.json"],
+      "producing_stage": "stage-executor",
+      "rebuild_stage": "synthesis",
+      "unknown_action": "mechanical-migrate",
+      "dependencies": [],
+      "migrations": {}
+    },
+    "checkpoint-ledger": {
+      "current_version": "1",
+      "paths": [".work/execution/transactions/*/checkpoints.json"],
+      "producing_stage": "stage-executor",
+      "rebuild_stage": "finalization",
+      "unknown_action": "mechanical-migrate",
+      "dependencies": [],
+      "migrations": {}
     }
   }
 }

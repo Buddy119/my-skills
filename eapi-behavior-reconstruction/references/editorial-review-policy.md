@@ -30,7 +30,11 @@ Build the BA view from the independent Business Model, not from a Tech Behavior 
 
 ### Mechanical review
 
-Use scripts for file structure, state transitions, endpoint identity, links, commit consistency, citation bounds, and placeholders. Fix mechanical errors without changing prose that is already accurate and readable.
+Run the generic Markdown structure Validator across every formal Tech and BA Markdown document before Artifact/frontmatter, specialized document, or cross-link validation. It checks Frontmatter boundaries, one H1, heading order, closed code fences, unique explicit anchors, and structurally valid pipe tables while ignoring fenced content and honoring escaped or inline-code pipes.
+
+When one document is structurally invalid, report that root cause and mark its specialized checks `SKIPPED`. Do not interpret a malformed table as an empty field, Endpoint, Dependency, Failure, Journey, or Scenario index. Continue independent documents and domains, but do not claim complete mechanical validation while a necessary group is skipped.
+
+After structure is trustworthy, use scripts for Artifact identity, state transitions, endpoint identity, links, commit consistency, JSON examples, citation bounds, and placeholders. Fix mechanical errors without changing prose that is already accurate and readable. Do not repair a Candidate by modifying a Skill Validator or relaxing the Markdown contract during an analysis run.
 
 ### Fact review
 
@@ -135,7 +139,7 @@ Revise for clarity when the answer is no, while preserving the underlying facts.
 
 ## Validator boundary
 
-Validators may reject missing files, invalid links, inconsistent IDs, dangling Call/Usage/Mapping/Dependency/Failure/Journey/Scenario references, duplicate IDs, invalid anchors, invalid line ranges, template placeholders, and invalid controlled status values. They may verify declared Journey–Scenario and Scenario–Tech backlinks. They must not decide how Journeys or Scenarios should be split, whether a technical concept has business meaning, whether remote operations, Dependencies, Failure Patterns, Connections, or Shared items are semantically equivalent; derive Criticality or Risk Attention from prose; require Claim IDs, sentence-level citations, fixed prose length, a minimum number of table rows, Mermaid node counts, a fixed aggregation ratio, or prose/method/integration regexes that pretend to determine business meaning.
+Validators may reject malformed Frontmatter boundaries, missing/multiple H1 headings, illegal heading jumps, unclosed fences, duplicate anchors, malformed Markdown tables, missing files, invalid links, inconsistent IDs, dangling Call/Usage/Mapping/Dependency/Failure/Journey/Scenario references, duplicate IDs, invalid line ranges, template placeholders, and invalid controlled status values. The API Contract structure contract may require exact caller-facing table headers when a table is present. Validators may verify declared Journey–Scenario and Scenario–Tech backlinks. They must not decide how Journeys or Scenarios should be split, whether a technical concept has business meaning, whether remote operations, Dependencies, Failure Patterns, Connections, or Shared items are semantically equivalent; derive Criticality or Risk Attention from prose; require Claim IDs, sentence-level citations, fixed prose length, a minimum number of table rows, Mermaid node counts, a fixed aggregation ratio, or prose/method/integration regexes that pretend to determine business meaning.
 
 Register validation must first verify the versioned Schema contract and then isolate HTTP, Dependency, and Failure domains. A bad header produces one Schema root error for that domain; it must not be interpreted as an empty ID index. Skip document reconciliation, completeness, Unknown-reference, and backlink checks that require the invalid or partial index, while continuing unrelated Endpoint, API, BA, HTTP, and Markdown checks. When Dependency is unavailable, Failure may still validate its local controlled fields but must skip Related Dependency cross-references.
 

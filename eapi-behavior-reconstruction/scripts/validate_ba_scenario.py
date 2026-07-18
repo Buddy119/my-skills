@@ -7,6 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from markdown_structure import parse_markdown
+
 from ba_validation_common import (
     ALLOWED_STATUSES,
     RAW_CITATION_RE,
@@ -55,6 +57,12 @@ def main() -> int:
         return 2
 
     text = args.document.read_text(encoding="utf-8")
+    structure = parse_markdown(text)
+    if structure.issues:
+        for issue in structure.issues:
+            print(f"ERROR [{issue.code}] line {issue.line}: {issue.message}")
+        print("SKIPPED [BA-SCENARIO-SEMANTICS] prerequisite Markdown structure is invalid")
+        return 1
     try:
         frontmatter, body = split_frontmatter(text)
     except ValueError as exc:

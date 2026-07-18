@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+from markdown_structure import parse_markdown
+
 
 REQUIRED_KEYS = {
     "behavior_id",
@@ -125,6 +127,12 @@ def main() -> int:
         return 2
 
     text = args.document.read_text(encoding="utf-8")
+    structure = parse_markdown(text)
+    if structure.issues:
+        for issue in structure.issues:
+            print(f"ERROR [{issue.code}] line {issue.line}: {issue.message}")
+        print("SKIPPED [TECH-BEHAVIOR-SEMANTICS] prerequisite Markdown structure is invalid")
+        return 1
     try:
         frontmatter, body = split_frontmatter(text)
     except ValueError as exc:

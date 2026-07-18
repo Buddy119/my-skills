@@ -1,6 +1,6 @@
 ---
 artifact_type: "api-contract"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 behavior_id: "repository.behavior-name"
 endpoint_id: "repository.method-route"
 title: "Human-readable API contract title"

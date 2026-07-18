@@ -9,8 +9,16 @@ import re
 import sys
 from pathlib import Path
 
+from markdown_structure import (
+    load_api_contract_structure,
+    parse_markdown,
+    validate_api_contract_tables,
+)
+
 
 REQUIRED_KEYS = {
+    "artifact_type",
+    "artifact_schema_version",
     "behavior_id",
     "endpoint_id",
     "title",
@@ -122,6 +130,12 @@ def main() -> int:
         return 2
 
     text = args.document.read_text(encoding="utf-8")
+    structure = parse_markdown(text)
+    if structure.issues:
+        for issue in structure.issues:
+            print(f"ERROR [{issue.code}] line {issue.line}: {issue.message}")
+        print("SKIPPED [API-CONTRACT-SEMANTICS] prerequisite Markdown structure is invalid")
+        return 1
     try:
         frontmatter, body = split_frontmatter(text)
     except ValueError as exc:
@@ -131,6 +145,23 @@ def main() -> int:
     missing_keys = sorted(REQUIRED_KEYS - top_level_keys(frontmatter))
     if missing_keys:
         errors.append("missing YAML keys: " + ", ".join(missing_keys))
+
+    if scalar_value(frontmatter, "artifact_type") != "api-contract":
+        errors.append("artifact_type must be api-contract")
+    if scalar_value(frontmatter, "artifact_schema_version") != "2":
+        errors.append("api-contract artifact_schema_version must be 2")
+
+    try:
+        structure_schema = load_api_contract_structure(
+            Path(__file__).resolve().parent.parent / "assets" / "api-contract-structure.json"
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        errors.append(f"API Contract structure schema is invalid: {exc}")
+    else:
+        errors.extend(
+            f"[{issue.code}] line {issue.line}: {issue.message}"
+            for issue in validate_api_contract_tables(structure, structure_schema)
+        )
 
     status = scalar_value(frontmatter, "contract_status")
     if status not in ALLOWED_STATUSES:
