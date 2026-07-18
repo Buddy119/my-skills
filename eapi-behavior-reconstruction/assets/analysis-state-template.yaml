@@ -1,13 +1,19 @@
+workflow_schema_version: "2"
 repository: "repository-name"
+repository_path: "/absolute/repository/path"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic"
-phase: "inventory|tracing|synthesis|publishing|completed"
-synthesis_status: "pending|complete|partial"
-business_model_status: "pending|complete|partial|blocked"
-publication_status: "pending|in-progress|complete"
+phase: "inventory"
+current_stage: "inventory"
+stage_status: "pending"
+active_transaction: null
+last_committed_stage: null
+synthesis_status: "pending"
+business_model_status: "pending"
+publication_status: "pending"
 output_directory: "behavior-docs/repository-name"
 behaviors:
   - behavior_id: "repository.behavior-name"
-    status: "discovered|tracing|understood|blocked"
+    status: "discovered"
     dossier: null
     notes: "Short progress or blocker note"

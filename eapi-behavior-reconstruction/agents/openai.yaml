@@ -1,4 +1,4 @@
 interface:
   display_name: "EAPI Repository Knowledge Reconstruction"
-  short_description: "分析EAPI仓库并生成Tech与独立Journey/Scenario BA知识包"
-  default_prompt: "Use $eapi-behavior-reconstruction --repo \"/absolute/repository/path\" --output \"/absolute/output/path\" to analyze the complete repository, publish the Tech Pack, then reconstruct independent Business Journeys and Scenarios for the BA Pack."
+  short_description: "以事务阶段分析EAPI仓库并生成Tech与独立BA知识包"
+  default_prompt: "Use $eapi-behavior-reconstruction --repo \"/absolute/repository/path\" --output \"/absolute/output/path\" to analyze the complete repository through the bundled transactional stage executor, publish the Tech Pack, then reconstruct independent Business Journeys and Scenarios for the BA Pack."

@@ -66,14 +66,16 @@ When no options are present, continue to accept a repository path and optional o
 - Use the evidence index only to navigate. Never treat its markers or role hints as behavioral conclusions.
 - Understand each behavior before drafting its Tech or BA document. Do not create a Claim Ledger or convert prose into atomic claim statements.
 - Do not publish the formal pack until full-repository synthesis is complete.
-- Let AI trace, interpret, synthesize, and write. Use scripts only for deterministic indexing and mechanical validation.
+- Let AI trace, interpret, synthesize, and write. Use scripts only for deterministic indexing, mechanical validation, and transactional stage control.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
-- Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If a script cannot run, report the failure and perform the equivalent read-only check manually; do not patch the script or install dependencies during the run.
+- Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
 - Do not access credentials, secret values, production customer data, live AWS resources, or repositories outside the supplied boundary.
 
 ## Load policies progressively
 
 Read [references/evidence-policy.md](references/evidence-policy.md) completely before reading source code.
+
+Read [references/stage-execution-policy.md](references/stage-execution-policy.md) completely before initializing or resuming an output.
 
 Before tracing the first behavior, read [references/behavior-dossier-policy.md](references/behavior-dossier-policy.md) completely.
 
@@ -106,7 +108,11 @@ behavior-docs/<repository-name>/
 │   ├── behavior-dossiers/
 │   ├── repository-register.md
 │   ├── repository-synthesis.md
-│   └── business-model.md
+│   ├── business-model.md
+│   └── execution/
+│       ├── transactions/
+│       ├── receipts/
+│       └── archive/
 ├── tech-pack/
 │   ├── repository-overview.md
 │   ├── behavior-catalog.yaml
@@ -133,9 +139,9 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 
 1. Confirm the repository root and record `git rev-parse HEAD` when available.
 2. Exclude generated artifacts, vendored dependencies, build output, coverage output, and lockfiles unless they define runtime behavior.
-3. Copy [assets/analysis-state-template.yaml](assets/analysis-state-template.yaml), [assets/behavior-catalog-template.yaml](assets/behavior-catalog-template.yaml), and [assets/repository-register-template.md](assets/repository-register-template.md) into `.work/`.
-4. Set `analysis_mode: automatic`, and move `phase` through `inventory`, `tracing`, `synthesis`, `publishing`, and `completed` as work advances.
-5. If an existing `.work/analysis-state.yaml` has the same repository and commit, resume it. If its commit differs, preserve the existing output and start a sibling output directory suffixed with the new short commit; never reuse old dossiers as current facts.
+3. For a new output, run `stage_executor.py init --repo <repository-root> --output <output-dir> --json`. Do not copy or edit lifecycle templates manually.
+4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If its commit differs, preserve the existing output and initialize a sibling output directory suffixed with the new short commit; never reuse old dossiers as current facts.
+5. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported stage. Treat its returned Candidate as the only writable output root for that stage.
 
 When resuming a same-commit analysis whose register lacks both `Endpoint evidence records` and `Endpoint reconciliation`, keep completed behavior dossiers but treat endpoint inventory and synthesis as stale. Rebuild the layered endpoint register, reset synthesis/publication to pending, regenerate affected formal documents, and do not publish the legacy flattened endpoint conclusions.
 
@@ -151,11 +157,13 @@ When resuming a same-commit analysis whose Failure observations lack stable IDs/
 
 When resuming a same-commit analysis whose synthesis lacks `Repository connection model` or `Shared behavior model`, or whose Repository Overview still reduces connections or shared behavior to a name list, preserve completed dossiers, register reconciliation, and existing Endpoint, API, Field, Lifecycle, Config, Dependency, and Failure documents. Rebuild only those synthesis models and `tech-pack/repository-overview.md`. Update BA documents only when the rebuilt models change a business-visible participant, interaction, shared business rule, outcome, or limitation.
 
-When resuming a same-commit analysis whose state lacks `business_model_status`, whose BA Pack still uses `ba-pack/behaviors/`, shares Tech `behavior_id` values, or whose Tech documents use `ba_behavior_document`, preserve dossiers, the register, repository synthesis, and all established Tech facts. Set `business_model_status: pending`, archive the legacy BA files under `.work/legacy-ba-pack/`, create a new independent Business Model, and rebuild the complete BA Pack as Journeys and Scenarios. Replace Tech and catalog BA links with `ba_scenarios` lists and update Repository Overview. Do not retrace understood Behaviors, generate old-path redirect stubs, or reuse legacy BA prose as business-model facts.
+When resuming a same-commit analysis whose state lacks `business_model_status`, whose BA Pack still uses `ba-pack/behaviors/`, shares Tech `behavior_id` values, or whose Tech documents use `ba_behavior_document`, preserve dossiers, the register, repository synthesis, and all established Tech facts. Let the resume audit select `business-model`; the transaction will archive legacy BA files under `.work/legacy-ba-pack/`, create a new independent Business Model, and rebuild the complete BA Pack as Journeys and Scenarios. Replace Tech and catalog BA links with `ba_scenarios` lists and update Repository Overview. Do not retrace understood Behaviors, generate old-path redirect stubs, or reuse legacy BA prose as business-model facts.
 
-Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register.
+Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register. Never edit lifecycle fields directly; only the stage executor may update them.
 
 ### 2. Build a navigation index and inventory entry points
+
+Begin `inventory` through the stage executor and use its Candidate root for every path below.
 
 Run:
 
@@ -196,6 +204,8 @@ Group trigger, handler, controller, service, and orchestration code into one beh
 
 Create stable behavior IDs and catalog every executable application or framework entry point. Keep external-only and configuration-only endpoint candidates out of the behavior catalog and in the endpoint register. Mirror active behaviors in `analysis-state.yaml` with status `discovered`.
 
+Commit the inventory transaction only after the evidence index is valid and every discovered entry point has a catalog disposition. Then begin `tracing` and continue in its new Candidate.
+
 ### 3. Trace behaviors into working dossiers
 
 Order work by signal:
@@ -207,7 +217,7 @@ Order work by signal:
 
 Process at most five behaviors per internal batch. For each behavior:
 
-1. Set its state to `tracing`.
+1. Use `stage_executor.py mark-behavior` to set its Candidate state to `tracing`; do not edit lifecycle fields directly.
 2. Copy [assets/behavior-dossier-template.md](assets/behavior-dossier-template.md) to `.work/behavior-dossiers/<behavior-id>.md`.
 3. For a Java behavior, complete the dossier's `Semantic symbol and call trace` before relying on the apparent call chain. Use exact symbols, definitions, call hierarchy, references, type hierarchy, overrides, and implementations when the environment exposes them. Then confirm critical edges and runtime implementation selection in source, DI/configuration, annotations, and tests. If semantic tooling is unavailable or incomplete, perform and record the policy's degraded investigation instead.
 4. For an API behavior, complete the dossier's `Endpoint exposure evidence` section and add every direct layer observation to the register without prematurely correlating it.
@@ -216,9 +226,11 @@ Process at most five behaviors per internal batch. For each behavior:
 7. Inspect IaC and configuration for trigger filters, timeouts, retries, DLQs, permissions, resources, and behavior-changing environment values.
 8. Stop at repository boundaries and describe remote internals as unknown.
 9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context. Record each executable external boundary as a Dependency Observation and each material failure path as a Failure Observation; do not create reader-facing Dependency Contracts or Failure Patterns while tracing one Behavior.
-10. Apply the behavior-understanding gate from the dossier policy. Mark the behavior `understood` only after it passes; otherwise continue tracing or mark it `blocked` with the exact limitation.
+10. Apply the behavior-understanding gate from the dossier policy. After main-agent review, use `mark-behavior` to record `understood`; otherwise continue tracing or record `blocked` with the exact limitation. A subagent may deliver a dossier file but may not change global state or commit the stage.
 
 Do not write formal Tech documents, the Business Model, Journeys, or Scenarios during this phase.
+
+Commit `tracing` only when status reports no undiscovered or tracing Behavior. Natural-language progress reports do not satisfy this gate.
 
 ### 4. Record external HTTP mappings only when proven
 
@@ -239,7 +251,7 @@ Do not classify inbound API contracts, event payloads, queue messages, persisten
 
 Begin only after every active behavior is `understood` or explicitly `blocked`, every executable entry point has a catalog disposition, and endpoint evidence candidates are registered.
 
-1. Set `phase: synthesis`.
+1. Begin the `synthesis` transaction and work only in its Candidate.
 2. Read all behavior dossiers and the repository register.
 3. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
 4. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
@@ -253,22 +265,11 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 12. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
 13. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
 14. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-15. Set `synthesis_status: complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. Coverage may still be `partial` when explicitly blocked areas are accounted for.
-
-Run the mechanical state check before publishing:
-
-```bash
-python3 <skill-root>/scripts/validate_analysis_state.py \
-  <output-dir>/.work/analysis-state.yaml \
-  --repo <repository-root> \
-  --catalog <output-dir>/.work/behavior-catalog.yaml \
-  --dossiers-dir <output-dir>/.work/behavior-dossiers \
-  --require-publishable
-```
+15. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. The executor runs the mechanical publishability gate before promotion.
 
 ### 6. Publish the Tech Pack
 
-Set `phase: publishing` and `publication_status: in-progress`. Write for a developer who needs to understand the repository, not for an auditor trying to count claims.
+Begin `tech-publication` and write in its Candidate for a developer who needs to understand the repository, not for an auditor trying to count claims.
 
 1. Build each Tech Behavior from its completed dossier. Use [assets/behavior-document-template.md](assets/behavior-document-template.md).
 2. Build `repository-overview.md` from the completed Connection and Shared Behavior models in `repository-synthesis.md` using [assets/repository-overview-template.md](assets/repository-overview-template.md), not directly from the evidence index, dependency names, configuration names, or file roles. Publish one grouped system-context Mermaid diagram and a compact connection matrix; then publish separate Shared Rules and Shared Behavior-shaping Components tables. Link to detailed models instead of copying their Operation, Mapping, Lifecycle, Config, or Failure tables. Leave BA Scenario links empty until the independent Business Model is complete.
@@ -288,7 +289,11 @@ Set `phase: publishing` and `publication_status: in-progress`. Write for a devel
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
+Commit `tech-publication` only after its Behavior and repository-document gates pass.
+
 ### 7. Publish endpoint evidence and application API contracts
+
+Begin `api-contract-publication` and use its Candidate.
 
 First generate `endpoint-matrix.md` whenever the register contains evidence from any endpoint layer. Treat it as a reader-facing projection rather than a dump of every register row:
 
@@ -315,32 +320,27 @@ Do not generate a contract or behavior for an external-only, configuration-only,
 
 Validate each endpoint contract and its backlink before continuing.
 
+Commit this stage after the executor validates application Contracts and Matrix links. When the repository has no application API Contract, commit it with `--skip` and an evidence-based reason; do not create empty Contracts.
+
 ### 8. Build an independent Business Model and publish the BA Pack
 
 Begin only after repository synthesis and the related Tech documents are complete.
 
-1. Read the BA Pack policy, keep `business_model_status: pending`, and copy [assets/business-model-template.md](assets/business-model-template.md) to `.work/business-model.md`.
+1. Begin `business-model`, read the BA Pack policy, and copy [assets/business-model-template.md](assets/business-model-template.md) to `.work/business-model.md` in its Candidate.
 2. Reconstruct Capabilities, actors, business objects, Journeys, Scenarios, shared business rules, business-visible exceptions, and Journey–Scenario relationships across all completed Tech facts. Do not iterate through Tech Behaviors and generate one BA document per row.
 3. Account for every active Tech Behavior in the Business Model as `scenario-support`, `business-visible-support`, `no-business-visible-role`, or `unknown`. An Entry Point, technical branch, validation, Dependency, or exception does not automatically become a Scenario, business decision, rule, participant, or exception.
 4. Assign semantic Journey and Scenario IDs from supported business goals and contexts. Merge and split by actor goal, business context, decision meaning, business-object lifecycle, and visible outcome—not by endpoint, handler, event, or Behavior identity.
-5. Review the Business Model semantically. Set `business_model_status: complete` when every Tech Behavior has a disposition and observable business modeling is complete; use `partial` for material blocked coverage and `blocked` when no safe model can be published.
-6. When status is `complete` or `partial`, build `business-overview.md` with [assets/ba-overview-template.md](assets/ba-overview-template.md), `business-catalog.md` with [assets/ba-business-catalog-template.md](assets/ba-business-catalog-template.md), Journey documents with [assets/ba-journey-document-template.md](assets/ba-journey-document-template.md), and Scenario documents with [assets/ba-scenario-document-template.md](assets/ba-scenario-document-template.md).
+5. Review the Business Model semantically and commit `business-model` with `--semantic-result complete`, `partial`, or `blocked`. Only the executor updates `business_model_status`.
+6. When status is `complete` or `partial`, begin `ba-publication` and build `business-overview.md` with [assets/ba-overview-template.md](assets/ba-overview-template.md), `business-catalog.md` with [assets/ba-business-catalog-template.md](assets/ba-business-catalog-template.md), Journey documents with [assets/ba-journey-document-template.md](assets/ba-journey-document-template.md), and Scenario documents with [assets/ba-scenario-document-template.md](assets/ba-scenario-document-template.md).
 7. Maintain direct many-to-many Scenario/Tech traceability: each Scenario lists all supporting Tech Behaviors; each supporting Tech Behavior and catalog entry lists the Scenario in `ba_scenarios`. A Journey links its Scenarios and their supporting Tech Behaviors, but Tech documents do not maintain Journey backlinks. `ba_scenarios: []` is valid for every Behavior category.
 8. Preserve evidence confidence without exposing raw source citations. Include only business-visible participants, interactions, shared rules, degradation, partial success, state risk, and recovery limitations. Do not copy the technical context diagram, connection matrix, internal components, Dependency tables, Failure tables, or Tech flows.
-9. When status is `blocked`, omit invented Journey and Scenario documents, explain the blocker in Repository Overview and delivery, and keep the supported Tech Pack complete.
+9. When status is `blocked`, begin `ba-publication` only to commit it with `--skip` and the blocker reason; omit invented Journey and Scenario documents and keep the supported Tech Pack complete.
 
-Run the BA publication gate before writing or completing BA documents:
-
-```bash
-python3 <skill-root>/scripts/validate_analysis_state.py \
-  <output-dir>/.work/analysis-state.yaml \
-  --repo <repository-root> \
-  --catalog <output-dir>/.work/behavior-catalog.yaml \
-  --dossiers-dir <output-dir>/.work/behavior-dossiers \
-  --require-ba-publishable
-```
+Commit `ba-publication` only after the executor verifies Journey, Scenario, backlink, and Pack-link mechanics.
 
 ### 9. Review in three passes
+
+Begin `finalization` and review its Candidate snapshot.
 
 Apply the editorial policy in this order:
 
@@ -354,21 +354,11 @@ For Repository Overview, verify that the context diagram and connection matrix m
 
 For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
-Run:
-
-```bash
-python3 <skill-root>/scripts/validate_behavior_doc.py <tech-behavior.md> --repo <repository-root>
-python3 <skill-root>/scripts/validate_api_contract.py <endpoint-contract.md> --repo <repository-root>
-python3 <skill-root>/scripts/validate_ba_journey.py <ba-journey.md>
-python3 <skill-root>/scripts/validate_ba_scenario.py <ba-scenario.md>
-python3 <skill-root>/scripts/validate_pack_links.py <output-dir> --repo <repository-root>
-```
-
-Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors without rewriting readable text into claim statements.
+The finalization commit runs all applicable document, state, link, citation, and placeholder Validators and records their complete output in the Receipt. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
 
 ### 10. Deliver
 
-Set `publication_status: complete` and `phase: completed` after final review. Report:
+Commit `finalization`. Deliver only when `status --json` reports `current_stage: completed`, `stage_status: committed`, and a successful finalization Receipt. Report:
 
 - Repository path and commit.
 - Full-repository coverage and any blocked areas.

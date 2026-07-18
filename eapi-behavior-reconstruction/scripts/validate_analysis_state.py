@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -11,10 +12,16 @@ from pathlib import Path
 
 
 REQUIRED_KEYS = {
+    "workflow_schema_version",
     "repository",
+    "repository_path",
     "source_commit",
     "analysis_mode",
     "phase",
+    "current_stage",
+    "stage_status",
+    "active_transaction",
+    "last_committed_stage",
     "synthesis_status",
     "business_model_status",
     "publication_status",
@@ -23,6 +30,18 @@ REQUIRED_KEYS = {
 }
 ALLOWED_MODES = {"automatic"}
 ALLOWED_PHASES = {"inventory", "tracing", "synthesis", "publishing", "completed"}
+ALLOWED_STAGES = {
+    "inventory",
+    "tracing",
+    "synthesis",
+    "tech-publication",
+    "api-contract-publication",
+    "business-model",
+    "ba-publication",
+    "finalization",
+    "completed",
+}
+ALLOWED_STAGE_STATUS = {"pending", "in-progress", "failed", "committed", "skipped"}
 ALLOWED_SYNTHESIS = {"pending", "complete", "partial"}
 ALLOWED_BUSINESS_MODEL = {"pending", "complete", "partial", "blocked"}
 ALLOWED_PUBLICATION = {"pending", "in-progress", "complete"}
@@ -124,6 +143,11 @@ def main() -> int:
         action="store_true",
         help="require completed repository synthesis and a complete or partial Business Model",
     )
+    parser.add_argument(
+        "--allow-missing-final-receipt",
+        action="store_true",
+        help="stage-executor candidate check only: allow final state before its Receipt is promoted",
+    )
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -154,11 +178,23 @@ def main() -> int:
     business_model = scalar_value(state_text, "business_model_status")
     publication = scalar_value(state_text, "publication_status")
     source_commit = scalar_value(state_text, "source_commit")
+    schema_version = scalar_value(state_text, "workflow_schema_version")
+    repository_path = scalar_value(state_text, "repository_path")
+    current_stage = scalar_value(state_text, "current_stage")
+    stage_status = scalar_value(state_text, "stage_status")
+    active_transaction = scalar_value(state_text, "active_transaction")
+    last_committed_stage = scalar_value(state_text, "last_committed_stage")
 
+    if schema_version != "2":
+        errors.append("workflow_schema_version must be 2; run stage_executor.py resume for legacy state")
     if mode not in ALLOWED_MODES:
         errors.append("analysis_mode must be automatic; targeted analysis is not supported")
     if phase not in ALLOWED_PHASES:
         errors.append("phase must be inventory, tracing, synthesis, publishing, or completed")
+    if current_stage not in ALLOWED_STAGES:
+        errors.append("current_stage is not a supported workflow stage")
+    if stage_status not in ALLOWED_STAGE_STATUS:
+        errors.append("stage_status must be pending, in-progress, failed, committed, or skipped")
     if synthesis not in ALLOWED_SYNTHESIS:
         errors.append("synthesis_status must be pending, complete, or partial")
     if business_model not in ALLOWED_BUSINESS_MODEL:
@@ -172,6 +208,29 @@ def main() -> int:
         errors.append("state and catalog must have the same source_commit")
     if scalar_value(catalog_text, "analysis_mode") != mode:
         errors.append("state and catalog must have the same analysis_mode")
+
+    if repository_path:
+        try:
+            if Path(repository_path).expanduser().resolve() != args.repo.expanduser().resolve():
+                errors.append("repository_path does not match --repo")
+        except OSError:
+            errors.append("repository_path could not be resolved")
+
+    expected_phase = (
+        current_stage
+        if current_stage in {"inventory", "tracing", "synthesis"}
+        else "completed"
+        if current_stage == "completed"
+        else "publishing"
+    )
+    if current_stage in ALLOWED_STAGES and phase != expected_phase:
+        errors.append(f"phase {phase} is inconsistent with current_stage {current_stage}")
+    if stage_status in {"in-progress", "failed"} and not active_transaction:
+        errors.append(f"stage_status {stage_status} requires active_transaction")
+    if stage_status in {"pending", "committed", "skipped"} and active_transaction:
+        errors.append(f"stage_status {stage_status} cannot retain active_transaction")
+    if last_committed_stage and last_committed_stage not in ALLOWED_STAGES - {"completed"}:
+        errors.append("last_committed_stage is not a supported committed stage")
 
     git_commit = current_git_commit(args.repo)
     if git_commit is None:
@@ -255,6 +314,25 @@ def main() -> int:
     if publication == "complete" and phase != "completed":
         errors.append("publication_status complete requires phase: completed")
 
+    if current_stage == "completed":
+        if stage_status != "committed":
+            errors.append("current_stage completed requires stage_status: committed")
+        if last_committed_stage != "finalization":
+            errors.append("current_stage completed requires last_committed_stage: finalization")
+        receipts = args.state.parent / "execution" / "receipts"
+        final_receipt_found = False
+        if receipts.is_dir():
+            for receipt in receipts.glob("*.json"):
+                try:
+                    payload = json.loads(receipt.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if payload.get("stage") == "finalization" and payload.get("result") == "committed":
+                    final_receipt_found = True
+                    break
+        if not final_receipt_found and not args.allow_missing_final_receipt:
+            errors.append("completed workflow requires a committed finalization receipt")
+
     placeholders = ("repository-name", "git-commit-or-unknown", "repository.behavior-name")
     if any(placeholder in state_text for placeholder in placeholders):
         errors.append("template placeholders remain in analysis state")
@@ -268,7 +346,8 @@ def main() -> int:
         return 1
     print(
         f"OK: {len(state_entries)} state behavior(s), {len(catalog_entries)} catalog behavior(s), "
-        f"phase={phase}, synthesis={synthesis}, business_model={business_model}, "
+        f"phase={phase}, stage={current_stage}, stage_status={stage_status}, "
+        f"synthesis={synthesis}, business_model={business_model}, "
         f"{len(warnings)} warning(s)"
     )
     return 0
