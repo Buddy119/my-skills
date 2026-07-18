@@ -1,4 +1,6 @@
 ---
+artifact_type: "data-lifecycle"
+artifact_schema_version: "1"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 coverage_status: "complete|partial|blocked"
@@ -25,4 +27,3 @@ Explain where important business objects or records originate, how they move thr
 ## Consistency, transaction, and retention questions
 
 Explain transaction boundaries, concurrent updates, partial writes, retention, ordering, and unresolved ownership only where the repository provides evidence or a meaningful gap.
-

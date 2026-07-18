@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
+from artifact_schema import ArtifactSchemaError, load_registry, validate_artifact_manifest
 from register_schema import (
     RegisterSchema,
     load_register_schema,
@@ -1570,6 +1571,16 @@ def main() -> int:
         action="store_true",
         help="emit a machine-readable validation report",
     )
+    parser.add_argument(
+        "--require-artifact-manifest",
+        action="store_true",
+        help="require and validate the versioned Artifact Manifest",
+    )
+    parser.add_argument(
+        "--skip-artifact-manifest",
+        action="store_true",
+        help="skip Manifest only during executor post-promotion checks before State commit",
+    )
     args = parser.parse_args()
 
     if not args.pack_root.is_dir():
@@ -1582,6 +1593,16 @@ def main() -> int:
         print(f"ERROR: repository directory does not exist: {args.repo}")
         return 2
     report = ValidationReport()
+
+    manifest_path = root / ".work" / "artifact-manifest.json"
+    if not args.skip_artifact_manifest and (
+        args.require_artifact_manifest or manifest_path.is_file()
+    ):
+        try:
+            artifact_errors = validate_artifact_manifest(root, load_registry())
+        except ArtifactSchemaError as exc:
+            artifact_errors = [str(exc)]
+        report.add_errors("ARTIFACT-SCHEMA", artifact_errors)
 
     markdown_files = sorted(
         path for path in root.rglob("*.md") if ".work" not in path.relative_to(root).parts

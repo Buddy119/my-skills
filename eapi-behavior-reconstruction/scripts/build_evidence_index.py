@@ -191,6 +191,8 @@ def main() -> int:
             marker_counts[kind] += len(markers)
 
     output = {
+        "artifact_type": "evidence-index",
+        "artifact_schema_version": "1",
         "repository": repo.name,
         "source_commit": git_commit(repo),
         "summary": {

@@ -1,4 +1,6 @@
 ---
+artifact_type: "ba-catalog"
+artifact_schema_version: "1"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 business_model_status: "complete|partial"

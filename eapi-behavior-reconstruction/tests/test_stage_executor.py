@@ -17,11 +17,15 @@ EXECUTOR = SKILL_ROOT / "scripts" / "stage_executor.py"
 
 
 def load_executor_module():
+    sys.path.insert(0, str(EXECUTOR.parent))
     specification = importlib.util.spec_from_file_location("stage_executor", EXECUTOR)
     assert specification and specification.loader
     module = importlib.util.module_from_spec(specification)
-    specification.loader.exec_module(module)
-    return module
+    try:
+        specification.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.pop(0)
 
 
 class StageExecutorTests(unittest.TestCase):
@@ -75,7 +79,10 @@ class StageExecutorTests(unittest.TestCase):
 
     def test_inventory_commit_creates_receipt_and_advances_once(self) -> None:
         transaction, candidate = self.begin("inventory")
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
         status = json.loads(
             self.run_cmd("status", "--output", str(self.output)).stdout
@@ -109,11 +116,13 @@ class StageExecutorTests(unittest.TestCase):
     def test_executor_does_not_modify_writable_skill_scripts(self) -> None:
         protected = [
             EXECUTOR,
+            SKILL_ROOT / "scripts" / "artifact_schema.py",
             SKILL_ROOT / "scripts" / "validate_analysis_state.py",
             SKILL_ROOT / "scripts" / "build_evidence_index.py",
             SKILL_ROOT / "scripts" / "register_schema.py",
             SKILL_ROOT / "scripts" / "validate_pack_links.py",
             SKILL_ROOT / "assets" / "register-schema.json",
+            SKILL_ROOT / "assets" / "artifact-schema.json",
             SKILL_ROOT / "assets" / "repository-register-template.md",
         ]
         before = {
@@ -180,12 +189,22 @@ class StageExecutorTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
 
         tracing, tracing_candidate = self.begin("tracing")
         dossier = tracing_candidate / ".work" / "behavior-dossiers" / "sample-repo.handle-request.md"
-        dossier.write_text('behavior_id: "sample-repo.handle-request"\n', encoding="utf-8")
+        dossier.write_text(
+            "---\n"
+            'artifact_type: "behavior-dossier"\n'
+            'artifact_schema_version: "1"\n'
+            'behavior_id: "sample-repo.handle-request"\n'
+            "---\n",
+            encoding="utf-8",
+        )
         self.run_cmd(
             "mark-behavior",
             "--output",
@@ -217,7 +236,10 @@ class StageExecutorTests(unittest.TestCase):
         transaction, candidate = self.begin("inventory")
         register = candidate / ".work" / "repository-register.md"
         register.write_text(register.read_text(encoding="utf-8") + "\nInventory note.\n", encoding="utf-8")
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         result = self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
         receipt_path = Path(json.loads(result.stdout)["receipt"])
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -230,56 +252,66 @@ class StageExecutorTests(unittest.TestCase):
         self.assertTrue(status["archive_audits"])
         self.assertTrue(all(item["valid"] for item in status["archive_audits"]))
 
-    def test_legacy_ba_directory_is_archived_as_one_verified_tree(self) -> None:
+    def test_legacy_ba_directory_is_archived_only_by_migration(self) -> None:
         legacy = self.output / "ba-pack" / "behaviors"
         legacy.mkdir(parents=True)
         (legacy / "old.md").write_text("legacy\n", encoding="utf-8")
-        transaction, candidate = self.begin("inventory")
-        candidate_legacy = candidate / "ba-pack" / "behaviors"
-        (candidate_legacy / "old.md").unlink()
-        candidate_legacy.rmdir()
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
-        result = self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
-        receipt = json.loads(Path(json.loads(result.stdout)["receipt"]).read_text(encoding="utf-8"))
-        legacy_archive = Path(receipt["legacy_ba_archive"])
-        self.assertEqual((legacy_archive / "behaviors" / "old.md").read_text(), "legacy\n")
-        self.assertFalse((self.output / "ba-pack" / "behaviors").exists())
-        status = json.loads(self.run_cmd("status", "--output", str(self.output)).stdout)
-        self.assertTrue(status["legacy_archive_audits"])
-        self.assertTrue(all(item["valid"] for item in status["legacy_archive_audits"]))
-        self.assertEqual(status["temporary_paths"], [])
-
-    def test_business_model_begin_removes_legacy_ba_only_from_candidate(self) -> None:
-        legacy = self.output / "ba-pack" / "behaviors"
-        legacy.mkdir(parents=True)
-        (legacy / "old.md").write_text("legacy\n", encoding="utf-8")
-        executor = load_executor_module()
-        state = self.output / ".work" / "analysis-state.yaml"
-        text = state.read_text(encoding="utf-8")
-        text = executor.set_scalar(text, "phase", "publishing")
-        text = executor.set_scalar(text, "current_stage", "business-model")
-        text = executor.set_scalar(text, "stage_status", "pending")
-        text = executor.set_scalar(text, "last_committed_stage", "api-contract-publication")
-        text = executor.set_scalar(text, "publication_status", "in-progress")
-        state.write_text(text, encoding="utf-8")
-        transaction, candidate = self.begin("business-model")
-        self.assertTrue(legacy.is_dir())
-        self.assertFalse((candidate / "ba-pack" / "behaviors").exists())
-        transaction_record = json.loads(
-            (
-                self.output
-                / ".work"
-                / "execution"
-                / "transactions"
-                / transaction
-                / "transaction.json"
-            ).read_text(encoding="utf-8")
+        (self.output / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
         )
-        self.assertTrue(transaction_record["automatic_actions"])
-        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
+        planned = self.run_cmd(
+            "resume",
+            "--repo",
+            str(self.repo),
+            "--state",
+            str(self.output / ".work" / "analysis-state.yaml"),
+        )
+        plan_payload = json.loads(planned.stdout)
+        self.assertEqual(plan_payload["resume_stage_after_migration"], "business-model")
+        self.assertTrue(legacy.is_dir())
+        begun = self.run_cmd(
+            "begin",
+            "--output",
+            str(self.output),
+            "--stage",
+            "migration",
+            "--plan",
+            str(self.output / ".work" / "migration-plan.yaml"),
+        )
+        begin_payload = json.loads(begun.stdout)
+        candidate = Path(begin_payload["candidate"])
+        self.assertFalse((candidate / "ba-pack" / "behaviors" / "old.md").exists())
+        result = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begin_payload["transaction_id"],
+        )
+        receipt = json.loads(
+            Path(json.loads(result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        archive = Path(receipt["archive"])
+        self.assertEqual((archive / "ba-pack" / "behaviors" / "old.md").read_text(), "legacy\n")
+        self.assertFalse((self.output / "ba-pack" / "behaviors").exists())
+        self.assertEqual(receipt["stage"], "migration")
+
+    def test_publication_stage_never_performs_legacy_ba_migration(self) -> None:
+        legacy = self.output / "ba-pack" / "behaviors"
+        legacy.mkdir(parents=True)
+        (legacy / "old.md").write_text("legacy\n", encoding="utf-8")
+        self.run_cmd(
+            "begin",
+            "--output",
+            str(self.output),
+            "--stage",
+            "inventory",
+            expected=2,
+        )
         self.assertTrue(legacy.is_dir())
 
-    def test_legacy_resume_does_not_trust_completed_without_receipt(self) -> None:
+    def test_resume_plans_unknown_pack_without_mutating_state(self) -> None:
         state = self.output / ".work" / "analysis-state.yaml"
         text = state.read_text(encoding="utf-8")
         for key in (
@@ -296,32 +328,43 @@ class StageExecutorTests(unittest.TestCase):
         text = text.replace('phase: "inventory"', 'phase: "completed"')
         text = text.replace('publication_status: "pending"', 'publication_status: "complete"')
         state.write_text(text, encoding="utf-8")
+        before = state.read_bytes()
         result = self.run_cmd("resume", "--repo", str(self.repo), "--state", str(state))
         payload = json.loads(result.stdout)
-        self.assertNotEqual(payload["current_stage"], "completed")
-        upgraded = state.read_text(encoding="utf-8")
-        self.assertIn('workflow_schema_version: "2"', upgraded)
-        self.assertNotIn('current_stage: "completed"', upgraded)
+        self.assertEqual(payload["result"], "migration-planned")
+        self.assertEqual(state.read_bytes(), before)
+        self.assertTrue((self.output / ".work" / "migration-plan.yaml").is_file())
 
-    def test_legacy_register_without_schema_version_resumes_from_synthesis(self) -> None:
-        executor = load_executor_module()
-        (self.output / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+    def test_unversioned_register_creates_synthesis_migration_plan(self) -> None:
+        (self.output / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         register = self.output / ".work" / "repository-register.md"
         register.write_text(
             "\n".join(
                 line
                 for line in register.read_text(encoding="utf-8").splitlines()
-                if not line.startswith("register_schema_version:")
+                if not line.startswith(("artifact_type:", "artifact_schema_version:"))
             )
             + "\n",
             encoding="utf-8",
         )
-        stage, reasons = executor.earliest_legacy_stage(
-            self.output,
-            (self.output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8"),
+        result = self.run_cmd(
+            "resume",
+            "--repo",
+            str(self.repo),
+            "--state",
+            str(self.output / ".work" / "analysis-state.yaml"),
         )
-        self.assertEqual(stage, "synthesis")
-        self.assertIn("register_schema_version", " ".join(reasons))
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["resume_stage_after_migration"], "synthesis")
+        plan = json.loads((self.output / ".work" / "migration-plan.yaml").read_text())
+        register_steps = [
+            step for step in plan["steps"] if step["artifact_type"] == "repository-register"
+        ]
+        self.assertEqual(register_steps[0]["source_version"], "unknown")
+        self.assertEqual(register_steps[0]["action"], "review-and-adopt")
 
     def test_recover_rolls_back_an_interrupted_promotion(self) -> None:
         transaction, _candidate = self.begin("inventory")
@@ -485,7 +528,10 @@ class StageExecutorTests(unittest.TestCase):
 
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         transaction, candidate = self.begin("inventory")
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
 
         tracing, _candidate = self.begin("tracing")
@@ -502,9 +548,10 @@ class StageExecutorTests(unittest.TestCase):
         }
         register_parts = [
             "---",
+            'artifact_type: "repository-register"',
+            'artifact_schema_version: "1"',
             'repository: "sample-repo"',
             'source_commit: "unknown"',
-            'register_schema_version: "1"',
             'register_status: "reconciled"',
             "---",
             "",
@@ -516,7 +563,15 @@ class StageExecutorTests(unittest.TestCase):
             register_parts.append("| " + " | ".join(headers) + " |")
             register_parts.append("|" + "|".join("---" for _ in headers) + "|")
         register_text = "\n".join(register_parts) + "\n"
-        synthesis_text = "# Repository synthesis\n\n" + "\n\n".join(
+        synthesis_text = (
+            "---\n"
+            'artifact_type: "repository-synthesis"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            "---\n\n"
+            "# Repository synthesis\n\n"
+        ) + "\n\n".join(
             f"## {heading}" for heading in sorted(executor.SYNTHESIS_HEADINGS)
         ) + "\n"
         (candidate / ".work" / "repository-register.md").write_text(
@@ -538,12 +593,24 @@ class StageExecutorTests(unittest.TestCase):
         tech, candidate = self.begin("tech-publication")
         (candidate / "tech-pack" / "behaviors").mkdir(parents=True)
         (candidate / "tech-pack" / "repository-overview.md").write_text(
+            "---\n"
+            'artifact_type: "repository-overview"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            "---\n\n"
             "# Repository overview\n\nNo executable behavior was observed in this fixture.\n",
             encoding="utf-8",
         )
+        catalog_text = (candidate / ".work" / "behavior-catalog.yaml").read_text(
+            encoding="utf-8"
+        ).replace(
+            'artifact_type: "working-behavior-catalog"',
+            'artifact_type: "tech-behavior-catalog"',
+            1,
+        )
         (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
-            (candidate / ".work" / "behavior-catalog.yaml").read_text(encoding="utf-8"),
-            encoding="utf-8",
+            catalog_text, encoding="utf-8"
         )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", tech)
 
@@ -560,7 +627,15 @@ class StageExecutorTests(unittest.TestCase):
         )
 
         model, candidate = self.begin("business-model")
-        model_text = "# Business model\n\n" + "\n\n".join(
+        model_text = (
+            "---\n"
+            'artifact_type: "business-model"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            "---\n\n"
+            "# Business model\n\n"
+        ) + "\n\n".join(
             f"## {heading}" for heading in sorted(executor.BUSINESS_MODEL_HEADINGS)
         ) + "\n"
         (candidate / ".work" / "business-model.md").write_text(model_text, encoding="utf-8")
@@ -604,7 +679,9 @@ class StageExecutorTests(unittest.TestCase):
         receipt_payload = json.loads(final_receipt.read_text(encoding="utf-8"))
         self.assertEqual(receipt_payload["stage"], "finalization")
         self.assertEqual(receipt_payload["result"], "committed")
-        self.assertEqual(receipt_payload["register_schema_version"], "1")
+        self.assertEqual(
+            receipt_payload["repository_register_artifact_schema_version"], "1"
+        )
         self.assertEqual(
             receipt_payload["validator_domain_statuses"],
             {"dependency": "valid", "failure": "valid", "http": "valid"},
@@ -614,7 +691,10 @@ class StageExecutorTests(unittest.TestCase):
 
     def test_synthesis_commit_rejects_register_schema_drift(self) -> None:
         transaction, candidate = self.begin("inventory")
-        (candidate / ".work" / "evidence-index.json").write_text("{}\n", encoding="utf-8")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
         self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
 
         tracing, _candidate = self.begin("tracing")

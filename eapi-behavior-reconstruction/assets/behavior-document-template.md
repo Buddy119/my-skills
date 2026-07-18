@@ -1,4 +1,6 @@
 ---
+artifact_type: "tech-behavior"
+artifact_schema_version: "1"
 behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"

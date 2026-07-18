@@ -28,6 +28,23 @@ python3 <skill-root>/scripts/stage_executor.py resume \
   --json
 ```
 
+Resume has two outcomes:
+
+- A current Workflow 3 Pack with a valid Artifact Manifest resumes its recorded normal stage.
+- Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Pack, or Archive.
+
+For a planned migration, begin the conditional stage before any normal stage:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py begin \
+  --output <output-dir> \
+  --stage migration \
+  --plan <output-dir>/.work/migration-plan.yaml \
+  --json
+```
+
+Migration and publication never share a transaction. Migration Candidate changes are limited by the Plan; commit it without `--semantic-result` or `--skip`. Read the Artifact Migration Policy for the full trust and adoption rules.
+
 Begin the exact `current_stage` reported by status:
 
 ```bash
@@ -104,19 +121,25 @@ python3 <skill-root>/scripts/stage_executor.py recover \
 
 Do not infer completion from an agent message. A stage is complete only when its committed Receipt exists and status has advanced. Do not modify the executor or another Skill script during analysis. If the executor or a required Validator cannot run, retain the Candidate and stop publication; do not fall back to manual lifecycle updates.
 
-## Versioned Register contract
+## Versioned Artifact and Register contracts
+
+`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records its path, identity, version, checksum, producing stage, invalidations, and latest transaction. `init` validates the registry against all active templates. Every successful commit atomically refreshes the Manifest.
+
+Do not use headings, directory names, old fields, or prose to detect a legacy generation. Only explicit Artifact metadata, the Manifest, file existence, hashes, and registry migration chains may drive Resume.
 
 `assets/register-schema.json` is the single source for the Register Schema version, sections, exact table columns, and mechanical domain prerequisites. `init` verifies that this Schema and `repository-register-template.md` are synchronized before creating output. Synthesis and later publication gates verify the Candidate Register against the same Schema.
 
 During a repository analysis, edit Register rows only. Do not repair a validation failure by changing table headers, the Schema, a Validator, the executor, or the template. If a Skill developer intentionally changes the Register model, publish the Schema, template, Validator, executor, and contract tests as one change set.
 
-A same-commit legacy Register with a missing or unsupported `register_schema_version` resumes from `synthesis`. Preserve Dossiers and raw evidence, archive the old Register transactionally, and rebuild the current structure. Do not infer legacy fields from their column positions.
+A Repository Register declares `artifact_type: repository-register` and its registry-backed `artifact_schema_version`. A missing version is `unknown`; the Migration Plan uses `review-and-adopt`, preserves the raw Register, and resumes no later than `synthesis`. Never infer legacy fields from column positions.
 
-Pack validation reports HTTP, Dependency, and Failure domain states as `valid`, `partial`, `invalid`, or `skipped`. A Schema failure invalidates only its domain; downstream checks that require a complete index are reported as `SKIPPED`, while unrelated validation continues. A Receipt with Primary Errors or skipped necessary groups does not represent complete validation. Receipts record the Register Schema version, domain states, Primary Error count, skipped-group count, and suppressed-error count.
+Pack validation reports HTTP, Dependency, and Failure domain states as `valid`, `partial`, `invalid`, or `skipped`. A Schema failure invalidates only its domain; downstream checks that require a complete index are reported as `SKIPPED`, while unrelated validation continues. A Receipt with Primary Errors or skipped necessary groups does not represent complete validation. Receipts record Artifact Registry/Register versions, domain states, Primary Error count, skipped-group count, and suppressed-error count.
 
 ## Stage boundaries
 
 Use this sequence without reordering:
+
+0. `migration` (conditional Resume-only): version upgrade, raw-artifact preservation, incompatible-file archive, invalidation, and recovery-stage selection. It never publishes reader documents.
 
 1. `inventory`: evidence index, working state, catalog, register, and entry-point inventory.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated Register observations.

@@ -12,6 +12,8 @@ from pathlib import Path
 
 
 REQUIRED_KEYS = {
+    "artifact_type",
+    "artifact_schema_version",
     "workflow_schema_version",
     "repository",
     "repository_path",
@@ -22,6 +24,7 @@ REQUIRED_KEYS = {
     "stage_status",
     "active_transaction",
     "last_committed_stage",
+    "migration_status",
     "synthesis_status",
     "business_model_status",
     "publication_status",
@@ -44,7 +47,8 @@ ALLOWED_STAGES = {
 ALLOWED_STAGE_STATUS = {"pending", "in-progress", "failed", "committed", "skipped"}
 ALLOWED_SYNTHESIS = {"pending", "complete", "partial"}
 ALLOWED_BUSINESS_MODEL = {"pending", "complete", "partial", "blocked"}
-ALLOWED_PUBLICATION = {"pending", "in-progress", "complete"}
+ALLOWED_PUBLICATION = {"pending", "in-progress", "stale", "complete"}
+ALLOWED_MIGRATION = {"not-required", "planned", "in-progress", "committed", "blocked"}
 ALLOWED_BEHAVIOR_STATUS = {"discovered", "tracing", "understood", "blocked"}
 CATALOG_WITHOUT_DOSSIER = {"duplicate", "excluded"}
 
@@ -184,9 +188,14 @@ def main() -> int:
     stage_status = scalar_value(state_text, "stage_status")
     active_transaction = scalar_value(state_text, "active_transaction")
     last_committed_stage = scalar_value(state_text, "last_committed_stage")
+    migration_status = scalar_value(state_text, "migration_status")
 
-    if schema_version != "2":
-        errors.append("workflow_schema_version must be 2; run stage_executor.py resume for legacy state")
+    if scalar_value(state_text, "artifact_type") != "analysis-state":
+        errors.append("artifact_type must be analysis-state")
+    if scalar_value(state_text, "artifact_schema_version") != "1":
+        errors.append("analysis-state artifact_schema_version must be 1")
+    if schema_version != "3":
+        errors.append("workflow_schema_version must be 3; run stage_executor.py resume for legacy state")
     if mode not in ALLOWED_MODES:
         errors.append("analysis_mode must be automatic; targeted analysis is not supported")
     if phase not in ALLOWED_PHASES:
@@ -200,10 +209,18 @@ def main() -> int:
     if business_model not in ALLOWED_BUSINESS_MODEL:
         errors.append("business_model_status must be pending, complete, partial, or blocked")
     if publication not in ALLOWED_PUBLICATION:
-        errors.append("publication_status must be pending, in-progress, or complete")
+        errors.append("publication_status must be pending, in-progress, stale, or complete")
+    if migration_status not in ALLOWED_MIGRATION:
+        errors.append(
+            "migration_status must be not-required, planned, in-progress, committed, or blocked"
+        )
 
     if scalar_value(catalog_text, "repository") != scalar_value(state_text, "repository"):
         errors.append("state and catalog must have the same repository")
+    if scalar_value(catalog_text, "artifact_type") != "working-behavior-catalog":
+        errors.append("working catalog artifact_type must be working-behavior-catalog")
+    if scalar_value(catalog_text, "artifact_schema_version") != "1":
+        errors.append("working catalog artifact_schema_version must be 1")
     if scalar_value(catalog_text, "source_commit") != source_commit:
         errors.append("state and catalog must have the same source_commit")
     if scalar_value(catalog_text, "analysis_mode") != mode:

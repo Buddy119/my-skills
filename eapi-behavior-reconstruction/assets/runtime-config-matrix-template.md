@@ -1,4 +1,6 @@
 ---
+artifact_type: "runtime-config-matrix"
+artifact_schema_version: "1"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 coverage_status: "complete|partial|blocked"
@@ -19,4 +21,3 @@ Explain combinations or precedence only when the repository provides evidence.
 ## Deployment-dependent unknowns
 
 Record values supplied outside the repository and the behavior questions they leave unresolved without reproducing secret values.
-

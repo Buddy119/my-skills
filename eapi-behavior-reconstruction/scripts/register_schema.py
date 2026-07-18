@@ -121,13 +121,21 @@ def table_header(text: str, section: str) -> list[str]:
 
 
 def validate_register_text(text: str, schema: RegisterSchema) -> ContractCheck:
-    version = scalar_value(text, "register_schema_version")
+    artifact_type = scalar_value(text, "artifact_type")
+    version = scalar_value(text, "artifact_schema_version")
     global_errors: list[str] = []
     domain_errors: dict[str, list[str]] = {}
+    if artifact_type != "repository-register":
+        global_errors.append(
+            "artifact_type must be repository-register; "
+            f"observed {artifact_type or '<missing>'}"
+        )
     if version != schema.version:
         global_errors.append(
-            f"register_schema_version must be {schema.version}; observed {version or '<missing>'}"
+            f"repository-register artifact_schema_version must be {schema.version}; "
+            f"observed {version or '<missing>'}"
         )
+    if global_errors:
         return ContractCheck(version, tuple(global_errors), {})
     for table in schema.tables.values():
         observed = table_header(text, table.section)

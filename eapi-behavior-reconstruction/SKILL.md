@@ -68,6 +68,7 @@ When no options are present, continue to accept a repository path and optional o
 - Do not publish the formal pack until full-repository synthesis is complete.
 - Let AI trace, interpret, synthesize, and write. Use scripts only for deterministic indexing, mechanical validation, and transactional stage control.
 - Treat [assets/register-schema.json](assets/register-schema.json) as the single mechanical contract for `repository-register.md`. Do not rename, reorder, add, or remove Register table columns during an analysis. A Schema change is Skill development work and must update the Schema, Register template, Validator, Stage Executor, and tests together.
+- Treat [assets/artifact-schema.json](assets/artifact-schema.json) as the version registry for every long-lived working, Tech, BA, and operational Artifact. Do not infer a document generation from headings, directory names, old field names, or prose.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
 - Do not access credentials, secret values, production customer data, live AWS resources, or repositories outside the supplied boundary.
@@ -77,6 +78,8 @@ When no options are present, continue to accept a repository path and optional o
 Read [references/evidence-policy.md](references/evidence-policy.md) completely before reading source code.
 
 Read [references/stage-execution-policy.md](references/stage-execution-policy.md) completely before initializing or resuming an output.
+
+For `--resume`, also read [references/artifact-migration-policy.md](references/artifact-migration-policy.md) completely before running the Resume Audit.
 
 Before tracing the first behavior, read [references/behavior-dossier-policy.md](references/behavior-dossier-policy.md) completely.
 
@@ -110,6 +113,9 @@ behavior-docs/<repository-name>/
 │   ├── repository-register.md
 │   ├── repository-synthesis.md
 │   ├── business-model.md
+│   ├── artifact-manifest.json
+│   ├── migration-plan.yaml                 # only when a version migration is required
+│   ├── legacy-artifacts/                   # verified raw-artifact preservation by Plan ID
 │   └── execution/
 │       ├── transactions/
 │       ├── receipts/
@@ -141,26 +147,14 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 1. Confirm the repository root and record `git rev-parse HEAD` when available.
 2. Exclude generated artifacts, vendored dependencies, build output, coverage output, and lockfiles unless they define runtime behavior.
 3. For a new output, run `stage_executor.py init --repo <repository-root> --output <output-dir> --json`. Do not copy or edit lifecycle templates manually.
-4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If its commit differs, preserve the existing output and initialize a sibling output directory suffixed with the new short commit; never reuse old dossiers as current facts.
-5. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported stage. Treat its returned Candidate as the only writable output root for that stage.
+4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If the current Artifact versions and Manifest are valid, resume the existing stage. Otherwise this command performs a read-only audit of knowledge Artifacts and creates only `.work/migration-plan.yaml` plus a Migration Planning Receipt.
+5. When Resume returns `migration-planned`, read the complete plan, then automatically run `stage_executor.py begin --stage migration --plan <output>/.work/migration-plan.yaml`. Review/adopt only the working Artifacts named by the plan, then commit this Migration before beginning Synthesis or any publication stage. Do not ask for a second user confirmation.
+6. When the plan is `blocked`, preserve the output and report its `blocked_reasons`; do not edit State or Knowledge Artifacts.
+7. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported normal stage. Treat its returned Candidate as the only writable output root for that stage.
 
-When resuming a same-commit analysis whose Register has no supported `register_schema_version`, preserve Dossiers and raw evidence but resume from `synthesis`. Archive and rebuild the Register through the stage transaction using the current template. Do not guess legacy columns by position or silently convert them into the current model.
+Resume and migration decisions come only from explicit `artifact_type`, `artifact_schema_version`, `workflow_schema_version`, the Artifact Manifest, file existence, hashes, and registered migration chains. Missing versions are `unknown`; never guess a historical generation from headings, table labels, directories, Frontmatter field names, or body text.
 
-When resuming a same-commit analysis whose register lacks both `Endpoint evidence records` and `Endpoint reconciliation`, keep completed behavior dossiers but treat endpoint inventory and synthesis as stale. Rebuild the layered endpoint register, reset synthesis/publication to pending, regenerate affected formal documents, and do not publish the legacy flattened endpoint conclusions.
-
-When resuming a same-commit analysis whose Endpoint reconciliation lacks `Operation Role` or `Publication Disposition`, preserve completed dossiers and raw endpoint evidence but treat endpoint reconciliation, repository synthesis, and Endpoint Matrix as stale. Reclassify operation roles, rebuild route-group associations and publication dispositions, and republish the Matrix. Preserve application contracts whose endpoint identity and caller-visible contract remain unchanged, then revalidate their Matrix links.
-
-When resuming a same-commit analysis whose published API Contracts still use the legacy `Exposure and reachability` plus fixed input/output L1/L2/L3 body structure, keep the completed dossiers, register, synthesis, endpoint identities, and catalog. Treat only those formal Contracts and their related field-document index as stale, then republish them with the consumer-first format. Do not retrace behaviors unless the source commit changed or the working artifacts cannot support the caller-visible contract.
-
-When resuming a same-commit analysis whose register still combines outbound Call identity and field Mapping in `Proven outbound HTTP calls and mappings`, preserve dossiers and cited call/mapping evidence but treat outbound-operation reconciliation, `field-validation-and-mapping.md`, and Tech Behaviors that reference those calls as stale. Split the evidence into Remote Operation, Executable Usage, and Field Mapping records. Preserve API Contracts, Endpoint Matrix, BA Pack, and unrelated behaviors. When several legacy Call IDs prove the same Method, Logical Target, and Client Operation, retain the lexicographically first ID as canonical and record the others as aliases; keep unresolved identities separate.
-
-When resuming a same-commit analysis whose register still uses the flattened `External dependencies` table or lacks `Dependency contract records`, preserve dossiers and all cited dependency observations. Convert each legacy row into a stable `DEP-OBS-nnn` observation, then rebuild Dependency Contract and Operation reconciliation, the dependency section of repository synthesis, and `external-dependency-contracts.md`. Keep identities unresolved when the old evidence cannot prove grouping; do not retrace unrelated Behaviors or regenerate Endpoint, API Contract, or Field Mapping documents.
-
-When resuming a same-commit analysis whose Failure observations lack stable IDs/reconciliation or whose register lacks `Failure pattern reconciliation`, preserve dossiers and every cited failure path. Assign stable `FO-nnn` observations, rebuild Failure Patterns, the failure section of repository synthesis, and `failure-taxonomy.md`. Republish only affected repository summaries, Tech links, and business-visible BA exception text. Do not infer retry, rollback, compensation, or state outcomes missing from the retained evidence.
-
-When resuming a same-commit analysis whose synthesis lacks `Repository connection model` or `Shared behavior model`, or whose Repository Overview still reduces connections or shared behavior to a name list, preserve completed dossiers, register reconciliation, and existing Endpoint, API, Field, Lifecycle, Config, Dependency, and Failure documents. Rebuild only those synthesis models and `tech-pack/repository-overview.md`. Update BA documents only when the rebuilt models change a business-visible participant, interaction, shared business rule, outcome, or limitation.
-
-When resuming a same-commit analysis whose state lacks `business_model_status`, whose BA Pack still uses `ba-pack/behaviors/`, shares Tech `behavior_id` values, or whose Tech documents use `ba_behavior_document`, preserve dossiers, the register, repository synthesis, and all established Tech facts. Let the resume audit select `business-model`; the transaction will archive legacy BA files under `.work/legacy-ba-pack/`, create a new independent Business Model, and rebuild the complete BA Pack as Journeys and Scenarios. Replace Tech and catalog BA links with `ba_scenarios` lists and update Repository Overview. Do not retrace understood Behaviors, generate old-path redirect stubs, or reuse legacy BA prose as business-model facts.
+The generated Migration Plan is the complete scope contract. It explicitly lists preserved, mechanically migrated, review-and-adopted, archived/rebuilt, and blocked Artifacts plus the earliest safe recovery stage. Do not add an undeclared migration because a document "looks old". Old BA directories, stale Contracts, and other incompatible reader files are archived only by the Migration transaction, never as a side effect of `business-model` or another publication stage.
 
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register. Never edit lifecycle fields directly; only the stage executor may update them.
 
@@ -255,7 +249,7 @@ Do not classify inbound API contracts, event payloads, queue messages, persisten
 Begin only after every active behavior is `understood` or explicitly `blocked`, every executable entry point has a catalog disposition, and endpoint evidence candidates are registered.
 
 1. Begin the `synthesis` transaction and work only in its Candidate.
-2. Reconcile observations inside the existing versioned Register tables. Preserve `register_schema_version: "1"` and every table header exactly as defined by `assets/register-schema.json`; change rows, not the mechanical contract.
+2. Reconcile observations inside the existing versioned Register tables. Preserve `artifact_type: "repository-register"`, its registry-backed `artifact_schema_version`, and every table header exactly as defined by `assets/register-schema.json`; change rows, not the mechanical contract.
 3. Read all behavior dossiers and the repository register.
 4. Copy [assets/repository-synthesis-template.md](assets/repository-synthesis-template.md) to `.work/repository-synthesis.md`.
 5. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
@@ -277,7 +271,7 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
 
 1. Build each Tech Behavior from its completed dossier. Use [assets/behavior-document-template.md](assets/behavior-document-template.md).
 2. Build `repository-overview.md` from the completed Connection and Shared Behavior models in `repository-synthesis.md` using [assets/repository-overview-template.md](assets/repository-overview-template.md), not directly from the evidence index, dependency names, configuration names, or file roles. Publish one grouped system-context Mermaid diagram and a compact connection matrix; then publish separate Shared Rules and Shared Behavior-shaping Components tables. Link to detailed models instead of copying their Operation, Mapping, Lifecycle, Config, or Failure tables. Leave BA Scenario links empty until the independent Business Model is complete.
-3. Copy the reconciled working catalog to `tech-pack/behavior-catalog.yaml` and replace working dossier paths with final document links.
+3. Create `tech-pack/behavior-catalog.yaml` from [assets/tech-behavior-catalog-template.yaml](assets/tech-behavior-catalog-template.yaml), populate it from the reconciled working catalog, and replace working dossier paths with final document links. Do not copy the Working Catalog's Artifact identity into the Tech Catalog.
 4. Generate applicable repository references from the corresponding reconciled register records and repository-synthesis models:
    - [assets/endpoint-matrix-template.md](assets/endpoint-matrix-template.md)
    - [assets/data-lifecycle-template.md](assets/data-lifecycle-template.md)
@@ -378,7 +372,8 @@ Do not modify application source code unless the user separately requests an imp
 Before delivering, confirm:
 
 - `.work` shows inventory, per-behavior understanding, repository registration, repository synthesis, and independent business modeling in that order.
-- The Register declares the supported Schema version, all table headers match the bundled Schema, and the final Receipt reports `valid` HTTP, Dependency, and Failure domains with zero skipped necessary validation groups.
+- Every long-lived Artifact declares the Registry-backed type/version, the final Artifact Manifest matches file hashes, and no invalidated Artifact type remains at Finalization.
+- Migration Planning, Migration, and Publication have distinct Receipts; Resume decisions use explicit versions and hashes, and the Register table headers match the bundled Schema with `valid` HTTP, Dependency, and Failure domains and zero skipped necessary groups.
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.

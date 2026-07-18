@@ -1,4 +1,6 @@
 ---
+artifact_type: "behavior-dossier"
+artifact_schema_version: "1"
 behavior_id: "repository.behavior-name"
 working_title: "Human-readable working title"
 repository: "repository-name"

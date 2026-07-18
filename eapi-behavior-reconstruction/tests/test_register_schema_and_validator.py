@@ -31,9 +31,10 @@ class RegisterFixture:
         header_override = header_override or {}
         parts = [
             "---",
+            'artifact_type: "repository-register"',
+            'artifact_schema_version: "1"',
             'repository: "fixture"',
             'source_commit: "unknown"',
-            'register_schema_version: "1"',
             'register_status: "reconciled"',
             "---",
             "",

@@ -1,4 +1,6 @@
 ---
+artifact_type: "ba-scenario"
+artifact_schema_version: "1"
 scenario_id: "repository.scenario.context-outcome"
 title: "Business scenario title"
 repository: "repository-name"

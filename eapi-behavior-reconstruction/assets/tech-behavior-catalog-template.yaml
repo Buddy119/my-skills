@@ -1,4 +1,4 @@
-artifact_type: "working-behavior-catalog"
+artifact_type: "tech-behavior-catalog"
 artifact_schema_version: "1"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
@@ -19,11 +19,3 @@ behaviors:
     api_contracts:
       - endpoint_id: "repository.method-route"
         document: "contracts/repository.method-route.api-contract.md"
-    notes: "Short evidence-based note"
-summary:
-  discovered: 0
-  documented: 0
-  technical: 0
-  duplicate: 0
-  excluded: 0
-  blocked: 0

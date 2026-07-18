@@ -1,0 +1,243 @@
+{
+  "artifact_schema_registry_version": "1",
+  "manifest_schema_version": "1",
+  "migration_plan_schema_version": "1",
+  "artifact_types": {
+    "analysis-state": {
+      "current_version": "1",
+      "paths": [".work/analysis-state.yaml"],
+      "template": "analysis-state-template.yaml",
+      "producing_stage": "init",
+      "rebuild_stage": "finalization",
+      "unknown_action": "mechanical-migrate",
+      "dependencies": [],
+      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+    },
+    "evidence-index": {
+      "current_version": "1",
+      "paths": [".work/evidence-index.json"],
+      "producing_stage": "inventory",
+      "rebuild_stage": "inventory",
+      "unknown_action": "review-and-adopt",
+      "dependencies": [],
+      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+    },
+    "working-behavior-catalog": {
+      "current_version": "1",
+      "paths": [".work/behavior-catalog.yaml"],
+      "template": "behavior-catalog-template.yaml",
+      "producing_stage": "inventory",
+      "rebuild_stage": "inventory",
+      "unknown_action": "review-and-adopt",
+      "dependencies": ["evidence-index"],
+      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+    },
+    "behavior-dossier": {
+      "current_version": "1",
+      "paths": [".work/behavior-dossiers/*.md"],
+      "template": "behavior-dossier-template.md",
+      "producing_stage": "tracing",
+      "rebuild_stage": "tracing",
+      "unknown_action": "review-and-adopt",
+      "dependencies": ["evidence-index", "working-behavior-catalog"],
+      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+    },
+    "repository-register": {
+      "schema_ref": "register-schema.json",
+      "paths": [".work/repository-register.md"],
+      "template": "repository-register-template.md",
+      "producing_stage": "synthesis",
+      "rebuild_stage": "synthesis",
+      "unknown_action": "review-and-adopt",
+      "dependencies": ["behavior-dossier"],
+      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+    },
+    "repository-synthesis": {
+      "current_version": "1",
+      "paths": [".work/repository-synthesis.md"],
+      "template": "repository-synthesis-template.md",
+      "producing_stage": "synthesis",
+      "rebuild_stage": "synthesis",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["behavior-dossier", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "business-model": {
+      "current_version": "1",
+      "paths": [".work/business-model.md"],
+      "template": "business-model-template.md",
+      "producing_stage": "business-model",
+      "rebuild_stage": "business-model",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "tech-behavior"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "repository-overview": {
+      "current_version": "1",
+      "paths": ["tech-pack/repository-overview.md"],
+      "template": "repository-overview-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "tech-behavior-catalog": {
+      "current_version": "1",
+      "paths": ["tech-pack/behavior-catalog.yaml"],
+      "template": "tech-behavior-catalog-template.yaml",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "working-behavior-catalog"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "tech-behavior": {
+      "current_version": "1",
+      "paths": ["tech-pack/behaviors/*.md"],
+      "template": "behavior-document-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "behavior-dossier"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "endpoint-matrix": {
+      "current_version": "1",
+      "paths": ["tech-pack/endpoint-matrix.md"],
+      "template": "endpoint-matrix-template.md",
+      "producing_stage": "api-contract-publication",
+      "rebuild_stage": "api-contract-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register", "tech-behavior"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "api-contract": {
+      "current_version": "1",
+      "paths": ["tech-pack/contracts/*.api-contract.md"],
+      "template": "api-contract-document-template.md",
+      "producing_stage": "api-contract-publication",
+      "rebuild_stage": "api-contract-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register", "tech-behavior", "endpoint-matrix"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "data-lifecycle": {
+      "current_version": "1",
+      "paths": ["tech-pack/data-lifecycle.md"],
+      "template": "data-lifecycle-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "field-validation-and-mapping": {
+      "current_version": "1",
+      "paths": ["tech-pack/field-validation-and-mapping.md"],
+      "template": "field-validation-and-mapping-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "runtime-config-matrix": {
+      "current_version": "1",
+      "paths": ["tech-pack/runtime-config-matrix.md"],
+      "template": "runtime-config-matrix-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "external-dependency-contracts": {
+      "current_version": "1",
+      "paths": ["tech-pack/external-dependency-contracts.md"],
+      "template": "external-dependency-contracts-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "failure-taxonomy": {
+      "current_version": "1",
+      "paths": ["tech-pack/failure-taxonomy.md"],
+      "template": "failure-taxonomy-template.md",
+      "producing_stage": "tech-publication",
+      "rebuild_stage": "tech-publication",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["repository-synthesis", "repository-register"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "ba-overview": {
+      "current_version": "1",
+      "paths": ["ba-pack/business-overview.md"],
+      "template": "ba-overview-template.md",
+      "producing_stage": "ba-publication",
+      "rebuild_stage": "business-model",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["business-model"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "ba-catalog": {
+      "current_version": "1",
+      "paths": ["ba-pack/business-catalog.md"],
+      "template": "ba-business-catalog-template.md",
+      "producing_stage": "ba-publication",
+      "rebuild_stage": "business-model",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["business-model"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "ba-journey": {
+      "current_version": "1",
+      "paths": ["ba-pack/journeys/*.md"],
+      "template": "ba-journey-document-template.md",
+      "producing_stage": "ba-publication",
+      "rebuild_stage": "business-model",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["business-model"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "ba-scenario": {
+      "current_version": "1",
+      "paths": ["ba-pack/scenarios/*.md"],
+      "template": "ba-scenario-document-template.md",
+      "producing_stage": "ba-publication",
+      "rebuild_stage": "business-model",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": ["business-model", "tech-behavior"],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    },
+    "artifact-manifest": {
+      "current_version": "1",
+      "paths": [".work/artifact-manifest.json"],
+      "producing_stage": "stage-executor",
+      "rebuild_stage": "finalization",
+      "unknown_action": "mechanical-migrate",
+      "dependencies": [],
+      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+    },
+    "migration-plan": {
+      "current_version": "1",
+      "paths": [".work/migration-plan.yaml"],
+      "producing_stage": "resume-audit",
+      "rebuild_stage": "migration",
+      "unknown_action": "mechanical-migrate",
+      "dependencies": [],
+      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+    },
+    "stage-receipt": {
+      "current_version": "1",
+      "paths": [".work/execution/receipts/*.json"],
+      "producing_stage": "stage-executor",
+      "rebuild_stage": "finalization",
+      "unknown_action": "archive-and-rebuild",
+      "dependencies": [],
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+    }
+  }
+}

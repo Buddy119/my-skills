@@ -1,4 +1,6 @@
 ---
+artifact_type: "repository-synthesis"
+artifact_schema_version: "1"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 synthesis_status: "complete|partial|blocked"

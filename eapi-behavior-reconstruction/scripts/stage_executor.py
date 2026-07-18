@@ -22,6 +22,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from artifact_schema import (
+    ArtifactSchemaError,
+    add_artifact_metadata,
+    artifact_metadata,
+    build_migration_plan,
+    current_pack_is_versioned,
+    load_migration_plan,
+    load_registry,
+    migration_allowed_paths,
+    source_snapshot,
+    validate_artifact_manifest,
+    validate_plan_snapshot,
+    validate_template_contract,
+    write_artifact_manifest,
+    write_migration_plan,
+)
 from register_schema import (
     RegisterSchemaError,
     load_register_schema,
@@ -30,7 +46,8 @@ from register_schema import (
 )
 
 
-WORKFLOW_SCHEMA_VERSION = "2"
+WORKFLOW_SCHEMA_VERSION = "3"
+MIGRATION_STAGE = "migration"
 STAGES = (
     "inventory",
     "tracing",
@@ -91,8 +108,11 @@ BUSINESS_MODEL_HEADINGS = {
     "Publication decisions",
 }
 SNAPSHOT_EXCLUDED_PREFIXES = {
-    ".work/execution",
+    ".work/execution/active.lock",
+    ".work/execution/transactions",
+    ".work/execution/archive",
     ".work/legacy-ba-pack",
+    ".work/legacy-artifacts",
 }
 STATE_FILE = Path(".work/analysis-state.yaml")
 
@@ -458,6 +478,8 @@ def render_template(name: str, repository: str, commit: str) -> str:
 
 def initial_state(repository: str, repository_path: Path, commit: str, output: Path) -> str:
     return (
+        f"artifact_type: {yaml_scalar('analysis-state')}\n"
+        f"artifact_schema_version: {yaml_scalar('1')}\n"
         f"workflow_schema_version: {yaml_scalar(WORKFLOW_SCHEMA_VERSION)}\n"
         f"repository: {yaml_scalar(repository)}\n"
         f"repository_path: {yaml_scalar(str(repository_path))}\n"
@@ -468,6 +490,7 @@ def initial_state(repository: str, repository_path: Path, commit: str, output: P
         f"stage_status: {yaml_scalar('pending')}\n"
         "active_transaction: null\n"
         "last_committed_stage: null\n"
+        f"migration_status: {yaml_scalar('not-required')}\n"
         f"synthesis_status: {yaml_scalar('pending')}\n"
         f"business_model_status: {yaml_scalar('pending')}\n"
         f"publication_status: {yaml_scalar('pending')}\n"
@@ -478,6 +501,8 @@ def initial_state(repository: str, repository_path: Path, commit: str, output: P
 
 def initial_catalog(repository: str, commit: str) -> str:
     return (
+        f"artifact_type: {yaml_scalar('working-behavior-catalog')}\n"
+        f"artifact_schema_version: {yaml_scalar('1')}\n"
         f"repository: {yaml_scalar(repository)}\n"
         f"source_commit: {yaml_scalar(commit)}\n"
         f"analysis_mode: {yaml_scalar('automatic')}\n"
@@ -496,6 +521,11 @@ def write_receipt(output: Path, sequence: int, stage: str, payload: dict[str, An
     receipts = execution_root(output) / "receipts"
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipts / f"{sequence:03d}-{stage}.json"
+    payload = {
+        "artifact_type": "stage-receipt",
+        "artifact_schema_version": "1",
+        **payload,
+    }
     atomic_write_json(path, payload)
     return path
 
@@ -567,8 +597,11 @@ def command_init(args: argparse.Namespace) -> int:
     template = template_root() / "repository-register-template.md"
     try:
         bundled_check = validate_bundled_contract(template)
+        registry = load_registry()
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"bundled Artifact Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -578,6 +611,12 @@ def command_init(args: argparse.Namespace) -> int:
         )
         raise ExecutorError(
             "bundled Register Schema and template are out of sync: " + " | ".join(details)
+        )
+    template_errors = validate_template_contract(registry, template_root())
+    if template_errors:
+        raise ExecutorError(
+            "bundled Artifact Schema and templates are out of sync: "
+            + " | ".join(template_errors)
         )
     if not repo.is_dir():
         raise ExecutorError(f"repository directory does not exist: {repo}")
@@ -594,7 +633,8 @@ def command_init(args: argparse.Namespace) -> int:
     )
     receipt = {
         "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
-        "register_schema_version": bundled_check.version,
+        "artifact_schema_registry_version": registry.registry_version,
+        "repository_register_artifact_schema_version": bundled_check.version,
         "validator_domain_statuses": {},
         "primary_error_count": 0,
         "skipped_group_count": 0,
@@ -607,6 +647,19 @@ def command_init(args: argparse.Namespace) -> int:
         "result": "committed",
     }
     receipt_path = write_receipt(output, 0, "init", receipt)
+    write_artifact_manifest(
+        output,
+        registry,
+        str(repo),
+        commit,
+        "init",
+        None,
+    )
+    manifest_errors = validate_artifact_manifest(output, registry)
+    if manifest_errors:
+        raise ExecutorError(
+            "initial Artifact Manifest is invalid: " + " | ".join(manifest_errors)
+        )
     emit(
         {
             "result": "initialized",
@@ -707,6 +760,7 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
                 "--repo",
                 str(repo),
                 "--json",
+                "--require-artifact-manifest",
             ]
         )
     return commands
@@ -714,6 +768,14 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
 
 def stage_gates(stage: str, candidate: Path, repo: Path) -> tuple[list[str], list[dict[str, Any]]]:
     errors: list[str] = []
+    try:
+        registry = load_registry()
+        errors.extend(
+            f"Artifact Schema: {message}"
+            for message in validate_artifact_manifest(candidate, registry)
+        )
+    except ArtifactSchemaError as exc:
+        errors.append(f"bundled Artifact Schema is invalid: {exc}")
     require_paths(
         candidate,
         [
@@ -799,6 +861,25 @@ def stage_gates(stage: str, candidate: Path, repo: Path) -> tuple[list[str], lis
             )
         elif stage == "ba-publication" and model_status != "blocked":
             errors.append("BA publication requires business_model_status complete, partial, or blocked")
+    if stage == "finalization":
+        try:
+            invalidated = read_json(candidate / ".work" / "artifact-manifest.json").get(
+                "invalidated_artifacts", []
+            )
+        except ExecutorError as exc:
+            errors.append(str(exc))
+        else:
+            if invalidated:
+                errors.append(
+                    "finalization cannot commit while Artifact types remain invalidated: "
+                    + ", ".join(
+                        sorted(
+                            str(item.get("artifact_type", "<unknown>"))
+                            for item in invalidated
+                            if isinstance(item, dict)
+                        )
+                    )
+                )
 
     results = [run_validator(command, candidate) for command in validator_commands(stage, candidate, repo)]
     for result in results:
@@ -859,14 +940,183 @@ def stage_skip_allowed(stage: str, candidate: Path, reason: str | None) -> None:
     raise ExecutorError(f"stage cannot be skipped: {stage}")
 
 
+def _migration_plan_path(output: Path, requested: Path | None) -> Path:
+    expected = (output / ".work" / "migration-plan.yaml").resolve()
+    if requested is None:
+        raise ExecutorError("migration begin requires --plan")
+    observed = requested.expanduser().resolve()
+    if observed != expected:
+        raise ExecutorError(f"--plan must point to {expected}")
+    return expected
+
+
+def _plan_repository_and_commit(plan: dict[str, Any]) -> tuple[Path, str]:
+    repo = Path(str(plan.get("repository", ""))).expanduser().resolve()
+    if not repo.is_dir():
+        raise ExecutorError(f"Migration Plan repository does not exist: {repo}")
+    actual = source_commit(repo)
+    planned = str(plan.get("source_commit", "unknown"))
+    if planned != "unknown" and actual != "unknown" and planned != actual:
+        raise ExecutorError(
+            f"Migration Plan commit no longer matches the repository: plan={planned}, current={actual}"
+        )
+    return repo, actual
+
+
+def _remove_candidate_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+    parent = path.parent
+    while parent.name not in {"candidate", ".work"} and parent.is_dir():
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
+def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
+    plan_path = _migration_plan_path(output, args.plan)
+    try:
+        registry = load_registry()
+        plan = load_migration_plan(plan_path, registry)
+        validate_plan_snapshot(output, plan)
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"Migration Plan is not executable: {exc}") from exc
+    if plan.get("status") == "blocked":
+        raise ExecutorError(
+            "Migration Plan is blocked: " + " | ".join(plan.get("blocked_reasons", []))
+        )
+    if plan.get("status") != "planned":
+        raise ExecutorError(f"Migration Plan must be planned, observed {plan.get('status')}")
+    repo, commit = _plan_repository_and_commit(plan)
+    transaction_id = f"00-migration-{uuid.uuid4().hex[:10]}"
+    acquire_lock(
+        output,
+        {
+            "transaction_id": transaction_id,
+            "stage": MIGRATION_STAGE,
+            "plan_id": plan["plan_id"],
+            "created_at": now_utc(),
+            "pid": os.getpid(),
+        },
+    )
+    tx_dir = transaction_dir(output, transaction_id)
+    candidate = tx_dir / "candidate"
+    try:
+        tx_dir.mkdir(parents=True, exist_ok=False)
+        snapshot_copy(output, candidate)
+        candidate_plan_path = candidate / ".work" / "migration-plan.yaml"
+        if not candidate_plan_path.is_file():
+            candidate_plan_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(plan_path, candidate_plan_path)
+        candidate_plan = dict(plan)
+        candidate_plan["status"] = "in-progress"
+        write_migration_plan(candidate_plan_path, candidate_plan)
+
+        automatic_actions: list[str] = []
+        for step in plan.get("steps", []):
+            action = step.get("action")
+            for relative in step.get("paths", []):
+                target = candidate / str(relative)
+                if action == "archive-and-rebuild":
+                    _remove_candidate_path(target)
+                    automatic_actions.append(f"invalidated {relative}")
+                elif action == "mechanical-migrate" and target.is_file():
+                    definition = registry.definitions.get(str(step.get("artifact_type")))
+                    if definition is None:
+                        raise ExecutorError(
+                            f"Migration step references unknown artifact type: {step.get('artifact_type')}"
+                        )
+                    add_artifact_metadata(
+                        target, definition.artifact_type, definition.current_version
+                    )
+                    automatic_actions.append(f"upgraded metadata for {relative}")
+
+        candidate_state_path = candidate / STATE_FILE
+        if not candidate_state_path.is_file():
+            raise ExecutorError("Migration Candidate has no analysis state")
+        add_artifact_metadata(candidate_state_path, "analysis-state", "1")
+        candidate_state = candidate_state_path.read_text(encoding="utf-8")
+        candidate_state = set_scalar(candidate_state, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
+        candidate_state = set_scalar(candidate_state, "repository_path", str(repo))
+        candidate_state = set_scalar(candidate_state, "migration_status", "in-progress")
+        candidate_state = set_scalar(candidate_state, "publication_status", "stale")
+        candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
+        atomic_write_text(candidate_state_path, candidate_state)
+
+        transaction = {
+            "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+            "transaction_id": transaction_id,
+            "stage": MIGRATION_STAGE,
+            "plan_id": plan["plan_id"],
+            "source_manifest_sha256": plan["source_manifest_sha256"],
+            "status": "in-progress",
+            "repository": str(repo),
+            "source_commit": commit,
+            "candidate": str(candidate),
+            "created_at": now_utc(),
+            "automatic_actions": automatic_actions,
+        }
+        atomic_write_text(tx_dir / "pre-state.yaml", state_text(output))
+        atomic_write_json(tx_dir / "transaction.json", transaction)
+        atomic_write_json(
+            tx_dir / "promotion-journal.json",
+            {
+                "transaction_id": transaction_id,
+                "stage": MIGRATION_STAGE,
+                "plan_id": plan["plan_id"],
+                "phase": "not-started",
+                "operations": [],
+            },
+        )
+    except Exception:
+        if tx_dir.exists():
+            shutil.rmtree(tx_dir, ignore_errors=True)
+        release_lock(output, transaction_id)
+        raise
+    emit(
+        {
+            "result": "begun",
+            "stage": MIGRATION_STAGE,
+            "transaction_id": transaction_id,
+            "plan_id": plan["plan_id"],
+            "candidate": str(candidate),
+            "automatic_actions": automatic_actions,
+            "instruction": (
+                "review-and-adopt only the planned working artifacts in Candidate; "
+                "do not write synthesis or reader documents"
+            ),
+        },
+        args.json,
+    )
+    return 0
+
+
 def command_begin(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
+    if args.stage == MIGRATION_STAGE:
+        return command_begin_migration(args, output)
+    if args.plan is not None:
+        raise ExecutorError("--plan is accepted only for the migration stage")
     formal_state = state_text(output)
     repo, commit = verify_repo_and_commit(formal_state)
     current_stage = scalar_value(formal_state, "current_stage")
     status = scalar_value(formal_state, "stage_status")
     if scalar_value(formal_state, "workflow_schema_version") != WORKFLOW_SCHEMA_VERSION:
         raise ExecutorError("analysis state is legacy; run resume before begin")
+    try:
+        registry = load_registry()
+        manifest_errors = validate_artifact_manifest(output, registry)
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"bundled Artifact Schema is invalid: {exc}") from exc
+    if manifest_errors:
+        raise ExecutorError(
+            "formal Artifact Manifest is invalid; run resume audit: "
+            + " | ".join(manifest_errors)
+        )
     if current_stage == "completed":
         raise ExecutorError("workflow is already completed")
     if current_stage not in STAGE_INDEX:
@@ -891,12 +1141,6 @@ def command_begin(args: argparse.Namespace) -> int:
         tx_dir.mkdir(parents=True, exist_ok=False)
         snapshot_copy(output, candidate)
         automatic_actions: list[str] = []
-        legacy_ba = candidate / "ba-pack" / "behaviors"
-        if current_stage == "business-model" and legacy_ba.is_dir():
-            shutil.rmtree(legacy_ba)
-            automatic_actions.append(
-                "removed legacy ba-pack/behaviors from Candidate for verified archival during commit"
-            )
         candidate_state = (candidate / STATE_FILE).read_text(encoding="utf-8")
         candidate_state = set_scalar(candidate_state, "stage_status", "in-progress")
         candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
@@ -1193,6 +1437,7 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
                 "--repo",
                 str(repo),
                 "--json",
+                "--skip-artifact-manifest",
             ]
         )
     return [run_validator(command, output) for command in commands]
@@ -1225,10 +1470,333 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def archive_legacy_artifacts(
+    output: Path, plan: dict[str, Any], transaction_id: str
+) -> Path | None:
+    paths = sorted(
+        {
+            str(relative)
+            for step in plan.get("steps", [])
+            if step.get("action") == "review-and-adopt"
+            for relative in step.get("paths", [])
+            if (output / str(relative)).is_file()
+        }
+    )
+    if not paths:
+        return None
+    parent = output / ".work" / "legacy-artifacts"
+    temporary = parent / f".{plan['plan_id']}.tmp"
+    final = parent / str(plan["plan_id"])
+    if final.is_dir():
+        audit = audit_archive_directory(final)
+        if not audit["valid"]:
+            raise ExecutorError("existing legacy-artifacts archive failed checksum audit")
+        return final
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    temporary.mkdir(parents=True, exist_ok=False)
+    for relative in paths:
+        destination = temporary / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(output / relative, destination)
+    verify_archive(output, temporary, paths)
+    manifest = file_manifest(temporary)
+    atomic_write_json(
+        temporary / "archive-manifest.json",
+        {
+            "plan_id": plan["plan_id"],
+            "transaction_id": transaction_id,
+            "created_at": now_utc(),
+            "files": manifest,
+            "summary": manifest_summary(manifest),
+        },
+    )
+    parent.mkdir(parents=True, exist_ok=True)
+    os.replace(temporary, final)
+    return final
+
+
+def _finalize_migration_candidate_state(
+    candidate: Path, plan: dict[str, Any], repo: Path
+) -> str:
+    path = candidate / STATE_FILE
+    add_artifact_metadata(path, "analysis-state", "1")
+    text = path.read_text(encoding="utf-8")
+    target = str(plan["resume_stage_after_migration"])
+    text = set_scalar(text, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
+    text = set_scalar(text, "repository_path", str(repo))
+    text = set_scalar(text, "current_stage", target)
+    text = set_scalar(text, "stage_status", "pending")
+    text = set_scalar(text, "active_transaction", None)
+    text = set_scalar(text, "last_committed_stage", previous_stage(target))
+    text = set_scalar(text, "phase", phase_for_stage(target))
+    text = set_scalar(text, "migration_status", "committed")
+    target_index = STAGE_INDEX[target]
+    if target_index <= STAGE_INDEX["synthesis"]:
+        text = set_scalar(text, "synthesis_status", "pending")
+    if target_index <= STAGE_INDEX["business-model"]:
+        text = set_scalar(text, "business_model_status", "pending")
+    publication = "stale" if plan.get("invalidated_artifacts") else "pending"
+    text = set_scalar(text, "publication_status", publication)
+    atomic_write_text(path, text)
+    return text
+
+
+def _validate_migration_candidate(
+    output: Path,
+    candidate: Path,
+    plan: dict[str, Any],
+    registry: Any,
+    repo: Path,
+    commit: str,
+    transaction_id: str,
+) -> tuple[list[str], dict[str, list[str]]]:
+    errors: list[str] = []
+    try:
+        validate_plan_snapshot(output, plan)
+    except ArtifactSchemaError as exc:
+        errors.append(str(exc))
+    allowed, must_remove, preserve = migration_allowed_paths(plan)
+    current_manifest = file_manifest(output)
+    candidate_manifest = file_manifest(candidate)
+    diff = manifest_diff(current_manifest, candidate_manifest)
+    changed_paths = set(diff["added"] + diff["changed"] + diff["deleted"])
+    unexpected = sorted(changed_paths - allowed)
+    if unexpected:
+        errors.append(
+            "Migration Candidate changed paths outside the plan: " + ", ".join(unexpected)
+        )
+    for relative in sorted(must_remove):
+        if (candidate / relative).exists():
+            errors.append(f"planned archive-and-rebuild Artifact still exists: {relative}")
+
+    source_by_path = {
+        str(item.get("path")): str(item.get("sha256"))
+        for item in plan.get("source_snapshot", [])
+        if isinstance(item, dict)
+    }
+    for relative in sorted(preserve):
+        source_hash = source_by_path.get(relative)
+        path = candidate / relative
+        if source_hash is not None and (
+            not path.is_file() or sha256_file(path) != source_hash
+        ):
+            errors.append(f"preserved Artifact changed during Migration: {relative}")
+
+    for step in plan.get("steps", []):
+        if step.get("action") not in {"mechanical-migrate", "review-and-adopt", "preserve"}:
+            continue
+        definition = registry.definitions.get(str(step.get("artifact_type")))
+        if definition is None:
+            continue
+        for relative in step.get("paths", []):
+            path = candidate / str(relative)
+            if not path.is_file():
+                if definition.artifact_type == "artifact-manifest":
+                    continue
+                errors.append(f"planned retained Artifact is missing: {relative}")
+                continue
+            observed_type, observed_version = artifact_metadata(path)
+            if (
+                observed_type != definition.artifact_type
+                or observed_version != definition.current_version
+            ):
+                errors.append(
+                    f"Artifact was not adopted to the current schema: {relative}; expected "
+                    f"{definition.artifact_type}@{definition.current_version}"
+                )
+
+    register = candidate / ".work" / "repository-register.md"
+    if register.is_file():
+        try:
+            register_check = validate_register_file(register, load_register_schema())
+        except RegisterSchemaError as exc:
+            errors.append(f"bundled Register Schema is invalid: {exc}")
+        else:
+            register_errors = list(register_check.errors)
+            register_errors.extend(
+                item
+                for values in register_check.domain_errors.values()
+                for item in values
+            )
+            if register_errors:
+                errors.append(
+                    "review-and-adopt Register does not match the current schema: "
+                    + " | ".join(register_errors)
+                )
+
+    write_artifact_manifest(
+        candidate,
+        registry,
+        str(repo),
+        commit,
+        MIGRATION_STAGE,
+        transaction_id,
+        plan.get("invalidated_artifacts", []),
+    )
+    errors.extend(validate_artifact_manifest(candidate, registry))
+    return errors, diff
+
+
+def command_commit_migration(
+    args: argparse.Namespace,
+    output: Path,
+    tx_dir: Path,
+    transaction: dict[str, Any],
+    candidate: Path,
+) -> int:
+    if args.skip or args.semantic_result is not None:
+        raise ExecutorError("Migration cannot use --skip or --semantic-result")
+    lock = read_json(lock_path(output)) if lock_path(output).is_file() else {}
+    if lock.get("transaction_id") != args.transaction or lock.get("stage") != MIGRATION_STAGE:
+        raise ExecutorError("migration execution lock does not own this transaction")
+    try:
+        registry = load_registry()
+        formal_plan_path = output / ".work" / "migration-plan.yaml"
+        plan = load_migration_plan(formal_plan_path, registry)
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"Migration Plan is invalid: {exc}") from exc
+    if transaction.get("plan_id") != plan.get("plan_id"):
+        raise ExecutorError("transaction and Migration Plan IDs do not match")
+    if plan.get("status") != "planned":
+        raise ExecutorError("formal Migration Plan is no longer planned")
+    repo, commit = _plan_repository_and_commit(plan)
+
+    candidate_plan = dict(plan)
+    candidate_plan["status"] = "committed"
+    write_migration_plan(candidate / ".work" / "migration-plan.yaml", candidate_plan)
+    candidate_state = _finalize_migration_candidate_state(candidate, plan, repo)
+    errors, diff = _validate_migration_candidate(
+        output, candidate, plan, registry, repo, commit, args.transaction
+    )
+    if errors:
+        transaction["status"] = "failed"
+        transaction["last_attempt_at"] = now_utc()
+        transaction["errors"] = errors
+        atomic_write_json(tx_dir / "transaction.json", transaction)
+        emit(
+            {
+                "result": "failed",
+                "stage": MIGRATION_STAGE,
+                "transaction_id": args.transaction,
+                "errors": errors,
+                "candidate": str(candidate),
+            },
+            args.json,
+        )
+        return 1
+
+    current_manifest = file_manifest(output)
+    candidate_manifest = file_manifest(candidate)
+    diff = manifest_diff(current_manifest, candidate_manifest)
+    directories = directory_diff(output, candidate)
+    archive_paths = sorted(
+        path
+        for path in set(diff["changed"] + diff["deleted"])
+        if path != STATE_FILE.as_posix()
+    )
+    archive, archive_summary = create_archive(output, args.transaction, archive_paths)
+    legacy_artifacts = archive_legacy_artifacts(output, plan, args.transaction)
+    legacy_ba_archive = archive_legacy_ba(output, candidate, args.transaction)
+    journal_path = tx_dir / "promotion-journal.json"
+    journal: dict[str, Any] | None = None
+    receipt_path: Path | None = None
+    try:
+        journal = promote_candidate(
+            output, candidate, args.transaction, diff, archive, journal_path
+        )
+        atomic_write_text(state_path(output), candidate_state)
+        receipt_payload = {
+            "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+            "artifact_schema_registry_version": registry.registry_version,
+            "kind": "migration",
+            "transaction_id": args.transaction,
+            "stage": MIGRATION_STAGE,
+            "plan_id": plan["plan_id"],
+            "repository": str(repo),
+            "source_commit": commit,
+            "source_manifest_sha256": plan["source_manifest_sha256"],
+            "resume_stage_after_migration": plan["resume_stage_after_migration"],
+            "steps": plan["steps"],
+            "invalidated_artifacts": plan["invalidated_artifacts"],
+            "expected_archives": plan["expected_archives"],
+            "archive": str(archive) if archive else None,
+            "archive_summary": archive_summary,
+            "legacy_artifacts_archive": str(legacy_artifacts) if legacy_artifacts else None,
+            "legacy_ba_archive": str(legacy_ba_archive) if legacy_ba_archive else None,
+            "changes": diff,
+            "directory_changes": directories,
+            "started_at": transaction.get("created_at"),
+            "completed_at": now_utc(),
+            "validators": [
+                {
+                    "group": "artifact-schema-and-manifest",
+                    "result": "passed",
+                },
+                {
+                    "group": "repository-register-schema",
+                    "result": "passed" if (candidate / ".work" / "repository-register.md").is_file() else "not-applicable",
+                },
+            ],
+            "result": "committed",
+        }
+        receipt_path = write_receipt(
+            output, receipt_count(output), MIGRATION_STAGE, receipt_payload
+        )
+        write_artifact_manifest(
+            output,
+            registry,
+            str(repo),
+            commit,
+            MIGRATION_STAGE,
+            args.transaction,
+            plan.get("invalidated_artifacts", []),
+        )
+        manifest_errors = validate_artifact_manifest(output, registry)
+        if manifest_errors:
+            raise ExecutorError(
+                "post-migration Artifact Manifest validation failed: "
+                + " | ".join(manifest_errors)
+            )
+        journal["phase"] = "committed"
+        journal["receipt"] = str(receipt_path)
+        journal["updated_at"] = now_utc()
+        atomic_write_json(journal_path, journal)
+        release_lock(output, args.transaction)
+        shutil.rmtree(tx_dir)
+    except Exception:
+        if journal is not None and journal.get("phase") == "content-promoted":
+            rollback_promotion(output, archive, journal)
+            journal["phase"] = "rolled-back-after-commit-error"
+            journal["updated_at"] = now_utc()
+            atomic_write_json(journal_path, journal)
+            atomic_write_text(state_path(output), (tx_dir / "pre-state.yaml").read_text(encoding="utf-8"))
+        if receipt_path is not None and receipt_path.exists():
+            receipt_path.unlink()
+        raise
+    emit(
+        {
+            "result": "committed",
+            "stage": MIGRATION_STAGE,
+            "transaction_id": args.transaction,
+            "plan_id": plan["plan_id"],
+            "next_stage": plan["resume_stage_after_migration"],
+            "receipt": str(receipt_path),
+            "archive": str(archive) if archive else None,
+            "legacy_artifacts_archive": str(legacy_artifacts) if legacy_artifacts else None,
+            "legacy_ba_archive": str(legacy_ba_archive) if legacy_ba_archive else None,
+        },
+        args.json,
+    )
+    return 0
+
+
 def command_commit(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
     tx_dir, transaction, candidate = load_transaction(output, args.transaction)
     stage = str(transaction.get("stage"))
+    if stage == MIGRATION_STAGE:
+        return command_commit_migration(args, output, tx_dir, transaction, candidate)
     formal_text = state_text(output)
     if scalar_value(formal_text, "active_transaction") != args.transaction:
         raise ExecutorError("analysis state does not own this transaction")
@@ -1244,6 +1812,35 @@ def command_commit(args: argparse.Namespace) -> int:
         args.skip,
     )
     atomic_write_text(candidate_state_path, candidate_state)
+
+    try:
+        registry = load_registry()
+        invalidated = read_json(candidate / ".work" / "artifact-manifest.json").get(
+            "invalidated_artifacts", []
+        )
+        if isinstance(invalidated, list):
+            produced_now = {
+                artifact_type
+                for artifact_type, definition in registry.definitions.items()
+                if definition.producing_stage == stage
+            }
+            invalidated = [
+                item
+                for item in invalidated
+                if not isinstance(item, dict)
+                or item.get("artifact_type") not in produced_now
+            ]
+        write_artifact_manifest(
+            candidate,
+            registry,
+            str(repo),
+            commit,
+            stage,
+            args.transaction,
+            invalidated if isinstance(invalidated, list) else [],
+        )
+    except (ArtifactSchemaError, ExecutorError) as exc:
+        raise ExecutorError(f"cannot refresh Candidate Artifact Manifest: {exc}") from exc
 
     errors, validators = stage_gates(stage, candidate, repo)
     candidate_state_check = run_validator(
@@ -1294,7 +1891,6 @@ def command_commit(args: argparse.Namespace) -> int:
         if path != STATE_FILE.as_posix()
     )
     archive, archive_summary = create_archive(output, args.transaction, archive_paths)
-    legacy_archive = archive_legacy_ba(output, candidate, args.transaction)
     journal_path = tx_dir / "promotion-journal.json"
     journal: dict[str, Any] | None = None
     receipt_path: Path | None = None
@@ -1314,17 +1910,25 @@ def command_commit(args: argparse.Namespace) -> int:
             rollback_promotion(output, archive, journal)
             journal["phase"] = "rolled-back-after-post-validation"
             atomic_write_json(journal_path, journal)
-            raise ExecutorError("post-promotion validation failed; published content was rolled back")
+            details = " | ".join(
+                (result.get("stdout") or result.get("stderr") or "validator failed").strip()
+                for result in failed_post
+            )
+            raise ExecutorError(
+                "post-promotion validation failed; published content was rolled back: "
+                + details
+            )
 
         sequence = receipt_count(output)
         validation_summary = pack_validation_summary(validators + post_results)
-        register_schema_version = scalar_value(
+        register_artifact_schema_version = scalar_value(
             (candidate / ".work" / "repository-register.md").read_text(encoding="utf-8"),
-            "register_schema_version",
+            "artifact_schema_version",
         )
         receipt_payload = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
-            "register_schema_version": register_schema_version,
+            "artifact_schema_registry_version": registry.registry_version,
+            "repository_register_artifact_schema_version": register_artifact_schema_version,
             **validation_summary,
             "transaction_id": args.transaction,
             "stage": stage,
@@ -1340,12 +1944,26 @@ def command_commit(args: argparse.Namespace) -> int:
             "directory_changes": directories,
             "archive": str(archive) if archive else None,
             "archive_summary": archive_summary,
-            "legacy_ba_archive": str(legacy_archive) if legacy_archive else None,
             "validators": validators + post_results,
             "result": "committed",
         }
         receipt_path = write_receipt(output, sequence, stage, receipt_payload)
         atomic_write_text(state_path(output), candidate_state)
+        write_artifact_manifest(
+            output,
+            registry,
+            str(repo),
+            commit,
+            stage,
+            args.transaction,
+            invalidated if isinstance(invalidated, list) else [],
+        )
+        manifest_errors = validate_artifact_manifest(output, registry)
+        if manifest_errors:
+            raise ExecutorError(
+                "post-commit Artifact Manifest validation failed: "
+                + " | ".join(manifest_errors)
+            )
         state_check = run_validator(
             [
                 sys.executable,
@@ -1427,8 +2045,13 @@ def command_abort(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
     tx_dir, transaction, _candidate = load_transaction(output, args.transaction)
     formal = state_text(output)
-    if scalar_value(formal, "active_transaction") != args.transaction:
+    is_migration = transaction.get("stage") == MIGRATION_STAGE
+    if not is_migration and scalar_value(formal, "active_transaction") != args.transaction:
         raise ExecutorError("analysis state does not own this transaction")
+    if is_migration:
+        lock = read_json(lock_path(output)) if lock_path(output).is_file() else {}
+        if lock.get("transaction_id") != args.transaction:
+            raise ExecutorError("migration execution lock does not own this transaction")
     journal = read_json(tx_dir / "promotion-journal.json")
     if journal.get("phase") not in {
         "not-started",
@@ -1439,9 +2062,10 @@ def command_abort(args: argparse.Namespace) -> int:
         "rolled-back-by-recover",
     }:
         raise ExecutorError("transaction has promotion work; run recover instead of abort")
-    formal = set_scalar(formal, "stage_status", "pending")
-    formal = set_scalar(formal, "active_transaction", None)
-    atomic_write_text(state_path(output), formal)
+    if not is_migration:
+        formal = set_scalar(formal, "stage_status", "pending")
+        formal = set_scalar(formal, "active_transaction", None)
+        atomic_write_text(state_path(output), formal)
     release_lock(output, args.transaction)
     shutil.rmtree(tx_dir)
     emit(
@@ -1470,6 +2094,10 @@ def status_payload(output: Path) -> dict[str, Any]:
         "synthesis_status": scalar_value(text, "synthesis_status"),
         "business_model_status": scalar_value(text, "business_model_status"),
         "publication_status": scalar_value(text, "publication_status"),
+        "migration_status": scalar_value(text, "migration_status") or "unknown",
+        "migration_plan": None,
+        "artifact_manifest_status": "unknown",
+        "artifact_manifest_errors": [],
         "behavior_counts": {},
         "formal_manifest": manifest_summary(file_manifest(output)),
         "receipt_count": receipt_count(output),
@@ -1482,6 +2110,7 @@ def status_payload(output: Path) -> dict[str, Any]:
         "validator_summary": [],
         "archive_audits": [],
         "legacy_archive_audits": [],
+        "legacy_artifact_archive_audits": [],
         "temporary_paths": temporary_paths(output),
     }
     counts: dict[str, int] = {}
@@ -1494,7 +2123,33 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["lock"] = read_json(lock_path(output))
         except ExecutorError as exc:
             payload["lock"] = {"error": str(exc)}
+    plan_path = output / ".work" / "migration-plan.yaml"
+    if plan_path.is_file():
+        try:
+            registry = load_registry()
+            plan = load_migration_plan(plan_path, registry)
+            payload["migration_plan"] = {
+                "path": str(plan_path),
+                "plan_id": plan.get("plan_id"),
+                "status": plan.get("status"),
+                "resume_stage_after_migration": plan.get("resume_stage_after_migration"),
+                "invalidated_artifacts": plan.get("invalidated_artifacts", []),
+                "blocked_reasons": plan.get("blocked_reasons", []),
+            }
+        except ArtifactSchemaError as exc:
+            payload["integrity_errors"].append(f"Migration Plan invalid: {exc}")
+    try:
+        registry = load_registry()
+        artifact_errors = validate_artifact_manifest(output, registry)
+        payload["artifact_manifest_errors"] = artifact_errors
+        payload["artifact_manifest_status"] = "valid" if not artifact_errors else "invalid"
+    except ArtifactSchemaError as exc:
+        payload["artifact_manifest_status"] = "invalid"
+        payload["artifact_manifest_errors"] = [str(exc)]
+
     active = payload["active_transaction"]
+    if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
+        active = payload["lock"].get("transaction_id")
     if active:
         try:
             tx_dir, transaction, candidate = load_transaction(output, str(active))
@@ -1524,7 +2179,14 @@ def status_payload(output: Path) -> dict[str, Any]:
         payload["integrity_errors"].append(
             "completed state has no committed finalization Receipt"
         )
-    if payload["active_transaction"] is None and payload["lock"] is not None:
+    if (
+        payload["active_transaction"] is None
+        and payload["lock"] is not None
+        and not (
+            isinstance(payload["lock"], dict)
+            and payload["lock"].get("stage") == MIGRATION_STAGE
+        )
+    ):
         payload["integrity_errors"].append("workflow lock exists without active_transaction")
     archive_root = execution_root(output) / "archive"
     if archive_root.is_dir():
@@ -1540,7 +2202,18 @@ def status_payload(output: Path) -> dict[str, Any]:
             for path in sorted(legacy_root.iterdir())
             if path.is_dir() and not path.name.startswith(".")
         ]
-    for audit in payload["archive_audits"] + payload["legacy_archive_audits"]:
+    legacy_artifacts_root = output / ".work" / "legacy-artifacts"
+    if legacy_artifacts_root.is_dir():
+        payload["legacy_artifact_archive_audits"] = [
+            audit_archive_directory(path)
+            for path in sorted(legacy_artifacts_root.iterdir())
+            if path.is_dir() and not path.name.startswith(".")
+        ]
+    for audit in (
+        payload["archive_audits"]
+        + payload["legacy_archive_audits"]
+        + payload["legacy_artifact_archive_audits"]
+    ):
         if not audit["valid"]:
             payload["integrity_errors"].append(
                 f"archive integrity failed: {audit['path']}"
@@ -1552,101 +2225,6 @@ def command_status(args: argparse.Namespace) -> int:
     payload = status_payload(args.output.expanduser().resolve())
     emit(payload, args.json)
     return 0
-
-
-def earliest_legacy_stage(output: Path, text: str) -> tuple[str, list[str]]:
-    reasons: list[str] = []
-    register = output / ".work" / "repository-register.md"
-    register_text = register.read_text(encoding="utf-8") if register.is_file() else ""
-    if not (output / ".work" / "evidence-index.json").is_file():
-        return "inventory", ["evidence index is missing"]
-    entries = behavior_entries(text)
-    if any(entry.get("status") not in {"understood", "blocked"} for entry in entries):
-        return "tracing", ["one or more behaviors are not understood or blocked"]
-    dossier_dir = output / ".work" / "behavior-dossiers"
-    if any(not (dossier_dir / f"{entry.get('behavior_id')}.md").is_file() and not entry.get("dossier") for entry in entries):
-        return "tracing", ["one or more behavior dossiers are missing"]
-    try:
-        register_schema = load_register_schema()
-    except RegisterSchemaError as exc:
-        reasons.append(f"bundled Register Schema is invalid: {exc}")
-    else:
-        if scalar_value(register_text, "register_schema_version") != register_schema.version:
-            reasons.append(
-                "repository register has no supported register_schema_version; rebuild it from synthesis"
-            )
-        else:
-            register_check = validate_register_file(register, register_schema)
-            if not register_check.valid:
-                reasons.append("repository register does not match the current Register Schema")
-    if REGISTER_HEADINGS - headings(register):
-        reasons.append("repository register uses an incomplete or legacy structure")
-    if "## Proven outbound HTTP calls and mappings" in register_text:
-        reasons.append("repository register still flattens outbound Calls and field Mappings")
-    if re.search(r"^## External dependencies\s*$", register_text, re.M):
-        reasons.append("repository register still uses the legacy dependency inventory")
-    endpoint_section = re.search(
-        r"^## Endpoint reconciliation\s*$\n(?P<body>.*?)(?=^## |\Z)",
-        register_text,
-        re.M | re.S,
-    )
-    if endpoint_section and not all(
-        label in endpoint_section.group("body")
-        for label in ("Operation Role", "Publication Disposition")
-    ):
-        reasons.append("Endpoint reconciliation lacks operation-role publication fields")
-    if not (output / ".work" / "repository-synthesis.md").is_file():
-        reasons.append("repository synthesis is missing")
-    elif SYNTHESIS_HEADINGS - headings(output / ".work" / "repository-synthesis.md"):
-        reasons.append("repository synthesis lacks a current repository mental model")
-    if reasons:
-        return "synthesis", reasons
-    if not (output / "tech-pack" / "repository-overview.md").is_file():
-        return "tech-publication", ["Tech Pack overview is missing"]
-    tech_legacy_markers = {
-        "tech-pack/field-validation-and-mapping.md": (
-            "## Proven external HTTP calls",
-            "## External HTTP field mappings",
-        ),
-        "tech-pack/external-dependency-contracts.md": (
-            "## Observed operations and contracts",
-            "## External dependency observations",
-        ),
-        "tech-pack/failure-taxonomy.md": ("## Failure observations",),
-    }
-    legacy_tech: list[str] = []
-    for relative, markers in tech_legacy_markers.items():
-        document = output / relative
-        if document.is_file() and any(
-            marker in document.read_text(encoding="utf-8") for marker in markers
-        ):
-            legacy_tech.append(relative)
-    if legacy_tech:
-        return "tech-publication", [
-            "legacy reader-document layouts were detected: " + ", ".join(legacy_tech)
-        ]
-    legacy_contracts: list[str] = []
-    for contract in (output / "tech-pack" / "contracts").glob("*.api-contract.md"):
-        contract_text = contract.read_text(encoding="utf-8")
-        if "## Exposure and reachability" in contract_text or re.search(
-            r"^## .*\bL[123]\b", contract_text, re.M
-        ):
-            legacy_contracts.append(contract.name)
-    if legacy_contracts:
-        return "api-contract-publication", [
-            "legacy API Contract layouts were detected: " + ", ".join(sorted(legacy_contracts))
-        ]
-    if "ba_behavior_document" in "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (output / "tech-pack" / "behaviors").glob("*.md")
-    ) or (output / "ba-pack" / "behaviors").exists():
-        return "business-model", ["legacy one-to-one BA Pack structure was detected"]
-    if not (output / ".work" / "business-model.md").is_file():
-        return "business-model", ["Business Model is missing"]
-    model_status = scalar_value(text, "business_model_status")
-    if model_status in {"complete", "partial"} and not (output / "ba-pack" / "business-overview.md").is_file():
-        return "ba-publication", ["BA Pack is incomplete"]
-    return "finalization", ["legacy runs require a new finalization receipt"]
 
 
 def command_resume(args: argparse.Namespace) -> int:
@@ -1666,74 +2244,70 @@ def command_resume(args: argparse.Namespace) -> int:
         )
     if scalar_value(text, "analysis_mode") != "automatic":
         raise ExecutorError("only automatic full-repository analysis can be resumed")
-    if scalar_value(text, "workflow_schema_version") == WORKFLOW_SCHEMA_VERSION:
+    try:
+        registry = load_registry()
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"bundled Artifact Schema is invalid: {exc}") from exc
+
+    if (
+        scalar_value(text, "workflow_schema_version") == WORKFLOW_SCHEMA_VERSION
+        and scalar_value(text, "current_stage") == "completed"
+        and committed_finalization_receipt(output) is None
+    ):
+        raise ExecutorError(
+            "completed state has no committed finalization Receipt; this is an integrity "
+            "failure and cannot be converted into a migration recovery point"
+        )
+
+    if current_pack_is_versioned(output, registry):
         verify_repo_and_commit(text, repo)
         status = status_payload(output)
         if status["current_stage"] == "completed" and committed_finalization_receipt(output) is None:
-            text = set_scalar(text, "current_stage", "finalization")
-            text = set_scalar(text, "stage_status", "pending")
-            text = set_scalar(text, "active_transaction", None)
-            text = set_scalar(text, "last_committed_stage", "ba-publication")
-            text = set_scalar(text, "phase", "publishing")
-            text = set_scalar(text, "publication_status", "in-progress")
-            atomic_write_text(state, text)
-            receipt = {
-                "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
-                "kind": "receipt-integrity-resume-audit",
-                "repository": str(repo),
-                "source_commit": actual_commit,
-                "selected_stage": "finalization",
-                "reasons": ["completed state had no committed finalization Receipt"],
-                "created_at": now_utc(),
-                "result": "pending-transactional-resume",
-            }
-            receipt_path = write_receipt(
-                output, receipt_count(output), "resume-audit", receipt
+            raise ExecutorError(
+                "completed state has no committed finalization Receipt; "
+                "this is an integrity failure and cannot be repaired by rewriting State"
             )
-            emit(
-                {
-                    "result": "completion-reopened",
-                    "current_stage": "finalization",
-                    "receipt": str(receipt_path),
-                },
-                args.json,
-            )
-            return 0
         emit({"result": "resume-ready", **status}, args.json)
         return 0
-    stage, reasons = earliest_legacy_stage(output, text)
-    text = set_scalar(text, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
-    text = set_scalar(text, "repository_path", str(repo))
-    text = set_scalar(text, "current_stage", stage)
-    text = set_scalar(text, "stage_status", "pending")
-    text = set_scalar(text, "active_transaction", None)
-    text = set_scalar(text, "last_committed_stage", previous_stage(stage))
-    text = set_scalar(text, "phase", phase_for_stage(stage))
-    if stage != "finalization":
-        text = set_scalar(text, "publication_status", "in-progress" if phase_for_stage(stage) == "publishing" else "pending")
-    atomic_write_text(state, text)
+
+    if lock_path(output).exists():
+        raise ExecutorError("resume audit cannot run while an execution transaction is active")
+    try:
+        plan = build_migration_plan(output, registry, repo, actual_commit)
+        plan_path = output / ".work" / "migration-plan.yaml"
+        write_migration_plan(plan_path, plan)
+    except ArtifactSchemaError as exc:
+        raise ExecutorError(f"cannot build Migration Plan: {exc}") from exc
     receipt = {
-        "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
-        "kind": "legacy-resume-audit",
+        "workflow_schema_version": scalar_value(text, "workflow_schema_version") or "unknown",
+        "artifact_schema_registry_version": registry.registry_version,
+        "kind": "migration-planning",
+        "plan_id": plan["plan_id"],
         "repository": str(repo),
         "source_commit": actual_commit,
-        "selected_stage": stage,
-        "reasons": reasons,
+        "source_manifest_sha256": plan["source_manifest_sha256"],
+        "target_workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+        "resume_stage_after_migration": plan["resume_stage_after_migration"],
+        "blocked_reasons": plan["blocked_reasons"],
         "created_at": now_utc(),
-        "result": "pending-transactional-resume",
+        "result": "blocked" if plan["status"] == "blocked" else "planned",
     }
-    receipt_path = write_receipt(output, receipt_count(output), "resume-audit", receipt)
+    receipt_path = write_receipt(output, receipt_count(output), "migration-planning", receipt)
     emit(
         {
-            "result": "legacy-state-upgraded",
+            "result": "migration-blocked" if plan["status"] == "blocked" else "migration-planned",
             "output": str(output),
-            "current_stage": stage,
-            "reasons": reasons,
+            "plan": str(plan_path),
+            "plan_id": plan["plan_id"],
+            "plan_status": plan["status"],
+            "resume_stage_after_migration": plan["resume_stage_after_migration"],
+            "invalidated_artifacts": plan["invalidated_artifacts"],
+            "blocked_reasons": plan["blocked_reasons"],
             "receipt": str(receipt_path),
         },
         args.json,
     )
-    return 0
+    return 1 if plan["status"] == "blocked" else 0
 
 
 def command_recover(args: argparse.Namespace) -> int:
@@ -1760,6 +2334,7 @@ def command_recover(args: argparse.Namespace) -> int:
                 )
                 return 0
             if tx_dir.is_dir():
+                transaction = read_json(tx_dir / "transaction.json")
                 journal = read_json(tx_dir / "promotion-journal.json")
                 archive_value = journal.get("archive")
                 archive = Path(archive_value) if archive_value else None
@@ -1769,10 +2344,16 @@ def command_recover(args: argparse.Namespace) -> int:
                     {"operations": journal.get("completed_operations", [])},
                 )
                 pre_state = tx_dir / "pre-state.yaml"
-                recovered = pre_state.read_text(encoding="utf-8") if pre_state.is_file() else text
-                recovered = set_scalar(recovered, "stage_status", "failed")
-                recovered = set_scalar(recovered, "active_transaction", transaction_id)
-                atomic_write_text(state_path(output), recovered)
+                if transaction.get("stage") == MIGRATION_STAGE:
+                    if pre_state.is_file():
+                        atomic_write_text(
+                            state_path(output), pre_state.read_text(encoding="utf-8")
+                        )
+                else:
+                    recovered = pre_state.read_text(encoding="utf-8") if pre_state.is_file() else text
+                    recovered = set_scalar(recovered, "stage_status", "failed")
+                    recovered = set_scalar(recovered, "active_transaction", transaction_id)
+                    atomic_write_text(state_path(output), recovered)
                 journal["phase"] = "rolled-back-by-recover"
                 atomic_write_json(tx_dir / "promotion-journal.json", journal)
                 emit(
@@ -1882,7 +2463,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     begin = subparsers.add_parser("begin")
     begin.add_argument("--output", type=Path, required=True)
-    begin.add_argument("--stage", choices=STAGES[:-1], required=True)
+    begin.add_argument("--stage", choices=(MIGRATION_STAGE,) + STAGES[:-1], required=True)
+    begin.add_argument("--plan", type=Path)
     begin.add_argument("--json", action="store_true")
     begin.set_defaults(handler=command_begin)
 

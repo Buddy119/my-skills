@@ -1,4 +1,6 @@
 ---
+artifact_type: "ba-journey"
+artifact_schema_version: "1"
 journey_id: "repository.journey.business-goal"
 title: "Business journey title"
 repository: "repository-name"
