@@ -59,13 +59,13 @@ Run the full structure, Artifact, Manifest, Markdown, domain, link, Fragment, ci
 
 ## Semantic Fact Review
 
-Use the risk categories in the Review Schema. Sample the highest-impact available instance in each applicable category, not the easiest instance. Confirm that cited code proves the documented meaning, state outcome, boundary relation, configuration effect, failure handling, binding, or business trace—not merely that a file or symbol exists.
+Use the risk categories in the Review Schema. Sample the highest-impact available instance in each applicable category, not the easiest instance. For lifecycle, sample one Object State definition, one Transition and its change point, one action that correctly has no State effect, and a Derived State when present. Confirm that cited code proves the documented meaning, state outcome, boundary relation, configuration effect, failure handling, binding, or business trace—not merely that a file or symbol exists.
 
 An unresolved semantic finding blocks publication. Preserve `Unknown` or `Conflicting` when the repository cannot support a stronger conclusion.
 
 ## Reader Review
 
-Read without source code first. Sample the applicable overview, behavior, contract, mapping, dependency, failure, BA, navigation, and diagram surfaces. Record whether the intended reader can answer the document's core questions and reach deeper detail without encountering repetition, audit-ledger prose, stale lifecycle wording, or misleading diagrams.
+Read without source code first. Sample the applicable overview, behavior, contract, mapping, dependency, failure, typed lifecycle, BA, navigation, and diagram surfaces. Confirm that readers can separately answer “what condition is the Object in?”, “what did the repository do?”, and “where did the data move?”. Record whether the intended reader can reach deeper detail without encountering repetition, audit-ledger prose, stale lifecycle wording, or misleading diagrams.
 
 An unresolved reader problem blocks publication even when every link and table is mechanically valid.
 

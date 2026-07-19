@@ -55,7 +55,10 @@ class ArtifactScaffoldTests(unittest.TestCase):
         )
         self.assertEqual(rendered.relative_path, ".work/repository-synthesis.md")
         self.assertIn('artifact_type: "repository-synthesis"', rendered.content)
-        self.assertIn('artifact_schema_version: "1"', rendered.content)
+        self.assertIn(
+            f'artifact_schema_version: "{self.registry.definitions["repository-synthesis"].current_version}"',
+            rendered.content,
+        )
         self.assertIn('repository: "customer-eapi"', rendered.content)
         self.assertIn('source_commit: "abc123"', rendered.content)
         self.assertIn('synthesis_status: "complete|partial|blocked"', rendered.content)

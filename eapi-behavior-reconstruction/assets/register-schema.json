@@ -1,5 +1,5 @@
 {
-  "register_schema_version": "1",
+  "register_schema_version": "2",
   "tables": {
     "endpoint_evidence": {
       "domain": "endpoint",
@@ -33,16 +33,79 @@
         "Correlation, conflict, or gap"
       ]
     },
-    "data_state_changes": {
-      "domain": "data",
-      "section": "Business objects, data resources, and state changes",
+    "lifecycle_observations": {
+      "domain": "lifecycle",
+      "section": "Lifecycle observations",
       "headers": [
-        "Object or resource",
+        "Observation ID",
+        "Candidate object or resource",
         "Behavior ID",
-        "Operation",
-        "From state/source",
-        "To state/destination",
+        "Observed action, condition, or change",
+        "Before condition or source",
+        "After condition or destination",
+        "Persistence or observability",
+        "Status",
+        "Evidence",
+        "Reconciliation"
+      ]
+    },
+    "business_objects": {
+      "domain": "lifecycle",
+      "section": "Business object and resource records",
+      "headers": [
+        "Object ID",
+        "Logical identity",
+        "Type",
+        "Source, ownership, and storage boundary",
+        "Related behaviors",
+        "Observation IDs",
+        "Status",
+        "Unknowns or conflicts"
+      ]
+    },
+    "object_states": {
+      "domain": "lifecycle",
+      "section": "Object state records",
+      "headers": [
+        "State ID",
+        "Object ID",
+        "State name",
+        "Basis",
+        "Definition or derivation",
+        "Persistence or observability",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "processing_actions": {
+      "domain": "lifecycle",
+      "section": "Processing action records",
+      "headers": [
+        "Action ID",
+        "Object ID(s)",
+        "Behavior ID",
+        "Action role",
+        "Input or source",
+        "Output or destination",
+        "Related Transition(s)",
         "Condition",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "state_transitions": {
+      "domain": "lifecycle",
+      "section": "State transition records",
+      "headers": [
+        "Transition ID",
+        "Object ID",
+        "From State ID",
+        "To State ID",
+        "Behavior ID",
+        "Causing Action ID(s)",
+        "Condition",
+        "Observable or persisted result",
+        "Transaction, side effect, or consistency impact",
         "Status",
         "Evidence"
       ]
@@ -229,6 +292,8 @@
     }
   },
   "domain_dependencies": {
+    "lifecycle_document": ["lifecycle"],
+    "behavior_lifecycle_backlinks": ["lifecycle"],
     "http_document": ["http"],
     "behavior_http_backlinks": ["http"],
     "dependency_http_cross_reference": ["dependency", "http"],

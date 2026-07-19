@@ -82,6 +82,8 @@ Evidence statuses apply to material conclusions and uncertainty, not to every co
 - Keep endpoint evidence collection separate from reader-facing publication. A `Confirmed` declaration remains in the register even when its reconciled operation role is protocol support and its publication disposition is summary-only.
 - Keep Dependency Observations separate from Dependency Contracts. A confirmed call or resource access proves the local boundary, not that similarly named observations share one remote participant or that the remote system provides unobserved guarantees.
 - Keep Failure Observations separate from Failure Patterns. A caught exception proves the observed path, not repository-wide recurrence, rollback of every side effect, safe retry, compensation, or business severity.
+- Keep Lifecycle Observations separate from Object, State, Action, and Transition reconciliation. A read, validation, mapping, write call, external invocation, event emission, source, store, or destination does not by itself prove an Object State or State Transition.
+- Support every State with a precise object-condition definition and an Explicit, Observable, or Derived basis. Derived States remain `Inferred` even when their predicate is executable. Support every Transition with same-Object From/To States and the executable change point; chronological order alone is not evidence.
 - Treat `Required`, `Degradable`, `Optional`, and Failure risk-attention labels as synthesized conclusions that require the relevant path, state, visibility, and recovery evidence. Use `Unknown` when decisive evidence is unavailable.
 - Treat a repository connection as a synthesized projection of an executable boundary or explicit trigger binding. A dependency name, host, URL, class, client, resource, configuration key, import, or file-role marker does not by itself prove that a connection exists or establish its direction and role.
 - Support connection direction, boundary type, interaction role, exchanged concepts, configuration selection, criticality, and failure/state impact from the corresponding executable path and reconciled Endpoint, Dependency, Lifecycle, Config, or Failure evidence. Qualify each unresolved dimension instead of letting one known attribute prove the others.
@@ -96,6 +98,7 @@ Raise an explicit open question when evidence is incomplete for:
 
 - Idempotency, duplicate delivery, and concurrency.
 - Transaction boundaries and partial failure.
+- Object-state definitions, Before/After conditions, and whether a write or emission actually changes the modeled object.
 - Retry, timeout, DLQ, and compensation behavior.
 - Monetary precision, currency, date, time zone, and ordering.
 - Backward compatibility of API or event contracts.

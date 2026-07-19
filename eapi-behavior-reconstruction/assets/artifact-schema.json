@@ -1,5 +1,5 @@
 {
-  "artifact_schema_registry_version": "3",
+  "artifact_schema_registry_version": "4",
   "manifest_schema_version": "2",
   "migration_plan_schema_version": "2",
   "transform_registry_ref": "migration-transform-registry.json",
@@ -40,14 +40,17 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "behavior-dossier": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/behavior-dossiers/*.md"],
       "template": "behavior-dossier-template.md",
       "producing_stage": "tracing",
       "rebuild_stage": "tracing",
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["evidence-index", "working-behavior-catalog"],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "repository-register": {
       "schema_ref": "register-schema.json",
@@ -58,23 +61,31 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["behavior-dossier"],
       "migrations": {
-        "0": {"to": "1", "action": "archive-and-rebuild"},
-        "flat-http-1": {
-          "to": "1",
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {
+          "to": "2",
           "action": "mechanical-migrate",
-          "transform_id": "repository-register-flat-http-1-to-1"
+          "transform_id": "repository-register-1-to-2"
+        },
+        "flat-http-1": {
+          "to": "2",
+          "action": "mechanical-migrate",
+          "transform_id": "repository-register-flat-http-1-to-2"
         }
       }
     },
     "repository-synthesis": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/repository-synthesis.md"],
       "template": "repository-synthesis-template.md",
       "producing_stage": "synthesis",
       "rebuild_stage": "synthesis",
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["behavior-dossier", "repository-register"],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "business-model": {
       "current_version": "1",
@@ -107,14 +118,17 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "tech-behavior": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": ["tech-pack/behaviors/*.md"],
       "template": "behavior-document-template.md",
       "producing_stage": "tech-publication",
       "rebuild_stage": "tech-publication",
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis", "behavior-dossier"],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "endpoint-matrix": {
       "current_version": "1",
@@ -140,14 +154,17 @@
       }
     },
     "data-lifecycle": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": ["tech-pack/data-lifecycle.md"],
       "template": "data-lifecycle-template.md",
       "producing_stage": "tech-publication",
       "rebuild_stage": "tech-publication",
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis", "repository-register"],
-      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "field-validation-and-mapping": {
       "current_version": "1",

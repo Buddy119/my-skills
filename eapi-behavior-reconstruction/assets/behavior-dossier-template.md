@@ -1,6 +1,6 @@
 ---
 artifact_type: "behavior-dossier"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 behavior_id: "repository.behavior-name"
 working_title: "Human-readable working title"
 repository: "repository-name"
@@ -63,9 +63,21 @@ Explain decisions that materially change the path, result, state, external inter
 
 Describe the ordered happy path and its observable outcome.
 
-## Data, business objects, and state
+## Object and state observations
 
-Record reads, writes, affected objects, state transitions, transaction boundaries, and unresolved consistency questions.
+Describe the object condition that exists before and after the behavior. Separate explicit status values, directly observable conditions, and derived predicates. Do not use Read, Validate, Map, Persist, Invoke, or Emit as state names.
+
+## Processing actions and data movement
+
+Record reads, observations, validations, transformations, mappings, persistence, calls, emissions, sources, destinations, and repository boundaries as actions or movement. State explicitly when no object-state change was observed.
+
+## Evidence-backed state transitions
+
+Record a transition only when both object conditions and the executable change point are supported. Identify the causing action, condition, persistence or observable result, transaction boundary, and evidence. Call order or data movement alone is not a transition.
+
+## Unresolved lifecycle candidates
+
+Keep incomplete Before/After relationships, ambiguous object identities, and conflicting state evidence here. Do not connect them merely to make a complete lifecycle.
 
 ## Boundaries, outputs, and side effects
 
@@ -93,13 +105,17 @@ Explain unanswered questions, conflicting artifacts, unavailable shared code, dy
 
 ## Repository register contributions
 
-List the endpoint, data/state, field rule, outbound HTTP operation/usage/mapping, configuration, Dependency Observation, Failure Observation, and cross-behavior records added to `repository-register.md`. Omit categories not observed.
+List the endpoint, Lifecycle Observation, Object, State, Action, Transition, field rule, outbound HTTP operation/usage/mapping, configuration, Dependency Observation, Failure Observation, and cross-behavior records added to `repository-register.md`. Omit categories not observed.
 
 ## Understanding gate
 
 - [ ] The complete flow can be retold coherently.
 - [ ] Main success and material decision paths were checked.
-- [ ] Data, state, boundaries, outputs, and failures were checked.
+- [ ] Object conditions, processing actions, data movement, boundaries, outputs, and failures were checked.
+- [ ] Every claimed State describes an object condition and records its basis.
+- [ ] Every claimed Transition identifies supported From/To States and a real change point.
+- [ ] Read, Observe, Validate, Transform, Map, Invoke, and Emit were not promoted to States without separate evidence.
+- [ ] Missing Before/After evidence remains an unresolved lifecycle candidate rather than a diagram edge.
 - [ ] Tests, configuration, and IaC were inspected or their absence recorded.
 - [ ] Repository-external internals remain qualified.
 - [ ] Key evidence and unresolved questions are recorded.

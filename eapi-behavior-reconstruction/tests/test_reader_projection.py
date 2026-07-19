@@ -43,7 +43,7 @@ def behavior_document(*, include_ba: bool = False) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'behavior_id: "repo.behavior"\n'
         'title: "Behavior"\n'
         'repository: "repo"\n'

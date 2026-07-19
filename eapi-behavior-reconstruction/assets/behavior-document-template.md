@@ -1,6 +1,6 @@
 ---
 artifact_type: "tech-behavior"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"
@@ -110,11 +110,21 @@ Use one row per remote operation used by this behavior, regardless of mapping co
 1. Describe the ordered executable steps.
 2. Cite important transitions inline or directly below the step.
 
-## Data access and state changes
+## Data access and processing
 
-| Operation | Resource | Key/record | State change | Status | Evidence |
-|---|---|---|---|---|---|
-| Read/Write | Resource | Identifier | Description | Confirmed | `path/to/file.ext:line` |
+Keep actions and movement separate from object state. Link stable `ACT-*` identities when the repository lifecycle model applies.
+
+| Action | Role | Object/resource | Input or source | Output or destination | State effect | Status | Evidence |
+|---|---|---|---|---|---|---|---|
+| `ACT-001` | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Object/resource | Input or boundary | Output, store, or boundary | `TRANS-001`, None observed, or Unknown | Confirmed | `path/to/file.ext:line` |
+
+## Object state transitions
+
+Include only evidence-backed object-condition changes. If none applies, state that no object state transition was established and link the processing/data-movement model when useful.
+
+| Transition | Object | From state | To state | Causing action and condition | Observable or persisted result | Status | Evidence |
+|---|---|---|---|---|---|---|---|
+| [`TRANS-001`](../data-lifecycle.md#trans-001) | `OBJ-001` | `STATE-001` | `STATE-002` | `ACT-001`; condition | Result | Confirmed/Inferred | `path/to/file.ext:line` |
 
 ## Outputs and side effects
 

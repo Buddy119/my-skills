@@ -35,6 +35,7 @@ Resume Audit
 | Stable ID preservation or deterministic ID generation from one explicit source record | Registered transform | Yes |
 | Link rewrite explicitly determined by an ID Map | Registered transform | Yes |
 | Table split defined by an exact source schema | Registered transform | Yes |
+| Legacy lifecycle row preservation as an unresolved Observation | Registered transform | Yes |
 | Referential integrity and Manifest checks | Validator / Stage Executor | Yes |
 | Dependency identity reconciliation | AI in Synthesis | No |
 | Failure Pattern grouping and risk meaning | AI in Synthesis | No |
@@ -81,7 +82,7 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 
 For a current Workflow 4 Pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a Migration Plan.
 
-Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `3`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
+Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `4`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
 
 Each mechanical step must visibly declare the Transform ID and its expected mechanical results. The plan is JSON-compatible YAML so the standard-library executor parses it deterministically. It must not contain repository knowledge conclusions.
 
@@ -131,12 +132,14 @@ A registered transform may:
 - Generate a repeatable ID from one normalized explicit source record and retain its ID Map.
 - Split an exact legacy flat HTTP row into Operation, Usage, and Mapping rows when the source schema exposes the necessary identity and call-site fields.
 - Move legacy dependency and failure rows into Observation tables with `Reconciliation: Unresolved`.
+- Move a Register Schema 1 lifecycle row into one stable `LIFE-OBS-*` record with `Reconciliation: Unresolved`, while preserving its original action, Before/Source, After/Destination, persistence, status, and evidence cells.
 - Rewrite only links whose old/new identity is explicit in the ID Map.
 
 A transform must not:
 
 - Merge records from name, Host, URL, method/target similarity, field names, or prose.
 - Generate `DEP-nnn`, `FAIL-nnn`, Connection/Shared models, Journeys, or Scenarios.
+- Generate `OBJ-*`, `STATE-*`, `ACT-*`, or `TRANS-*`, or infer that an old lifecycle verb represented an object State or a Transition.
 - Decide Criticality, Risk, Caller Visibility, State Outcome, business meaning, or remote behavior.
 - Generate Repository Synthesis or Reader documents.
 

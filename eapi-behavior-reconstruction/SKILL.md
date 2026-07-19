@@ -68,6 +68,7 @@ When no options are present, continue to accept a repository path and optional o
 - Do not publish the formal pack until full-repository synthesis is complete.
 - Let AI trace, interpret, reconcile meaning, model business behavior, and write. Use scripts for byte copying, deterministic indexing, registered schema transforms, stable structural IDs, explicit link rewrites, manifests, validation, archives, and transactional stage control. Never exchange these responsibilities.
 - Treat [assets/register-schema.json](assets/register-schema.json) as the single mechanical contract for `repository-register.md`. Do not rename, reorder, add, or remove Register table columns during an analysis. A Schema change is Skill development work and must update the Schema, Register template, Validator, Stage Executor, and tests together.
+- Treat [assets/lifecycle-model-schema.json](assets/lifecycle-model-schema.json) as the typed lifecycle and diagram-projection contract. Scripts may validate declared Object, State, Action, Transition, and link identities; they must not infer semantic state from words or call order.
 - Treat [assets/artifact-schema.json](assets/artifact-schema.json) as the version registry for every long-lived working, Tech, BA, and operational Artifact. Do not infer a document generation from headings, directory names, old field names, or prose.
 - Treat [assets/migration-transform-registry.json](assets/migration-transform-registry.json) as the only executable migration-transform registry. A mechanical transform requires an exact source schema, target schema, registered handler, and test fixture. An unknown or unversioned schema is archived and rebuilt; it is never guessed or AI-adopted inside Migration.
 - Treat [assets/publication-maturity-rules.json](assets/publication-maturity-rules.json) as the mechanical contract for execution-stage residue in Reader artifacts. Explicit workflow phrases may block publication; ambiguous words remain review prompts and never become business-semantic decisions in Python.
@@ -88,6 +89,8 @@ For `--resume`, also read [references/artifact-migration-policy.md](references/a
 Before tracing the first behavior, read [references/behavior-dossier-policy.md](references/behavior-dossier-policy.md) completely.
 
 Before repository-wide synthesis, read [references/repository-synthesis-policy.md](references/repository-synthesis-policy.md) completely.
+
+After observing any object read, write, condition, persistence, deletion, event emission, or possible state change, read [references/lifecycle-model-policy.md](references/lifecycle-model-policy.md) completely before classifying lifecycle records.
 
 Before building the repository connection model, shared behavior model, or Repository Overview, read [references/repository-mental-model-publication-policy.md](references/repository-mental-model-publication-policy.md) completely.
 
@@ -271,11 +274,11 @@ Process at most five behaviors per internal batch. For each behavior:
 2. Scaffold `behavior-dossier` with `--identity behavior_id=<behavior-id>`; then write the working analysis into the returned Candidate path.
 3. For a Java behavior, complete the dossier's `Semantic symbol and call trace` before relying on the apparent call chain. Use exact symbols, definitions, call hierarchy, references, type hierarchy, overrides, and implementations when the environment exposes them. Then confirm critical edges and runtime implementation selection in source, DI/configuration, annotations, and tests. If semantic tooling is unavailable or incomplete, perform and record the policy's degraded investigation instead.
 4. For an API behavior, complete the dossier's `Endpoint exposure evidence` section and add every direct layer observation to the register without prematurely correlating it.
-5. Follow the executable path from trigger through input handling, validation, decisions, data access, external boundaries, outputs, and material failures.
+5. Follow the executable path from trigger through input handling, validation, decisions, data access, external boundaries, outputs, and material failures. Record raw `LIFE-OBS-*` facts, then keep object conditions, processing actions, and data movement in separate dossier sections. Do not call an action or location a State.
 6. Inspect tests alongside implementation. When relevant tests exist, record one or two concrete assertions that prove a core outcome, prioritizing a failure path. Distinguish test-only references from production callers.
 7. Inspect IaC and configuration for trigger filters, timeouts, retries, DLQs, permissions, resources, and behavior-changing environment values.
 8. Stop at repository boundaries and describe remote internals as unknown.
-9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context. Record each executable external boundary as a Dependency Observation and each material failure path as a Failure Observation; do not create reader-facing Dependency Contracts or Failure Patterns while tracing one Behavior.
+9. Update the relevant sections of `.work/repository-register.md` while the evidence is in context. Record each lifecycle fact first as an Observation; do not create a Transition without supported From/To object conditions and a real change point. Record each executable external boundary as a Dependency Observation and each material failure path as a Failure Observation; do not create reader-facing Dependency Contracts or Failure Patterns while tracing one Behavior.
 10. Apply the behavior-understanding gate from the dossier policy. After main-agent review, use `mark-behavior` to record `understood`; otherwise continue tracing or record `blocked` with the exact limitation. A subagent may deliver a dossier file but may not change global state or commit the stage.
 
 Do not write formal Tech documents, the Business Model, Journeys, or Scenarios during this phase.
@@ -305,7 +308,7 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 2. Reconcile observations inside the existing versioned Register tables. Preserve `artifact_type: "repository-register"`, its registry-backed `artifact_schema_version`, and every table header exactly as defined by `assets/register-schema.json`; change rows, not the mechanical contract.
 3. Read all behavior dossiers and the repository register.
 4. Scaffold `repository-synthesis`; then write the repository mental model into the returned Candidate path.
-5. Reconcile behavior boundaries, business objects, state transitions, data lifecycles, dependencies, configuration effects, and failure categories.
+5. Reconcile lifecycle Observations into `OBJ-*`, `STATE-*`, `ACT-*`, and `TRANS-*`. Build separate Object State, Processing, and Data Movement models. Review every Transition against its From/To conditions, causing Action, observable or persisted result, and evidence; keep unsupported relationships in Unproven lifecycle relationships.
 6. Reconcile endpoint evidence only through explicit target, binding, mapping, or rewrite evidence. Populate `Endpoint reconciliation` with separate layer statuses and derive external reachability without upgrading missing layers.
 7. Classify each reconciled endpoint record as `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, or `unresolved`; record `publish`, `summarize`, or `publish-as-exception`, the classification basis, and any normalized route-group association. Ordinary protocol support requires proof that it has no application handler, business payload, state access, or business dependency call. Method or mock/static integration alone is insufficient.
 8. Associate a shared protocol-support operation with one normalized route group instead of copying it under every application method. Summarize ordinary support records; publish orphaned, conflicting, environment-inconsistent, and unresolved records as exceptions.
@@ -316,7 +319,7 @@ Begin only after every active behavior is `understood` or explicitly `blocked`, 
 13. Build the `Repository connection model` from reconciled endpoint, dependency, lifecycle, configuration, and failure models. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Include only executable crossings or explicit trigger bindings; a class, host, resource, or configuration name alone is not a connection.
 14. Build the `Shared behavior model`. Include a rule or behavior-shaping component only when the same proven source is reused by at least two Behaviors or independent entry paths and materially changes validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Preserve behavior-specific differences and overrides. Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, and single-Behavior helpers.
 15. Explain blocked coverage, conflicts, and unknowns instead of filling gaps with intent.
-16. Complete the synthesis checkpoints in their executor-provided order: Endpoint, Outbound HTTP, Dependency, Failure, Lifecycle/Config, Connection/Shared Model, and synthesis review. Commit with `--semantic-result complete` only after every Dependency and Failure Observation is reconciled or explicitly unresolved, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. This commit advances only the Working Generation; it does not replace the formal Pack.
+16. Complete the synthesis checkpoints in their executor-provided order: Endpoint, Outbound HTTP, Dependency, Failure, Lifecycle/Config, Connection/Shared Model, and synthesis review. Commit with `--semantic-result complete` only after every Lifecycle, Dependency, and Failure Observation is reconciled or explicitly unresolved, every Transition received semantic review, the repository-wide dependency and failure models are complete, and the Connection and Shared Behavior models have been reviewed. This commit advances only the Working Generation; it does not replace the formal Pack.
 
 ### 6. Publish the Tech Pack
 
@@ -331,6 +334,7 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
    - [assets/runtime-config-matrix-template.md](assets/runtime-config-matrix-template.md)
    - [assets/external-dependency-contracts-template.md](assets/external-dependency-contracts-template.md)
    - [assets/failure-taxonomy-template.md](assets/failure-taxonomy-template.md)
+   Build `data-lifecycle.md` by Object. Use a State Diagram only for registered States and established Transitions; use a separate Processing/Data Movement flow for `ACT-*`, resources, and boundaries. When no Transition is established, omit the State Diagram and use the exact no-transition statement from the lifecycle schema.
 5. Build the outbound portion of `field-validation-and-mapping.md` as one index row and one anchored section per Remote Operation. Put call identity once in Call Overview, list multiple or materially different Executable Usages, and nest request/response mappings under that Call. Do not copy the register tables or repeat call metadata in mapping rows.
 6. In each affected Tech Behavior, add one call-summary row per Remote Operation, link its Call ID directly to the operation anchor, and list only that behavior's Usage IDs. Do not create one behavior row per Mapping ID.
 7. Build `external-dependency-contracts.md` as one landscape row and one anchored section per `DEP-nnn`. Nest Operations beneath their Dependency, explain role, shared capabilities, availability, degradation, state implications, and remote Unknowns, and link Field Mapping and Failure details instead of repeating them. Never publish the Dependency Observation table.
@@ -397,7 +401,7 @@ Begin `finalization` from the complete Working Generation and review its Candida
 Apply the Editorial and Finalization Review policies in this order:
 
 1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, file and Fragment links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
-2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
+2. Fact review: sample important rules, Object State definitions, State Transition evidence, Action/State separation, mappings, configuration effects, and failure paths back to source.
 3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack. Run the publication-maturity check across the complete Reader Pack. Rewrite every explicit execution-stage residue. Inspect warning-only words such as `planned` or `pending` in context and retain them only when they describe a real domain state.
 
 After corrections stabilize, create one schema-complete input for each pass and run `record-review` for `mechanical`, `semantic-fact`, and `reader`. Every applicable risk category needs a high-value sample; every `not-applicable` category needs a reason. Record all displayed Validator warning decisions. A corrected sample must name a file actually changed in Finalization, and a Semantic Fact sample must cite repository evidence. Re-record all three Reviews if Candidate knowledge changes.
@@ -433,10 +437,11 @@ Before delivering, confirm:
 
 - `.work` shows inventory, per-behavior understanding, repository registration, repository synthesis, and independent business modeling in that order.
 - Every long-lived Artifact declares the Registry-backed type/version, the final Artifact Manifest matches file hashes, and no invalidated Artifact type remains at Finalization.
-- Migration Planning, Migration, and Publication have distinct Receipts; Resume decisions use explicit versions and hashes, and the Register table headers match the bundled Schema with `valid` HTTP, Dependency, and Failure domains and zero skipped necessary groups.
+- Migration Planning, Migration, and Publication have distinct Receipts; Resume decisions use explicit versions and hashes, and the Register table headers match the bundled Schema with `valid` HTTP, Dependency, Failure, and Lifecycle domains and zero skipped necessary groups.
 - Every final behavior can be retold as a coherent success-and-failure story.
 - Tests contribute assertion-level evidence when available.
 - Data and state changes connect across behaviors where evidence permits.
+- Object States describe object conditions, Processing Actions describe what code does, and Data Movement describes source/store/boundary/destination. Every published lifecycle edge has a registered Transition and evidence; unsupported relationships remain unresolved rather than being drawn.
 - Every confirmed application API route has its own contract; meaningful external-only records and endpoint exceptions appear only in Endpoint Matrix, while ordinary protocol-support records remain fully evidenced in the register and appear as a compact Matrix summary.
 - Every API Contract leads with caller purpose, invocation, inputs, validation, responses, confidence, and material limitations; it uses supported examples when available and links instead of copying internal flow, five-layer exposure, outbound mappings, or failure-taxonomy detail.
 - Application route, external entry, environment intent, runtime deployment, and external reachability remain separate, with no single layer proving another.

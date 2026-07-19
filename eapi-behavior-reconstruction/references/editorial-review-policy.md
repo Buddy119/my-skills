@@ -43,7 +43,9 @@ After structure is trustworthy, use scripts for Artifact identity, state transit
 Sample at least these high-risk facts back to source when present:
 
 - A core rule and its failure outcome.
-- A state change or data write.
+- An Object State definition, including its Explicit, Observable, or Derived basis.
+- A State Transition, including same-Object From/To conditions, causing Action, observable or persisted result, and evidence.
+- A Processing Action that correctly remains outside the Object State model.
 - An outbound HTTP operation, one executable usage, and one mapping that proves both field boundaries.
 - A configuration-dependent branch.
 - A retry, partial-success, or dependency-failure path.
@@ -131,6 +133,15 @@ For Repository Overview, perform a repository-mental-model review:
 - Are logging, ordinary monitoring, framework glue, generated code, simple wrappers, behavior-neutral utilities, and single-Behavior helpers excluded?
 - Can readers reach Endpoint, Contract, Behavior, Dependency, Mapping, Lifecycle, Config, and Failure detail with one relevant link instead of seeing those details copied into the Overview?
 
+For Data Lifecycle, perform a typed-lifecycle review:
+
+- Does every State describe a condition of one Object rather than an action, method, system, store, source, or destination?
+- Does every diagram edge map to a registered Transition with supported From/To conditions and a real change point?
+- Are Read, Observe, Validate, Transform, Map, Persist, Delete, Invoke, Emit, and Route presented as Actions, with Persist/Delete linked to a Transition only when separately supported?
+- Are State Diagrams and Processing/Data Movement flows visually and structurally separate?
+- Are Derived States marked `Inferred` with their derivation, and are Unknown/Conflicting candidates excluded from established diagram edges?
+- When no Transition is established, is the State Diagram omitted rather than filled from call order?
+
 For the BA Pack, perform an independent-business-model review:
 
 - Do Journey and Scenario identities arise from business goals, contexts, decisions, objects, and outcomes rather than Entry Points or Tech Behavior IDs?
@@ -145,9 +156,9 @@ Revise for clarity when the answer is no, while preserving the underlying facts.
 
 ## Validator boundary
 
-Validators may reject malformed Frontmatter boundaries, missing/multiple H1 headings, illegal heading jumps, unclosed fences, duplicate anchors, malformed Markdown tables, missing files, nonexistent local Markdown Fragments, invalid links, inconsistent IDs, dangling Call/Usage/Mapping/Dependency/Failure/Journey/Scenario references, duplicate IDs, invalid line ranges, template placeholders, and invalid controlled status values. The API Contract structure contract may require exact caller-facing table headers when a table is present. Validators may verify declared Journey–Scenario and Scenario–Tech backlinks. They must not decide how Journeys or Scenarios should be split, whether a technical concept has business meaning, whether remote operations, Dependencies, Failure Patterns, Connections, or Shared items are semantically equivalent; derive Criticality or Risk Attention from prose; require Claim IDs, sentence-level citations, fixed prose length, a minimum number of table rows, Mermaid node counts, a fixed aggregation ratio, or prose/method/integration regexes that pretend to determine business meaning.
+Validators may reject malformed Frontmatter boundaries, missing/multiple H1 headings, illegal heading jumps, unclosed fences, duplicate anchors, malformed Markdown tables, missing files, nonexistent local Markdown Fragments, invalid links, inconsistent IDs, dangling Call/Usage/Mapping/Dependency/Failure/Journey/Scenario/Object/State/Action/Transition references, cross-Object Transitions, Derived-as-Confirmed States, typed lifecycle diagram mismatches, duplicate IDs, invalid line ranges, template placeholders, and invalid controlled status values. The API Contract structure contract may require exact caller-facing table headers when a table is present. Validators may verify declared Journey–Scenario and Scenario–Tech backlinks. They must not decide from prose whether something is semantically a State or Action, whether a Transition is factually true, how Journeys or Scenarios should be split, whether a technical concept has business meaning, whether remote operations, Dependencies, Failure Patterns, Connections, or Shared items are semantically equivalent; derive Criticality or Risk Attention from prose; require Claim IDs, sentence-level citations, fixed prose length, a minimum number of table rows, Mermaid node counts unrelated to declared lifecycle projection, a fixed aggregation ratio, or prose/method/integration regexes that pretend to determine business meaning.
 
-Register validation must first verify the versioned Schema contract and then isolate HTTP, Dependency, and Failure domains. A bad header produces one Schema root error for that domain; it must not be interpreted as an empty ID index. Skip document reconciliation, completeness, Unknown-reference, and backlink checks that require the invalid or partial index, while continuing unrelated Endpoint, API, BA, HTTP, and Markdown checks. When Dependency is unavailable, Failure may still validate its local controlled fields but must skip Related Dependency cross-references.
+Register validation must first verify the versioned Schema contract and then isolate Lifecycle, HTTP, Dependency, and Failure domains. A bad header produces one Schema root error for that domain; it must not be interpreted as an empty ID index. Skip document reconciliation, completeness, Unknown-reference, and backlink checks that require the invalid or partial index, while continuing unrelated Endpoint, API, BA, HTTP, and Markdown checks. When Dependency is unavailable, Failure may still validate its local controlled fields but must skip Related Dependency cross-references.
 
 Cap each validation group at ten displayed independent errors, de-duplicate identical messages, and summarize additional suppressed errors. `SKIPPED` is explicit loss of validation coverage, not success. Only zero Primary Errors and zero skipped necessary groups supports the statement that full mechanical validation passed.
 

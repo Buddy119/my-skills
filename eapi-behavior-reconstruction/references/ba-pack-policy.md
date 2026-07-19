@@ -63,6 +63,7 @@ Merge technical paths into one Scenario when they achieve the same business goal
 - A technical dependency becomes an External Business Participant only when its role or unavailability changes a business interaction or result.
 - A technical exception becomes a Business Exception only when it changes completion, caller-visible outcome, recovery, timing, or business-object state.
 - Do not model internal retries, transformations, framework calls, mapping steps, or fully recovered technical failures as standalone business stages.
+- Consume only business-visible Object States and outcomes from the typed lifecycle model. A technical Action, source, store, destination, or event emission cannot become a BA State or Journey stage without independently supported business-visible meaning. Derived States retain their `Inferred` confidence.
 - Do not reproduce endpoint exposure layers, class names, methods, AWS resources, protocols, field mappings, storage identities, or Failure Pattern mechanics in BA documents.
 
 ## Many-to-many traceability

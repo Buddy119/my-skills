@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-synthesis"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 synthesis_status: "complete|partial|blocked"
@@ -23,9 +23,21 @@ Describe how behaviors combine into capabilities. Include a behavior-level Merma
 
 Explain trigger chains, shared orchestration, shared rules, common components, and independently exposed behaviors.
 
-## Business objects and data lifecycle
+## Object state model
 
-Describe where important objects originate, how behaviors read or change them, state transitions, external movement, and terminal or unknown states.
+Reconcile `OBJ-*`, `STATE-*`, and `TRANS-*` records. Define every State as an object condition, distinguish Explicit, Observable, and Derived bases, and explain the executable evidence for every Transition. Derived States remain Inferred. Keep unsupported ordering and conflicting transitions outside the established lifecycle.
+
+## Processing model
+
+Reconcile `ACT-*` records by Behavior and Object. Separate Read, Observe, Validate, Transform, Map, Persist, Delete, Invoke, Emit, and Route actions from object States. Explain which actions cause proven Transitions and which have no observed state effect.
+
+## Data movement model
+
+Describe origins, stores, repository boundaries, destinations, representation changes, and handoffs without treating locations or systems as States.
+
+## Unproven lifecycle relationships
+
+List unresolved Before/After relationships, missing persistence or observability evidence, conflicting state definitions, and lifecycle edges deliberately not established.
 
 ## Endpoint and contract model
 

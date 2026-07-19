@@ -1,6 +1,6 @@
 {
-  "finalization_review_schema_version": "1",
-  "validation_version": "1",
+  "finalization_review_schema_version": "2",
+  "validation_version": "2",
   "outcomes": [
     "passed",
     "corrected",
@@ -28,7 +28,9 @@
       "checkpoint": "fact-sampling",
       "categories": [
         "core-rule-and-failure",
-        "state-change",
+        "object-state-definition",
+        "state-transition-evidence",
+        "processing-action-separation",
         "outbound-http-and-mapping",
         "configuration-branch",
         "retry-partial-or-dependency-failure",
@@ -49,7 +51,8 @@
         "dependency-and-failure",
         "journey-and-scenario",
         "catalog-navigation-and-projection",
-        "publication-language-and-diagrams"
+        "publication-language-and-diagrams",
+        "lifecycle-model-and-diagrams"
       ]
     }
   }

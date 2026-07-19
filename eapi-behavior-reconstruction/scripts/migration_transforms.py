@@ -69,7 +69,11 @@ def load_transform_registry(
     if not isinstance(raw_definitions, dict) or not raw_definitions:
         raise MigrationTransformError("transform registry must define transforms")
     definitions: dict[str, TransformDefinition] = {}
-    handlers = {"analysis-state-envelope", "repository-register-flat-http-1"}
+    handlers = {
+        "analysis-state-envelope",
+        "repository-register-flat-http-1",
+        "repository-register-1-to-2",
+    }
     for transform_id, raw in raw_definitions.items():
         if not isinstance(transform_id, str) or not isinstance(raw, dict):
             raise MigrationTransformError("each transform must be a named object")
@@ -568,6 +572,112 @@ def _render_flat_register(
     return target, report
 
 
+def _render_table_section(section: str, headers: list[str], rows: list[list[str]]) -> str:
+    lines = [
+        f"## {section}",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "|" + "|".join("---" for _ in headers) + "|",
+    ]
+    lines.extend(
+        "| " + " | ".join(cell.replace("|", "\\|") for cell in row) + " |"
+        for row in rows
+    )
+    return "\n".join(lines)
+
+
+def _render_register_1_to_2(
+    source_text: str,
+    definition: TransformDefinition,
+    assets_root: Path,
+) -> tuple[str, dict[str, Any]]:
+    """Preserve v1 Register bytes except for the flat lifecycle section.
+
+    The legacy row is intentionally converted only into an unresolved observation.
+    Object, State, Action, and Transition identities require later AI synthesis.
+    """
+
+    source_schema = _json_object(assets_root / definition.source_schema)
+    target_schema = _json_object(assets_root / definition.target_schema)
+    legacy = source_schema["tables"]["data_state_changes"]
+    legacy_rows = _source_rows(source_text, legacy["section"], legacy["headers"])
+    occupied: set[str] = set()
+    id_map: dict[str, str] = {}
+    observation_rows: list[list[str]] = []
+    for index, row in enumerate(legacy_rows, 1):
+        identity = "\u241f".join(row[header] for header in legacy["headers"])
+        observation_id = _stable_numeric_id("LIFE-OBS-", identity, occupied)
+        id_map[f"legacy-lifecycle-row-{index}:observation"] = observation_id
+        observation_rows.append(
+            [
+                observation_id,
+                row["Object or resource"],
+                row["Behavior ID"],
+                row["Operation"],
+                row["From state/source"],
+                row["To state/destination"],
+                "Unknown",
+                row["Status"],
+                row["Evidence"],
+                "Unresolved",
+            ]
+        )
+
+    lifecycle_keys = (
+        "lifecycle_observations",
+        "business_objects",
+        "object_states",
+        "processing_actions",
+        "state_transitions",
+    )
+    sections = []
+    for key in lifecycle_keys:
+        contract = target_schema["tables"][key]
+        sections.append(
+            _render_table_section(
+                contract["section"],
+                contract["headers"],
+                observation_rows if key == "lifecycle_observations" else [],
+            )
+        )
+    replacement = "\n\n".join(sections) + "\n\n"
+    section_match = re.search(
+        rf"^##\s+{re.escape(legacy['section'])}\s*$\n",
+        source_text,
+        re.M,
+    )
+    if section_match is None:
+        raise MigrationTransformError(f"legacy lifecycle section is missing: {legacy['section']}")
+    next_heading = re.search(r"^##\s+", source_text[section_match.end() :], re.M)
+    end = (
+        section_match.end() + next_heading.start()
+        if next_heading is not None
+        else len(source_text)
+    )
+    rendered = source_text[: section_match.start()] + replacement + source_text[end:]
+    rendered = _set_scalar(rendered, "artifact_schema_version", definition.target_version)
+    if "## Unrelated preserved section\n\nThis text must remain byte-for-byte unchanged" in source_text:
+        if "## Unrelated preserved section\n\nThis text must remain byte-for-byte unchanged" not in rendered:
+            raise MigrationTransformError("an unaffected Register section changed during migration")
+    report = {
+        "source_records": {"data_state_changes": len(legacy_rows)},
+        "output_records": {
+            "lifecycle_observations": len(observation_rows),
+            "business_objects": 0,
+            "object_states": 0,
+            "processing_actions": 0,
+            "state_transitions": 0,
+        },
+        "id_map": id_map,
+        "referential_check_results": {
+            "unaffected-register-sections-preserved": "passed",
+            "legacy-lifecycle-rows-become-unresolved-observations": "passed",
+            "no-object-state-action-or-transition-is-generated": "passed",
+        },
+    }
+    return rendered, report
+
+
 def preview_transform(
     definition: TransformDefinition,
     root: Path,
@@ -601,6 +711,16 @@ def preview_transform(
             "source_record_counts": report["source_records"],
             "output_record_counts": report["output_records"],
         }
+    if definition.handler == "repository-register-1-to-2":
+        _rendered, report = _render_register_1_to_2(
+            path.read_text(encoding="utf-8"), definition, assets_root
+        )
+        return {
+            "input_file_count": 1,
+            "output_file_count": 1,
+            "source_record_counts": report["source_records"],
+            "output_record_counts": report["output_records"],
+        }
     raise MigrationTransformError(f"unsupported transform handler: {definition.handler}")
 
 
@@ -621,6 +741,11 @@ def execute_transform(
         report, _text = _analysis_state_transform(path, definition)
     elif definition.handler == "repository-register-flat-http-1":
         rendered, report = _render_flat_register(
+            path.read_text(encoding="utf-8"), definition, assets_root
+        )
+        _atomic_text(path, rendered)
+    elif definition.handler == "repository-register-1-to-2":
+        rendered, report = _render_register_1_to_2(
             path.read_text(encoding="utf-8"), definition, assets_root
         )
         _atomic_text(path, rendered)

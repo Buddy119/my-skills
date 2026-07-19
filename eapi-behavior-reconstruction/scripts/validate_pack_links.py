@@ -13,6 +13,14 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from artifact_schema import ArtifactSchemaError, load_registry, validate_artifact_manifest
+from lifecycle_model import (
+    LIFECYCLE_MODEL_VALIDATION_VERSION,
+    LifecycleSchemaError,
+    load_lifecycle_schema,
+    validate_behavior_lifecycle_projection,
+    validate_lifecycle_document,
+    validate_lifecycle_register,
+)
 from markdown_structure import MARKDOWN_FRAGMENT_VALIDATION_VERSION, parse_markdown
 from register_schema import (
     RegisterSchema,
@@ -277,6 +285,7 @@ class ValidationReport:
             "checked_links": self.checked_links,
             "checked_documents": self.checked_documents,
             "markdown_fragment_validation_version": MARKDOWN_FRAGMENT_VALIDATION_VERSION,
+            "lifecycle_model_validation_version": LIFECYCLE_MODEL_VALIDATION_VERSION,
             "checked_fragments": self.checked_fragments,
             "fragment_target_documents": len(self.fragment_target_documents),
             "fragment_error_count": len(self.error_groups.get("MARKDOWN-FRAGMENT", [])),
@@ -1869,6 +1878,7 @@ def main() -> int:
     if schema_check.errors:
         report.error("REG-SCHEMA-VERSION", "; ".join(schema_check.errors))
     schema_codes = {
+        "lifecycle": "REG-LIFECYCLE-SCHEMA",
         "http": "REG-HTTP-SCHEMA",
         "dependency": "REG-DEP-SCHEMA",
         "failure": "REG-FAIL-SCHEMA",
@@ -1886,6 +1896,50 @@ def main() -> int:
         return all(
             report.domain_statuses.get(domain) == "valid"
             for domain in _REGISTER_SCHEMA.domain_dependencies[group]
+        )
+
+    lifecycle_schema: dict[str, Any] | None = None
+    if domain_schema_valid("lifecycle"):
+        try:
+            lifecycle_schema = load_lifecycle_schema()
+        except LifecycleSchemaError as exc:
+            lifecycle_result = DomainResult("invalid", errors=[str(exc)])
+        else:
+            typed_lifecycle = validate_lifecycle_register(
+                register, _REGISTER_SCHEMA, lifecycle_schema
+            )
+            lifecycle_result = DomainResult(
+                typed_lifecycle.status,
+                typed_lifecycle.data,
+                typed_lifecycle.errors,
+            )
+        report.add_errors("REG-LIFECYCLE-ROW", lifecycle_result.errors)
+    else:
+        lifecycle_result = DomainResult("invalid")
+    report.domain_statuses["lifecycle"] = lifecycle_result.status
+
+    if prerequisites_available("lifecycle_document"):
+        lifecycle_document_errors = validate_lifecycle_document(
+            root / "tech-pack" / "data-lifecycle.md",
+            lifecycle_result,
+            repo,
+            lifecycle_schema,
+        )
+        report.add_errors("LIFECYCLE-DOCUMENT", lifecycle_document_errors)
+        behavior_lifecycle_errors = validate_behavior_lifecycle_projection(
+            root, lifecycle_result
+        )
+        report.add_errors(
+            "BEHAVIOR-LIFECYCLE-BACKLINK", behavior_lifecycle_errors
+        )
+    else:
+        report.skip(
+            "LIFECYCLE-DOCUMENT",
+            f"prerequisite Lifecycle Register is {lifecycle_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-LIFECYCLE-BACKLINK",
+            f"prerequisite Lifecycle Register is {lifecycle_result.status}",
         )
 
     if domain_schema_valid("http"):

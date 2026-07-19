@@ -1,0 +1,76 @@
+{
+  "lifecycle_model_schema_version": "1",
+  "validation_version": "1",
+  "ids": {
+    "observation": "^LIFE-OBS-[0-9]+$",
+    "object": "^OBJ-[0-9]+$",
+    "state": "^STATE-[0-9]+$",
+    "action": "^ACT-[0-9]+$",
+    "transition": "^TRANS-[0-9]+$"
+  },
+  "state_bases": ["Explicit", "Observable", "Derived"],
+  "evidence_statuses": ["Confirmed", "Inferred", "Conflicting", "Unknown"],
+  "action_roles": [
+    "Read",
+    "Observe",
+    "Validate",
+    "Transform",
+    "Map",
+    "Persist",
+    "Delete",
+    "Invoke",
+    "Emit",
+    "Route",
+    "Other"
+  ],
+  "reader_tables": {
+    "object_landscape": [
+      "Object ID",
+      "Logical object or resource",
+      "Type",
+      "Source, ownership, and store",
+      "Behaviors",
+      "State model",
+      "Processing and data movement",
+      "Status",
+      "Details"
+    ],
+    "state_vocabulary": [
+      "State ID",
+      "State",
+      "Basis",
+      "Definition or derivation",
+      "Persistence or observability",
+      "Status",
+      "Evidence"
+    ],
+    "state_transitions": [
+      "Transition ID",
+      "From state",
+      "To state",
+      "Triggering behavior",
+      "Causing action(s)",
+      "Condition",
+      "Result and consistency impact",
+      "Status",
+      "Evidence"
+    ],
+    "processing_actions": [
+      "Action ID",
+      "Role",
+      "Behavior",
+      "Input or source",
+      "Output or destination",
+      "Related transition",
+      "Condition",
+      "Status",
+      "Evidence"
+    ]
+  },
+  "diagram_contract": {
+    "state_tag": "lifecycle-state-diagram",
+    "processing_tag": "lifecycle-processing-diagram",
+    "state_alias_rule": "replace-hyphen-with-underscore",
+    "no_transition_sentence": "No object state transition was established from repository evidence."
+  }
+}

@@ -52,7 +52,7 @@ def behavior_document(
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -81,7 +81,8 @@ def behavior_document(
         "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
         "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"
         "## Happy path\n\n1. Accept the request.\n2. Return the result.\n\n"
-        "## Data access and state changes\n\nNo state change was observed.\n\n"
+        "## Data access and processing\n\nNo processing action was observed.\n\n"
+        "## Object state transitions\n\nNo object state transition was observed.\n\n"
         "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
         "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"

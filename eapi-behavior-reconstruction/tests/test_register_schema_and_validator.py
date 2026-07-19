@@ -32,7 +32,7 @@ class RegisterFixture:
         parts = [
             "---",
             'artifact_type: "repository-register"',
-            'artifact_schema_version: "1"',
+            f'artifact_schema_version: "{self.schema["register_schema_version"]}"',
             'repository: "fixture"',
             'source_commit: "unknown"',
             'register_status: "reconciled"',
@@ -302,6 +302,7 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "lifecycle": "valid",
                 "markdown-fragment": "valid",
             },
         )
@@ -523,6 +524,7 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "lifecycle": "valid",
                 "markdown-fragment": "valid",
             },
         )

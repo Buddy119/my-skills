@@ -51,7 +51,7 @@ If the Java language service is unavailable, the project is not imported, or res
 Before leaving the behavior, add applicable observations to the repository register:
 
 - Endpoint identity and owning behavior.
-- Data resources, business objects, and state transitions.
+- Lifecycle Observations, business Objects, State candidates, Processing Actions, data movement, and evidence-backed Transitions.
 - Input or output field rules.
 - Proven outbound HTTP operations, executable usages, and mappings.
 - Behavior-changing runtime configuration.
@@ -67,7 +67,9 @@ Move a behavior from `tracing` to `understood` only when:
 
 - The dossier contains a natural-language end-to-end narrative.
 - The main path and material decisions are clear.
-- Data, state, boundaries, outputs, and failures were checked.
+- Object conditions, processing actions, data movement, boundaries, outputs, and failures were checked.
+- Read, Observe, Validate, Transform, Map, Invoke, and Emit were not promoted to States without separate object-condition evidence.
+- Every claimed Transition has supported same-Object From/To conditions and a real change point; incomplete relationships remain unresolved.
 - Tests, IaC, and configuration were inspected or explicitly unavailable.
 - Repository-external internals remain qualified as unknown.
 - Key evidence and unresolved questions are recorded.

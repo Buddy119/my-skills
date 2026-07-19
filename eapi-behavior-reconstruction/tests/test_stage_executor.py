@@ -40,7 +40,7 @@ def api_behavior_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -72,7 +72,8 @@ def api_behavior_fixture() -> str:
         "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
         "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"
         "## Happy path\n\n1. Accept the request.\n2. Return the result.\n\n"
-        "## Data access and state changes\n\nNo state change was observed.\n\n"
+        "## Data access and processing\n\nNo processing action is modeled by this fixture.\n\n"
+        "## Object state transitions\n\nNo object state transition was observed.\n\n"
         "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
         "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
@@ -185,7 +186,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -219,7 +220,8 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "## Inputs\n\nCaller inputs are defined by the endpoint Contracts.\n\n"
         "## Preconditions and business rules\n\nThe route selects the requested profile operation.\n\n"
         "## Happy path\n\n1. Accept the profile request.\n2. Return the observed result.\n\n"
-        "## Data access and state changes\n\nNo durable state is modeled by this fixture.\n\n"
+        "## Data access and processing\n\nNo processing action is modeled by this fixture.\n\n"
+        "## Object state transitions\n\nNo durable state transition is modeled by this fixture.\n\n"
         "## Outputs and side effects\n\nReturns the caller-visible profile result.\n\n"
         "## Failures, retries, and partial success\n\nNo retry or partial success is modeled.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
@@ -522,7 +524,7 @@ def complete_dossier_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "behavior-dossier"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'working_title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -545,7 +547,10 @@ def complete_dossier_fixture() -> str:
         "## Input handling and validation\n\nThe path identifies the customer.\n\n"
         "## Decisions and rules\n\nThe HTTP method selects read or update intent.\n\n"
         "## Main successful path\n\nThe handler accepts the request and returns a profile result.\n\n"
-        "## Data, business objects, and state\n\nNo durable state is modeled in this fixture.\n\n"
+        "## Object and state observations\n\nNo durable object state is modeled in this fixture.\n\n"
+        "## Processing actions and data movement\n\nNo processing action is modeled in this fixture.\n\n"
+        "## Evidence-backed state transitions\n\nNo state transition is established in this fixture.\n\n"
+        "## Unresolved lifecycle candidates\n\nNone observed.\n\n"
         "## Boundaries, outputs, and side effects\n\nTwo caller-visible application routes were observed.\n\n"
         "## Failures, retry, and partial success\n\nNo retry or partial success was observed.\n\n"
         "## Runtime configuration and IaC\n\nNo deployment configuration was supplied.\n\n"
@@ -605,7 +610,7 @@ def complete_register_fixture(executor) -> str:
     parts = [
         "---",
         'artifact_type: "repository-register"',
-        'artifact_schema_version: "1"',
+        f'artifact_schema_version: "{schema["register_schema_version"]}"',
         'repository: "sample-repo"',
         'source_commit: "unknown"',
         'register_status: "reconciled"',
@@ -628,7 +633,7 @@ def complete_repository_synthesis_fixture(executor) -> str:
     return (
         "---\n"
         'artifact_type: "repository-synthesis"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
@@ -1141,7 +1146,7 @@ class StageExecutorTests(unittest.TestCase):
         dossier = Path(result["path"])
         dossier_text = dossier.read_text(encoding="utf-8")
         self.assertIn('artifact_type: "behavior-dossier"', dossier_text)
-        self.assertIn('artifact_schema_version: "1"', dossier_text)
+        self.assertIn('artifact_schema_version: "2"', dossier_text)
         self.assertIn('behavior_id: "sample-repo.update-customer"', dossier_text)
         self.assertIn('repository: "sample-repo"', dossier_text)
         self.assertIn('source_commit: "unknown"', dossier_text)
@@ -1881,7 +1886,7 @@ class StageExecutorTests(unittest.TestCase):
         dossier.write_text(
             "---\n"
             'artifact_type: "behavior-dossier"\n'
-            'artifact_schema_version: "1"\n'
+            'artifact_schema_version: "2"\n'
             'behavior_id: "sample-repo.handle-request"\n'
             "---\n",
             encoding="utf-8",
@@ -2863,7 +2868,7 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_validation["reader_review_status"], "current")
         self.assertEqual(final_validation["finalization_review_unresolved_count"], 0)
         self.assertEqual(final_validation["finalization_review_stale_count"], 0)
-        self.assertEqual(final_receipt["finalization_review_validation_version"], "1")
+        self.assertEqual(final_receipt["finalization_review_validation_version"], "2")
         self.assertEqual(final_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(final_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(final_receipt["reader_review_status"], "current")
@@ -3397,7 +3402,7 @@ class StageExecutorTests(unittest.TestCase):
         review_receipt = json.loads(
             Path(review_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(review_receipt["finalization_review_validation_version"], "1")
+        self.assertEqual(review_receipt["finalization_review_validation_version"], "2")
         self.assertEqual(review_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(review_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(review_receipt["reader_review_status"], "current")
@@ -3434,7 +3439,7 @@ class StageExecutorTests(unittest.TestCase):
         register_parts = [
             "---",
             'artifact_type: "repository-register"',
-            'artifact_schema_version: "1"',
+            f'artifact_schema_version: "{register_schema["register_schema_version"]}"',
             'repository: "sample-repo"',
             'source_commit: "unknown"',
             'register_status: "reconciled"',
@@ -3451,7 +3456,7 @@ class StageExecutorTests(unittest.TestCase):
         synthesis_text = (
             "---\n"
             'artifact_type: "repository-synthesis"\n'
-            'artifact_schema_version: "1"\n'
+            'artifact_schema_version: "2"\n'
             'repository: "sample-repo"\n'
             'source_commit: "unknown"\n'
             "---\n\n"
@@ -3609,7 +3614,7 @@ class StageExecutorTests(unittest.TestCase):
         self.assertTrue(receipt_payload["formal_pack_published"])
         self.assertTrue((self.output / "tech-pack" / "repository-overview.md").is_file())
         self.assertEqual(
-            receipt_payload["repository_register_artifact_schema_version"], "1"
+            receipt_payload["repository_register_artifact_schema_version"], "2"
         )
         self.assertEqual(
             receipt_payload["validator_domain_statuses"],
@@ -3617,6 +3622,7 @@ class StageExecutorTests(unittest.TestCase):
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "lifecycle": "valid",
                 "markdown": "valid",
                 "markdown-fragment": "valid",
             },

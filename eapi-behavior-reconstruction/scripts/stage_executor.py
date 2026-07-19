@@ -58,6 +58,11 @@ from markdown_structure import (
     parse_markdown,
     validate_api_contract_tables,
 )
+from lifecycle_model import (
+    LifecycleSchemaError,
+    load_lifecycle_schema,
+    validate_lifecycle_register,
+)
 from migration_transforms import MigrationTransformError, execute_transform
 from publication_maturity import PublicationMaturityError, load_rules
 from finalization_review import (
@@ -159,7 +164,11 @@ STAGE_CHECKPOINTS: dict[str, tuple[str, ...]] = {
 REGISTER_HEADINGS = {
     "Endpoint evidence records",
     "Endpoint reconciliation",
-    "Business objects, data resources, and state changes",
+    "Lifecycle observations",
+    "Business object and resource records",
+    "Object state records",
+    "Processing action records",
+    "State transition records",
     "Field validation and internal transformation observations",
     "Outbound HTTP operation records",
     "Outbound HTTP operation usages",
@@ -177,7 +186,10 @@ SYNTHESIS_HEADINGS = {
     "Observable repository responsibility",
     "Capability and behavior model",
     "Behavior relationships",
-    "Business objects and data lifecycle",
+    "Object state model",
+    "Processing model",
+    "Data movement model",
+    "Unproven lifecycle relationships",
     "Endpoint and contract model",
     "Outbound HTTP operation and mapping model",
     "Runtime configuration effects",
@@ -1105,6 +1117,7 @@ def command_init(args: argparse.Namespace) -> int:
         load_rules()
         load_projection_schema()
         load_review_schema()
+        load_lifecycle_schema()
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
@@ -1117,6 +1130,8 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(f"bundled Reader Projection Schema is invalid: {exc}") from exc
     except FinalizationReviewError as exc:
         raise ExecutorError(f"bundled Finalization Review Schema is invalid: {exc}") from exc
+    except LifecycleSchemaError as exc:
+        raise ExecutorError(f"bundled Lifecycle Model Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1432,6 +1447,17 @@ def stage_gates(
                     "repository register does not match Register Schema "
                     f"{schema.version}: " + " | ".join(schema_errors)
                 )
+            else:
+                try:
+                    lifecycle_check = validate_lifecycle_register(register, schema)
+                except LifecycleSchemaError as exc:
+                    errors.append(f"bundled Lifecycle Model Schema is invalid: {exc}")
+                else:
+                    if lifecycle_check.errors:
+                        errors.append(
+                            "repository lifecycle model is mechanically inconsistent: "
+                            + " | ".join(lifecycle_check.errors)
+                        )
         validate_heading_set(
             register,
             REGISTER_HEADINGS,
@@ -3273,6 +3299,7 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "markdown_fragment_target_document_count": 0,
         "markdown_fragment_error_count": 0,
         "markdown_fragment_skipped_group_count": 0,
+        "lifecycle_model_validation_version": None,
     }
     for result in results:
         try:
@@ -3309,6 +3336,9 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
                 value = payload.get(source_key)
                 if isinstance(value, int):
                     summary[target_key] = max(summary[target_key], value)
+        lifecycle_version = payload.get("lifecycle_model_validation_version")
+        if isinstance(lifecycle_version, str):
+            summary["lifecycle_model_validation_version"] = lifecycle_version
         for source_key, target_key in (
             ("primary_errors", "primary_error_count"),
             ("skipped_validation_groups", "skipped_group_count"),

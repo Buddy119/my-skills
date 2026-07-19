@@ -188,7 +188,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         register = self.output / ".work" / "repository-register.md"
         register.write_text(
             register.read_text().replace(
-                'artifact_schema_version: "1"', 'artifact_schema_version: "99"', 1
+                'artifact_schema_version: "2"', 'artifact_schema_version: "99"', 1
             )
         )
         result = subprocess.run(
@@ -407,7 +407,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
         self.assertEqual(step["action"], "mechanical-migrate")
         self.assertEqual(
-            step["transform_id"], "repository-register-flat-http-1-to-1"
+            step["transform_id"], "repository-register-flat-http-1-to-2"
         )
         self.assertEqual(step["source_artifact"]["artifact_schema_version"], "flat-http-1")
         self.assertEqual(step["expected"]["source_record_counts"]["flat_http_mappings"], 2)
@@ -440,7 +440,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(len(mechanical_manifest["transform_reports"]), 2)
         candidate_register = Path(begun["candidate"]) / ".work" / "repository-register.md"
         candidate_text = candidate_register.read_text(encoding="utf-8")
-        self.assertIn('artifact_schema_version: "1"', candidate_text)
+        self.assertIn('artifact_schema_version: "2"', candidate_text)
         self.assertIn("HTTP-007-U01", candidate_text)
         self.assertIn("Unresolved", candidate_text)
         status = self.run_cmd("status", "--output", str(self.output))
@@ -470,11 +470,11 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
         receipt = json.loads(Path(committed["receipt"]).read_text(encoding="utf-8"))
         transform_ids = {item["transform_id"] for item in receipt["transform_reports"]}
-        self.assertIn("repository-register-flat-http-1-to-1", transform_ids)
+        self.assertIn("repository-register-flat-http-1-to-2", transform_ids)
         register_report = next(
             item
             for item in receipt["transform_reports"]
-            if item["transform_id"] == "repository-register-flat-http-1-to-1"
+            if item["transform_id"] == "repository-register-flat-http-1-to-2"
         )
         self.assertEqual(register_report["input_summary"]["file_count"], 1)
         self.assertEqual(register_report["output_records"]["http_mappings"], 2)

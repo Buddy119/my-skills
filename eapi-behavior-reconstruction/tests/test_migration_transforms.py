@@ -27,7 +27,7 @@ class MigrationTransformTests(unittest.TestCase):
         )
         self.assets = SKILL_ROOT / "assets"
         self.definition = load_transform_registry().definitions[
-            "repository-register-flat-http-1-to-1"
+            "repository-register-flat-http-1-to-2"
         ]
 
     def tearDown(self) -> None:
@@ -114,6 +114,63 @@ class MigrationTransformTests(unittest.TestCase):
         }
         self.assertEqual(len(generated_calls), 1)
         self.assertEqual(len(generated_usages), 1)
+
+    def lifecycle_transform(self, name: str) -> tuple[Path, dict]:
+        root = self.root / name
+        register = root / ".work" / "repository-register.md"
+        register.parent.mkdir(parents=True)
+        shutil.copy2(
+            SKILL_ROOT
+            / "tests"
+            / "fixtures"
+            / "migration"
+            / "repository-register-1.md",
+            register,
+        )
+        definition = load_transform_registry().definitions[
+            "repository-register-1-to-2"
+        ]
+        report = execute_transform(
+            definition,
+            root,
+            [".work/repository-register.md"],
+            [".work/repository-register.md"],
+            self.assets,
+        )
+        return register, report
+
+    def test_register_v1_lifecycle_migration_is_deterministic_and_observation_only(self) -> None:
+        first, first_report = self.lifecycle_transform("lifecycle-first")
+        second, second_report = self.lifecycle_transform("lifecycle-second")
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertEqual(first_report["id_map"], second_report["id_map"])
+        self.assertEqual(first_report["output_records"]["lifecycle_observations"], 2)
+        for semantic_table in (
+            "business_objects",
+            "object_states",
+            "processing_actions",
+            "state_transitions",
+        ):
+            self.assertEqual(first_report["output_records"][semantic_table], 0)
+        text = first.read_text(encoding="utf-8")
+        self.assertEqual(text.count("| Unresolved |"), 2)
+        self.assertNotRegex(text, r"\|\s*OBJ-[0-9]+\s*\|")
+        self.assertNotRegex(text, r"\|\s*STATE-[0-9]+\s*\|")
+        self.assertNotRegex(text, r"\|\s*ACT-[0-9]+\s*\|")
+        self.assertNotRegex(text, r"\|\s*TRANS-[0-9]+\s*\|")
+
+    def test_register_v1_lifecycle_migration_preserves_unrelated_sections(self) -> None:
+        register, report = self.lifecycle_transform("lifecycle-preserve")
+        text = register.read_text(encoding="utf-8")
+        self.assertIn("## Unrelated preserved section", text)
+        self.assertIn(
+            "This text must remain byte-for-byte unchanged by the lifecycle structural migration.",
+            text,
+        )
+        self.assertEqual(
+            report["referential_check_results"]["unaffected-register-sections-preserved"],
+            "passed",
+        )
 
 
 if __name__ == "__main__":

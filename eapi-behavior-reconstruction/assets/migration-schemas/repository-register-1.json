@@ -1,0 +1,20 @@
+{
+  "source_schema_id": "repository-register-1",
+  "artifact_type": "repository-register",
+  "artifact_schema_version": "1",
+  "tables": {
+    "data_state_changes": {
+      "section": "Business objects, data resources, and state changes",
+      "headers": [
+        "Object or resource",
+        "Behavior ID",
+        "Operation",
+        "From state/source",
+        "To state/destination",
+        "Condition",
+        "Status",
+        "Evidence"
+      ]
+    }
+  }
+}

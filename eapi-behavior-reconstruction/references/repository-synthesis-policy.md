@@ -24,18 +24,19 @@ Use the dossiers and register to answer:
 4. Which business or data objects cross behavior boundaries?
 5. Where do those objects originate, how do they change, and where do they leave or terminate?
 6. Which state transitions form a lifecycle?
-7. Which rules or components are genuinely shared across behaviors?
-8. Which endpoints expose the same behavior, and which endpoint contracts differ?
-9. Which configuration values alter execution, outcomes, dependencies, or recovery?
-10. Which dependencies and failure modes recur across the repository?
-11. Which endpoint observations are application behavior, meaningful external exposure, protocol support, or unresolved?
-12. Which endpoint records belong in the reader-facing Matrix, which belong in its protocol-support summary, and which must be published as exceptions?
-13. Which outbound HTTP usages represent the same remote operation, and which usage-specific conditions or mappings must remain distinct?
-14. Which external-boundary observations belong to the same logical Dependency, what role does it play, which Operations and capabilities share it, and how does unavailability affect each usage?
-15. Which failure observations share materially equivalent trigger, propagation, visibility, state, retry, and recovery semantics, and which represent distinct repository-wide Patterns?
-16. Which dependency and failure conclusions are High-attention or materially Unknown, and what repository evidence supports that reader priority?
-17. Which reconciled Operations form one reader-meaningful logical connection, and where do direction, boundary, interaction role, or configuration selection require separate connections for the same participant?
-18. Which shared rules and behavior-shaping components materially affect at least two Behaviors or independent entry paths, where do their effects differ, and what would change if their source changed?
+7. Which observations are object conditions, which are processing actions, and which only describe data movement?
+8. Which rules or components are genuinely shared across behaviors?
+9. Which endpoints expose the same behavior, and which endpoint contracts differ?
+10. Which configuration values alter execution, outcomes, dependencies, or recovery?
+11. Which dependencies and failure modes recur across the repository?
+12. Which endpoint observations are application behavior, meaningful external exposure, protocol support, or unresolved?
+13. Which endpoint records belong in the reader-facing Matrix, which belong in its protocol-support summary, and which must be published as exceptions?
+14. Which outbound HTTP usages represent the same remote operation, and which usage-specific conditions or mappings must remain distinct?
+15. Which external-boundary observations belong to the same logical Dependency, what role does it play, which Operations and capabilities share it, and how does unavailability affect each usage?
+16. Which failure observations share materially equivalent trigger, propagation, visibility, state, retry, and recovery semantics, and which represent distinct repository-wide Patterns?
+17. Which dependency and failure conclusions are High-attention or materially Unknown, and what repository evidence supports that reader priority?
+18. Which reconciled Operations form one reader-meaningful logical connection, and where do direction, boundary, interaction role, or configuration selection require separate connections for the same participant?
+19. Which shared rules and behavior-shaping components materially affect at least two Behaviors or independent entry paths, where do their effects differ, and what would change if their source changed?
 
 ## Reconcile rather than concatenate
 
@@ -62,7 +63,9 @@ Treat migrated Observation rows and mechanical IDs only as navigation inputs. `U
 - Reconcile a Shared Rule or Shared Behavior-shaping Component only when one proven rule source, implementation, or configuration binding affects at least two Behaviors or independent entry paths and changes observable validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Similar names are not shared identity evidence.
 - Exclude logging, ordinary monitoring, generated code, framework glue, simple wrappers, behavior-neutral utilities, and single-Behavior helpers from the Shared Behavior model.
 - Resolve duplicate register entries and preserve conflicting evidence explicitly.
-- Do not infer ordering or lifecycle edges merely because two objects have similar names.
+- Reconcile `LIFE-OBS-*` into `OBJ-*`, `STATE-*`, `ACT-*`, and `TRANS-*`, or keep it `Unresolved`. Define States as object conditions; keep Read, Observe, Validate, Transform, Map, Persist, Delete, Invoke, Emit, and Route as Actions. A Persist/Delete Action may cause a Transition but is not the State itself.
+- Use Explicit, Observable, and Derived State bases. Derived States stay `Inferred`. Create a Transition only from same-Object States with an evidenced change point and observable or persisted result.
+- Do not infer ordering or lifecycle edges merely because two objects have similar names, calls are adjacent, or data moves between locations.
 - Do not infer a remote system's internal behavior from a client method name.
 
 Update the working catalog, analysis state, dossiers, and register together when behavior boundaries change.

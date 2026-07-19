@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-register"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 register_status: "working|reconciled"
@@ -41,11 +41,45 @@ Use `application-endpoint`, `meaningful-external-exposure`, `protocol-support`, 
 
 When one protocol-support operation covers several methods on the same normalized route, use `repository.route-group.<normalized-path>` without an HTTP method and use `summarize` rather than duplicating it under every method. For one shared configuration spanning unrelated paths, use `repository.protocol-group.<normalized-config-identity>` and state its covered scope. Use `publish-as-exception` for orphaned, conflicting, environment-inconsistent, or unresolved support records. Keep every underlying `EP-EV-nnn` observation in Endpoint evidence records regardless of publication disposition.
 
-## Business objects, data resources, and state changes
+## Lifecycle observations
 
-| Object or resource | Behavior ID | Operation | From state/source | To state/destination | Condition | Status | Evidence |
+Record what executable code shows before assigning semantic Object, State, Action, or Transition identities. One observation may reconcile to several typed records. Keep it `Unresolved` when the evidence cannot safely distinguish action, movement, and state change.
+
+| Observation ID | Candidate object or resource | Behavior ID | Observed action, condition, or change | Before condition or source | After condition or destination | Persistence or observability | Status | Evidence | Reconciliation |
+|---|---|---|---|---|---|---|---|---|---|
+| `LIFE-OBS-001` | Candidate object/resource | `repository.behavior` | Exact observed operation or change | Before/source as observed | After/destination as observed | Stored, returned, emitted, derived, or Unknown | Confirmed | `path/to/file.ext:line` | `OBJ-001`, `ACT-001`, `TRANS-001`, or `Unresolved` |
+
+## Business object and resource records
+
+Create these records during synthesis. A resource location is not an Object State.
+
+| Object ID | Logical identity | Type | Source, ownership, and storage boundary | Related behaviors | Observation IDs | Status | Unknowns or conflicts |
 |---|---|---|---|---|---|---|---|
-| Object/resource | `repository.behavior` | Read/Create/Update/Delete | Source/state | Destination/state | Condition | Confirmed | `path/to/file.ext:line` |
+| `OBJ-001` | Stable object/resource identity | business-object/record/event/job/resource/other | Origin, owner, store, and repository boundary | `repository.behavior` | `LIFE-OBS-001` | Confirmed | None observed or limitation |
+
+## Object state records
+
+Use `Explicit` for declared status values, `Observable` for directly observable existence or durable conditions, and `Derived` only for a condition computed by an executable rule. A Derived State cannot be `Confirmed`.
+
+| State ID | Object ID | State name | Basis | Definition or derivation | Persistence or observability | Status | Evidence |
+|---|---|---|---|---|---|---|---|
+| `STATE-001` | `OBJ-001` | Human-readable object condition | Explicit/Observable/Derived | Exact meaning or derivation rule | Field, record existence, predicate, or observation | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.ext:line` |
+
+## Processing action records
+
+Read, Observe, Validate, Transform, Map, Persist, Delete, Invoke, Emit, and Route are actions. Persist or Delete may cause a Transition, but the action is not itself a State.
+
+| Action ID | Object ID(s) | Behavior ID | Action role | Input or source | Output or destination | Related Transition(s) | Condition | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+| `ACT-001` | `OBJ-001` | `repository.behavior` | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Input, source, or boundary | Output, destination, or effect | `TRANS-001` or None | Invocation or branch condition | Confirmed | `path/to/file.ext:line` |
+
+## State transition records
+
+Create a Transition only when the repository supports both object conditions and the change point. Call order, similar names, data movement, or an emitted event alone does not prove a Transition.
+
+| Transition ID | Object ID | From State ID | To State ID | Behavior ID | Causing Action ID(s) | Condition | Observable or persisted result | Transaction, side effect, or consistency impact | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `TRANS-001` | `OBJ-001` | `STATE-001` | `STATE-002` | `repository.behavior` | `ACT-001` | Change condition | Stored or externally observable result | Transaction boundary, side effect, partial state, or None observed | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.ext:line` |
 
 ## Field validation and internal transformation observations
 
