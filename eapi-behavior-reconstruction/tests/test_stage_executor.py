@@ -265,6 +265,62 @@ def complete_tech_catalog_fixture(*, include_ba: bool) -> str:
     )
 
 
+def complete_repository_overview_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "repository-overview"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        "---\n\n"
+        "# Repository overview\n\n"
+        "The fixture provides the observed customer profile capability.\n\n"
+        "## Endpoint exposure summary\n\n"
+        "| Category | Count | Interpretation | Details |\n"
+        "|---|---|---|---|\n"
+        "| Application endpoints | 0 | Executable routes | [Endpoint Matrix](endpoint-matrix.md) |\n"
+        "| Meaningful external exposures | 0 | Reader-relevant external entries | [Endpoint Matrix](endpoint-matrix.md) |\n"
+        "| Aggregated protocol-support declarations | 0 | Protocol support | Not observed |\n"
+        "| Unresolved or conflicting exceptions | 0 | Configuration exceptions | [Endpoint Matrix](endpoint-matrix.md) |\n\n"
+        "## Behavior summary\n\n"
+        "| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |\n"
+        "|---|---|---|---|---|---|---|\n"
+        f"| {COMPLETE_BEHAVIOR_ID} | Gets or updates a customer profile | Caller request | Profile response | "
+        f"[Tech](behaviors/{COMPLETE_BEHAVIOR_ID}.md) | N/A | N/A |\n\n"
+        "## Knowledge pack index\n\n"
+        "| Knowledge area | Document | Availability | What it explains |\n"
+        "|---|---|---|---|\n"
+        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application routes and contracts |\n"
+    )
+
+
+def single_repository_overview_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "repository-overview"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        "---\n\n"
+        "# Repository overview\n\n"
+        "The fixture exposes one application route.\n\n"
+        "## Endpoint exposure summary\n\n"
+        "| Category | Count | Interpretation | Details |\n"
+        "|---|---|---|---|\n"
+        "| Application endpoints | 0 | Executable routes | [Endpoint Matrix](endpoint-matrix.md) |\n"
+        "| Meaningful external exposures | 0 | External entries | [Endpoint Matrix](endpoint-matrix.md) |\n"
+        "| Aggregated protocol-support declarations | 0 | Protocol support | Not observed |\n"
+        "| Unresolved or conflicting exceptions | 0 | Exceptions | [Endpoint Matrix](endpoint-matrix.md) |\n\n"
+        "## Behavior summary\n\n"
+        "| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| sample-repo.get-customer | Gets a customer | Request | Response | "
+        "[Tech](behaviors/sample-repo.get-customer.md) | N/A | N/A |\n\n"
+        "## Knowledge pack index\n\n"
+        "| Knowledge area | Document | Availability | What it explains |\n"
+        "|---|---|---|---|\n"
+        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application route and contract |\n"
+    )
 def complete_endpoint_matrix_fixture() -> str:
     rows = "".join(
         f"| `{endpoint_id}` | application-endpoint | Confirmed — `{method} {route}` | "
@@ -683,6 +739,37 @@ class StageExecutorTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def refresh_and_review_projections(
+        self, transaction: str, *, output: Path | None = None
+    ) -> dict:
+        output = output or self.output
+        refreshed = self.run_cmd(
+            "refresh-projections",
+            "--output",
+            str(output),
+            "--transaction",
+            transaction,
+        )
+        payload = json.loads(refreshed.stdout)
+        plan = json.loads(Path(payload["plan"]).read_text(encoding="utf-8"))
+        for item in plan.get("semantic_items", []):
+            if item.get("status") != "pending":
+                continue
+            self.run_cmd(
+                "mark-projection",
+                "--output",
+                str(output),
+                "--transaction",
+                transaction,
+                "--projection",
+                item["projection_id"],
+                "--status",
+                "reviewed-no-change",
+                "--reason",
+                "The fixture summary already describes the materialized relationship.",
+            )
+        return json.loads(Path(payload["plan"]).read_text(encoding="utf-8"))
 
     def test_partial_candidate_does_not_advance_formal_state(self) -> None:
         transaction, candidate = self.begin("inventory")
@@ -2184,14 +2271,7 @@ class StageExecutorTests(unittest.TestCase):
             complete_api_behavior_fixture(include_ba=False), encoding="utf-8"
         )
         (candidate / "tech-pack" / "repository-overview.md").write_text(
-            "---\n"
-            'artifact_type: "repository-overview"\n'
-            'artifact_schema_version: "1"\n'
-            'repository: "sample-repo"\n'
-            'source_commit: "unknown"\n'
-            "---\n\n"
-            "# Repository overview\n\n"
-            "The fixture provides the observed customer profile capability.\n",
+            complete_repository_overview_fixture(),
             encoding="utf-8",
         )
         (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
@@ -2387,6 +2467,8 @@ class StageExecutorTests(unittest.TestCase):
         (contracts / f"{second_endpoint[0]}.api-contract.md").write_text(
             complete_api_contract_fixture(*second_endpoint), encoding="utf-8"
         )
+        api_projection_plan = self.refresh_and_review_projections(api)
+        self.assertEqual(api_projection_plan["status"], "reviewed")
         complete_api_validation = json.loads(
             self.run_cmd(
                 "validate",
@@ -2397,6 +2479,11 @@ class StageExecutorTests(unittest.TestCase):
             ).stdout
         )
         self.assertEqual(complete_api_validation["result"], "ready")
+        self.assertEqual(
+            complete_api_validation["reader_projection_status"],
+            {"api": "current", "ba": "deferred"},
+        )
+        self.assertEqual(complete_api_validation["pending_projection_count"], 0)
         api_result = self.run_cmd(
             "commit", "--output", str(self.output), "--transaction", api
         )
@@ -2404,6 +2491,8 @@ class StageExecutorTests(unittest.TestCase):
             Path(json.loads(api_result.stdout)["receipt"]).read_text(encoding="utf-8")
         )
         self.assertEqual(api_receipt["generation_id"], generation_id)
+        self.assertEqual(api_receipt["reader_projection_api_status"], "current")
+        self.assertEqual(api_receipt["reader_projection_ba_status"], "deferred")
         for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS:
             self.assertTrue(
                 (
@@ -2452,12 +2541,6 @@ class StageExecutorTests(unittest.TestCase):
         )
 
         ba, candidate = self.begin("ba-publication")
-        (candidate / "tech-pack" / "behaviors" / f"{COMPLETE_BEHAVIOR_ID}.md").write_text(
-            complete_api_behavior_fixture(include_ba=True), encoding="utf-8"
-        )
-        (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
-            complete_tech_catalog_fixture(include_ba=True), encoding="utf-8"
-        )
         for artifact_type, identities in (
             ("ba-overview", []),
             ("ba-catalog", []),
@@ -2489,6 +2572,8 @@ class StageExecutorTests(unittest.TestCase):
         (candidate / "ba-pack" / "scenarios" / f"{COMPLETE_SCENARIO_ID}.md").write_text(
             complete_ba_scenario_fixture(), encoding="utf-8"
         )
+        ba_projection_plan = self.refresh_and_review_projections(ba)
+        self.assertEqual(ba_projection_plan["status"], "reviewed")
         self.complete_checkpoints(ba)
         ba_validation = json.loads(
             self.run_cmd(
@@ -2500,12 +2585,18 @@ class StageExecutorTests(unittest.TestCase):
             ).stdout
         )
         self.assertEqual(ba_validation["result"], "ready")
+        self.assertEqual(
+            ba_validation["reader_projection_status"],
+            {"api": "current", "ba": "current"},
+        )
         ba_result = self.run_cmd(
             "commit", "--output", str(self.output), "--transaction", ba
         )
         ba_receipt = json.loads(
             Path(json.loads(ba_result.stdout)["receipt"]).read_text(encoding="utf-8")
         )
+        self.assertEqual(ba_receipt["reader_projection_api_status"], "current")
+        self.assertEqual(ba_receipt["reader_projection_ba_status"], "current")
         for validator_name in (
             "validate_behavior_doc.py",
             "validate_ba_journey.py",
@@ -2545,6 +2636,10 @@ class StageExecutorTests(unittest.TestCase):
             ).stdout
         )
         self.assertEqual(final_validation["result"], "ready")
+        self.assertEqual(
+            final_validation["reader_projection_status"],
+            {"api": "current", "ba": "current"},
+        )
         finalized = self.run_cmd(
             "commit",
             "--output",
@@ -2587,6 +2682,12 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["markdown_fragment_error_count"], 0)
         self.assertEqual(final_receipt["markdown_fragment_skipped_group_count"], 0)
         self.assertEqual(status["markdown_fragment_validation_status"], "current")
+        self.assertEqual(final_receipt["reader_projection_validation_version"], "1")
+        self.assertEqual(final_receipt["reader_projection_api_status"], "current")
+        self.assertEqual(final_receipt["reader_projection_ba_status"], "current")
+        self.assertEqual(final_receipt["reader_projection_pending_count"], 0)
+        self.assertEqual(final_receipt["reader_projection_stale_count"], 0)
+        self.assertEqual(status["reader_projection_validation_status"], "current")
 
         artifact_manifest_path = self.output / ".work" / "artifact-manifest.json"
         artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
@@ -2940,6 +3041,98 @@ class StageExecutorTests(unittest.TestCase):
             fragment_revalidation,
         )
 
+        # A Pack whose latest Finalization Receipt predates Reader Projection
+        # validation is revalidated transactionally. The revalidation refreshes
+        # both API and BA projections and republishes one consistent Generation.
+        projection_old_receipt = dict(revalidation_receipt)
+        for key in tuple(projection_old_receipt):
+            if key.startswith("reader_projection_"):
+                projection_old_receipt.pop(key)
+        latest_receipt_path.write_text(
+            json.dumps(projection_old_receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        state_text = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        executor.write_artifact_manifest(
+            self.output,
+            executor.load_registry(),
+            str(self.repo),
+            executor.scalar_value(state_text, "source_commit") or "unknown",
+            "finalization",
+            revalidation,
+            [],
+        )
+        projection_resume = json.loads(
+            self.run_cmd(
+                "resume",
+                "--repo",
+                str(self.repo),
+                "--state",
+                str(self.output / ".work" / "analysis-state.yaml"),
+            ).stdout
+        )
+        self.assertEqual(projection_resume["result"], "revalidation-required")
+        self.assertEqual(
+            projection_resume["reason"], "reader-projection-validation-outdated"
+        )
+        self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+
+        projection_revalidation, _projection_candidate = self.begin("finalization")
+        projection_transaction = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / projection_revalidation
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            projection_transaction["revalidation_kind"], "reader-projections"
+        )
+        self.refresh_and_review_projections(projection_revalidation)
+        self.complete_checkpoints(projection_revalidation)
+        projection_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                projection_revalidation,
+            ).stdout
+        )
+        self.assertEqual(projection_validation["result"], "ready")
+        self.assertEqual(
+            projection_validation["reader_projection_status"],
+            {"api": "current", "ba": "current"},
+        )
+        self.assertEqual(projection_validation["pending_projection_count"], 0)
+        self.assertEqual(projection_validation["stale_projection_count"], 0)
+
+        projection_commit = json.loads(
+            self.run_cmd(
+                "commit",
+                "--output",
+                str(self.output),
+                "--transaction",
+                projection_revalidation,
+            ).stdout
+        )
+        projection_receipt = json.loads(
+            Path(projection_commit["receipt"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(projection_receipt["reader_projection_validation_version"], "1")
+        self.assertEqual(projection_receipt["reader_projection_api_status"], "current")
+        self.assertEqual(projection_receipt["reader_projection_ba_status"], "current")
+        projection_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(projection_status["reader_projection_validation_status"], "current")
+        self.assertEqual(projection_status["release_readiness"], "ready")
+
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         source = self.repo / "src" / "Handler.java"
         source.parent.mkdir(parents=True)
@@ -3033,13 +3226,7 @@ class StageExecutorTests(unittest.TestCase):
             api_behavior_fixture(), encoding="utf-8"
         )
         (candidate / "tech-pack" / "repository-overview.md").write_text(
-            "---\n"
-            'artifact_type: "repository-overview"\n'
-            'artifact_schema_version: "1"\n'
-            'repository: "sample-repo"\n'
-            'source_commit: "unknown"\n'
-            "---\n\n"
-            "# Repository overview\n\nThe fixture exposes one application route.\n",
+            single_repository_overview_fixture(),
             encoding="utf-8",
         )
         catalog_text = (
@@ -3082,6 +3269,7 @@ class StageExecutorTests(unittest.TestCase):
             / "contracts"
             / "sample-repo.get-customer.api-contract.md"
         ).write_text(api_contract_fixture(), encoding="utf-8")
+        self.refresh_and_review_projections(api)
         self.run_cmd(
             "commit", "--output", str(self.output), "--transaction", api
         )

@@ -1,0 +1,57 @@
+{
+  "reader_projection_schema_version": "1",
+  "validation_version": "1",
+  "stages": {
+    "tech-publication": {
+      "api": "deferred",
+      "ba": "deferred"
+    },
+    "api-contract-publication": {
+      "api": "required",
+      "ba": "deferred"
+    },
+    "business-model": {
+      "api": "receipt-or-current",
+      "ba": "deferred"
+    },
+    "ba-publication": {
+      "api": "receipt-or-current",
+      "ba": "required"
+    },
+    "finalization": {
+      "api": "receipt-or-current",
+      "ba": "receipt-or-current"
+    }
+  },
+  "mechanical_surfaces": {
+    "api": [
+      "tech-behavior.api_contracts",
+      "tech-behavior.api-contract-links",
+      "tech-behavior-catalog.api_contracts",
+      "repository-overview.endpoint-counts",
+      "repository-overview.behavior-api-links",
+      "repository-overview.endpoint-availability"
+    ],
+    "ba": [
+      "tech-behavior.ba_scenarios",
+      "tech-behavior.ba-scenario-links",
+      "tech-behavior-catalog.ba_scenarios",
+      "ba-journey.supporting_tech_behaviors",
+      "repository-overview.behavior-ba-links"
+    ]
+  },
+  "semantic_surfaces": {
+    "api": [
+      "tech-pack/repository-overview.md",
+      "tech-pack/behaviors/*.md",
+      "tech-pack/field-validation-and-mapping.md",
+      "tech-pack/failure-taxonomy.md"
+    ],
+    "ba": [
+      "tech-pack/repository-overview.md",
+      "tech-pack/behaviors/*.md",
+      "ba-pack/business-overview.md",
+      "ba-pack/business-catalog.md"
+    ]
+  }
+}

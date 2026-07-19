@@ -60,6 +60,17 @@ from markdown_structure import (
 )
 from migration_transforms import MigrationTransformError, execute_transform
 from publication_maturity import PublicationMaturityError, load_rules
+from reader_projection import (
+    PROJECTION_STAGES,
+    READER_PROJECTION_VALIDATION_VERSION,
+    ReaderProjectionError,
+    evaluate_projection,
+    load_projection_schema,
+    mark_projection,
+    plan_path as reader_projection_plan_path,
+    receipt_projection_summary,
+    refresh_projections,
+)
 
 
 WORKFLOW_SCHEMA_VERSION = "4"
@@ -943,15 +954,60 @@ def markdown_fragment_receipt_status(output: Path, state: str) -> dict[str, Any]
     }
 
 
-def finalization_revalidation_reasons(output: Path, state: str) -> tuple[list[str], dict[str, Any], dict[str, Any]]:
+def reader_projection_receipt_status(output: Path, state: str) -> dict[str, Any]:
+    expected = READER_PROJECTION_VALIDATION_VERSION
+    published_generation_id = scalar_value(state, "published_generation_id")
+    receipt = committed_finalization_receipt(output, published_generation_id)
+    if receipt is None:
+        return {
+            "status": "unknown",
+            "expected_version": expected,
+            "observed_version": None,
+            "api_status": None,
+            "ba_status": None,
+            "pending_count": None,
+            "stale_count": None,
+            "receipt": None,
+        }
+    payload = read_json(receipt)
+    observed = payload.get("reader_projection_validation_version")
+    api_status = payload.get("reader_projection_api_status")
+    ba_status = payload.get("reader_projection_ba_status")
+    pending = payload.get("reader_projection_pending_count")
+    stale = payload.get("reader_projection_stale_count")
+    current = (
+        observed == expected
+        and api_status in {"current", "not-applicable"}
+        and ba_status in {"current", "not-applicable"}
+        and pending == 0
+        and stale == 0
+    )
+    return {
+        "status": "current" if current else "revalidation-required",
+        "expected_version": expected,
+        "observed_version": observed if isinstance(observed, str) else None,
+        "api_status": api_status if isinstance(api_status, str) else None,
+        "ba_status": ba_status if isinstance(ba_status, str) else None,
+        "pending_count": pending if isinstance(pending, int) else None,
+        "stale_count": stale if isinstance(stale, int) else None,
+        "receipt": str(receipt),
+    }
+
+
+def finalization_revalidation_reasons(
+    output: Path, state: str
+) -> tuple[list[str], dict[str, Any], dict[str, Any], dict[str, Any]]:
     maturity = publication_maturity_receipt_status(output, state)
     fragments = markdown_fragment_receipt_status(output, state)
+    projections = reader_projection_receipt_status(output, state)
     reasons: list[str] = []
     if maturity["status"] == "revalidation-required":
         reasons.append("publication-maturity-validation-outdated")
     if fragments["status"] == "revalidation-required":
         reasons.append("markdown-fragment-validation-outdated")
-    return reasons, maturity, fragments
+    if projections["status"] == "revalidation-required":
+        reasons.append("reader-projection-validation-outdated")
+    return reasons, maturity, fragments, projections
 
 
 def audit_archive_directory(path: Path) -> dict[str, Any]:
@@ -991,6 +1047,7 @@ def command_init(args: argparse.Namespace) -> int:
         registry = load_registry()
         load_scaffold_schema(registry, assets_root=template_root())
         load_rules()
+        load_projection_schema()
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
@@ -999,6 +1056,8 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(f"bundled Artifact Scaffold Schema is invalid: {exc}") from exc
     except PublicationMaturityError as exc:
         raise ExecutorError(f"bundled publication maturity rules are invalid: {exc}") from exc
+    except ReaderProjectionError as exc:
+        raise ExecutorError(f"bundled Reader Projection Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1673,6 +1732,13 @@ def empty_stage_validation_report(
         },
         "blocking_errors": compact_validation_section([]),
         "warnings": compact_validation_section([]),
+        "reader_projection_validation_version": READER_PROJECTION_VALIDATION_VERSION,
+        "reader_projection_status": {
+            "api": "not-applicable",
+            "ba": "not-applicable",
+        },
+        "pending_projection_count": 0,
+        "stale_projection_count": 0,
         "validator_summary": [],
     }
 
@@ -2100,14 +2166,21 @@ def command_begin(args: argparse.Namespace) -> int:
         if args.stage != "finalization":
             raise ExecutorError("workflow is already completed")
         try:
-            revalidation_reasons, maturity, fragments = finalization_revalidation_reasons(
-                output, formal_state
-            )
+            (
+                revalidation_reasons,
+                maturity,
+                fragments,
+                projections,
+            ) = finalization_revalidation_reasons(output, formal_state)
         except PublicationMaturityError as exc:
             raise ExecutorError(
                 f"bundled publication maturity rules are invalid: {exc}"
             ) from exc
-        if maturity["status"] == "unknown" or fragments["status"] == "unknown":
+        if (
+            maturity["status"] == "unknown"
+            or fragments["status"] == "unknown"
+            or projections["status"] == "unknown"
+        ):
             raise ExecutorError(
                 "completed workflow has no trusted Finalization Receipt for its published Generation"
             )
@@ -2117,6 +2190,8 @@ def command_begin(args: argparse.Namespace) -> int:
             revalidation_kind = "publication-maturity"
         elif revalidation_reasons == ["markdown-fragment-validation-outdated"]:
             revalidation_kind = "markdown-fragments"
+        elif revalidation_reasons == ["reader-projection-validation-outdated"]:
+            revalidation_kind = "reader-projections"
         else:
             revalidation_kind = "finalization-validation"
         previous_published_generation_id = scalar_value(
@@ -2499,6 +2574,105 @@ def command_scaffold(args: argparse.Namespace) -> int:
             "path": str(destination),
             "identity": rendered.identity,
             "candidate_manifest_status": assessment.status,
+        },
+        args.json,
+    )
+    return 0
+
+
+def _projection_transaction(
+    output: Path, transaction_id: str
+) -> tuple[Path, dict[str, Any], Path, str, str]:
+    tx_dir, transaction, candidate = load_transaction(output, transaction_id)
+    stage = str(transaction.get("stage"))
+    if transaction.get("status") not in VALIDATABLE_TRANSACTION_STATUSES:
+        raise ExecutorError(
+            f"transaction status {transaction.get('status')} does not allow Reader Projection work"
+        )
+    formal = state_text(output)
+    if scalar_value(formal, "active_transaction") != transaction_id:
+        raise ExecutorError("analysis state does not own this Reader Projection transaction")
+    lock = read_json(lock_path(output))
+    if lock.get("transaction_id") != transaction_id or lock.get("stage") != stage:
+        raise ExecutorError("execution lock does not own the Reader Projection transaction")
+    journal = read_json(tx_dir / "promotion-journal.json")
+    if journal.get("phase") not in VALIDATABLE_JOURNAL_PHASES:
+        raise ExecutorError(
+            f"promotion journal phase {journal.get('phase')} requires recover before Reader Projection work"
+        )
+    repo, commit = verify_repo_and_commit(formal)
+    if transaction.get("repository") != str(repo) or transaction.get("source_commit") != commit:
+        raise ExecutorError("Reader Projection transaction repository or commit mismatch")
+    repository = scalar_value(formal, "repository")
+    if not repository:
+        raise ExecutorError("analysis state is missing repository identity")
+    return tx_dir, transaction, candidate, repository, commit
+
+
+def command_refresh_projections(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    tx_dir, transaction, candidate, repository, commit = _projection_transaction(
+        output, args.transaction
+    )
+    try:
+        plan = refresh_projections(
+            root=candidate,
+            transaction_dir=tx_dir,
+            transaction_id=args.transaction,
+            stage=str(transaction.get("stage")),
+            repository=repository,
+            source_commit=commit,
+        )
+    except ReaderProjectionError as exc:
+        raise ExecutorError(str(exc)) from exc
+    semantic_items = plan.get("semantic_items", [])
+    payload = {
+        "result": "blocked" if plan.get("status") == "invalid" else "refreshed",
+        "stage": transaction.get("stage"),
+        "transaction_id": args.transaction,
+        "plan": str(reader_projection_plan_path(tx_dir)),
+        "plan_status": plan.get("status"),
+        "domain_graph_sha256": plan.get("domain_graph_sha256", {}),
+        "mechanical_refresh_count": sum(
+            item.get("status") == "refreshed"
+            for item in plan.get("mechanical_items", [])
+        ),
+        "semantic_projection_count": len(semantic_items),
+        "pending_semantic_count": sum(
+            item.get("status") == "pending" for item in semantic_items
+        ),
+        "relationship_errors": plan.get("relationship_errors", []),
+        "semantic_notes": plan.get("semantic_notes", []),
+    }
+    emit(payload, args.json)
+    return 1 if payload["result"] == "blocked" else 0
+
+
+def command_mark_projection(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    tx_dir, transaction, candidate, _repository, _commit = _projection_transaction(
+        output, args.transaction
+    )
+    try:
+        item = mark_projection(
+            root=candidate,
+            transaction_dir=tx_dir,
+            transaction_id=args.transaction,
+            projection_id=args.projection,
+            status=args.status,
+            reason=args.reason,
+        )
+    except ReaderProjectionError as exc:
+        raise ExecutorError(str(exc)) from exc
+    emit(
+        {
+            "result": "projection-reviewed",
+            "stage": transaction.get("stage"),
+            "transaction_id": args.transaction,
+            "projection_id": args.projection,
+            "projection_status": args.status,
+            "path": item.get("path"),
+            "reviewed_sha256": item.get("reviewed_sha256"),
         },
         args.json,
     )
@@ -3225,6 +3399,7 @@ def commit_generation_stage(
     registry: Any,
     invalidated: list[dict[str, Any]],
     validators: list[dict[str, Any]],
+    projection_summary: dict[str, Any],
     checkpoints: dict[str, Any],
     skipped: bool,
     skip_reason: str | None,
@@ -3251,6 +3426,7 @@ def commit_generation_stage(
             "artifact_schema_version",
         ),
         **validation_summary,
+        **projection_summary,
         "transaction_id": transaction["transaction_id"],
         "stage": stage,
         "stage_result": "skipped" if skipped else "committed",
@@ -3482,7 +3658,33 @@ def command_commit(args: argparse.Namespace) -> int:
     except (ArtifactSchemaError, ExecutorError) as exc:
         raise ExecutorError(f"cannot refresh Candidate Artifact Manifest: {exc}") from exc
 
+    projection_summary: dict[str, Any] = {}
+    projection_gate_errors: list[str] = []
+    if stage in PROJECTION_STAGES:
+        try:
+            projection_evaluation = evaluate_projection(
+                root=candidate,
+                transaction_dir=tx_dir,
+                transaction_id=args.transaction,
+                stage=stage,
+                repository=scalar_value(formal_text, "repository") or "unknown",
+                source_commit=commit,
+            )
+        except ReaderProjectionError as exc:
+            projection_gate_errors.append(f"Reader Projection Schema: {exc}")
+        else:
+            projection_summary = receipt_projection_summary(projection_evaluation)
+            projection_gate_errors.extend(
+                f"Reader Projection: {message}"
+                for message in projection_evaluation["semantic_errors"]
+            )
+            projection_gate_errors.extend(
+                f"Reader Projection: {message}"
+                for message in projection_evaluation["blocking_errors"]
+            )
+
     errors, validators = stage_gates(stage, candidate, repo)
+    errors.extend(projection_gate_errors)
     candidate_state_check = run_validator(
         [
             sys.executable,
@@ -3534,6 +3736,7 @@ def command_commit(args: argparse.Namespace) -> int:
             registry=registry,
             invalidated=invalidated if isinstance(invalidated, list) else [],
             validators=validators,
+            projection_summary=projection_summary,
             checkpoints=checkpoints,
             skipped=args.skip,
             skip_reason=args.reason,
@@ -3602,6 +3805,7 @@ def command_commit(args: argparse.Namespace) -> int:
             "artifact_schema_registry_version": registry.registry_version,
             "repository_register_artifact_schema_version": register_artifact_schema_version,
             **validation_summary,
+            **projection_summary,
             "transaction_id": args.transaction,
             "stage": stage,
             "stage_result": "skipped" if args.skip else "committed",
@@ -4197,6 +4401,49 @@ def collect_stage_validation_report(
                 }
             )
 
+        try:
+            projection_evaluation = evaluate_projection(
+                root=candidate,
+                transaction_dir=tx_dir,
+                transaction_id=transaction_id,
+                stage=stage,
+                repository=scalar_value(formal, "repository") or "unknown",
+                source_commit=commit,
+            )
+        except ReaderProjectionError as exc:
+            blocking.append(
+                validation_item(
+                    "READER-PROJECTION-SCHEMA",
+                    str(exc),
+                    source="reader-projection",
+                )
+            )
+        else:
+            report["reader_projection_validation_version"] = projection_evaluation[
+                "validation_version"
+            ]
+            report["reader_projection_status"] = projection_evaluation["statuses"]
+            report["pending_projection_count"] = projection_evaluation[
+                "pending_count"
+            ]
+            report["stale_projection_count"] = projection_evaluation["stale_count"]
+            semantic.extend(
+                validation_item(
+                    "READER-PROJECTION-DOCUMENT",
+                    message,
+                    source="reader-projection",
+                )
+                for message in projection_evaluation["semantic_errors"]
+            )
+            blocking.extend(
+                validation_item(
+                    "READER-PROJECTION-STATE",
+                    message,
+                    source="reader-projection",
+                )
+                for message in projection_evaluation["blocking_errors"]
+            )
+
         if stage in {"api-contract-publication", "ba-publication"}:
             try:
                 stage_skip_allowed(stage, candidate, "stage validation")
@@ -4272,6 +4519,14 @@ def status_payload(output: Path) -> dict[str, Any]:
         "markdown_fragment_error_count": None,
         "markdown_fragment_skipped_group_count": None,
         "markdown_fragment_receipt": None,
+        "reader_projection_validation_status": "unknown",
+        "reader_projection_validation_version": READER_PROJECTION_VALIDATION_VERSION,
+        "reader_projection_observed_version": None,
+        "reader_projection_status": {"api": None, "ba": None},
+        "reader_projection_pending_count": None,
+        "reader_projection_stale_count": None,
+        "reader_projection_receipt": None,
+        "active_reader_projection_plan": None,
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
@@ -4409,6 +4664,23 @@ def status_payload(output: Path) -> dict[str, Any]:
             "resume and revalidate Finalization under the current Markdown fragment policy"
         )
 
+    projections = reader_projection_receipt_status(output, text)
+    payload["reader_projection_validation_status"] = projections["status"]
+    payload["reader_projection_validation_version"] = projections["expected_version"]
+    payload["reader_projection_observed_version"] = projections["observed_version"]
+    payload["reader_projection_status"] = {
+        "api": projections["api_status"],
+        "ba": projections["ba_status"],
+    }
+    payload["reader_projection_pending_count"] = projections["pending_count"]
+    payload["reader_projection_stale_count"] = projections["stale_count"]
+    payload["reader_projection_receipt"] = projections["receipt"]
+    if payload["current_stage"] == "completed" and projections["status"] != "current":
+        payload["release_readiness"] = "not-ready"
+        payload["requirements"].append(
+            "resume and revalidate Finalization under the current Reader Projection policy"
+        )
+
     active = payload["active_transaction"]
     if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
         active = payload["lock"].get("transaction_id")
@@ -4416,6 +4688,27 @@ def status_payload(output: Path) -> dict[str, Any]:
         try:
             tx_dir, transaction, candidate = load_transaction(output, str(active))
             payload["transaction"] = transaction
+            projection_plan = reader_projection_plan_path(tx_dir)
+            if projection_plan.is_file():
+                try:
+                    projection_payload = read_json(projection_plan)
+                except ExecutorError as exc:
+                    payload["integrity_errors"].append(
+                        f"Reader Projection Plan invalid: {exc}"
+                    )
+                else:
+                    payload["active_reader_projection_plan"] = {
+                        "path": str(projection_plan),
+                        "status": projection_payload.get("status"),
+                        "domain_graph_sha256": projection_payload.get(
+                            "domain_graph_sha256", {}
+                        ),
+                        "pending_semantic_count": sum(
+                            item.get("status") == "pending"
+                            for item in projection_payload.get("semantic_items", [])
+                            if isinstance(item, dict)
+                        ),
+                    }
             payload["candidate_manifest"] = manifest_summary(file_manifest(candidate))
             try:
                 candidate_assessment = assess_artifact_manifest(
@@ -4567,6 +4860,11 @@ def status_payload(output: Path) -> dict[str, Any]:
         and payload["markdown_fragment_validation_status"] != "current"
     ):
         payload["release_readiness"] = "not-ready"
+    if (
+        payload["current_stage"] == "completed"
+        and payload["reader_projection_validation_status"] != "current"
+    ):
+        payload["release_readiness"] = "not-ready"
     return payload
 
 
@@ -4636,6 +4934,8 @@ def command_resume(args: argparse.Namespace) -> int:
             revalidation_reasons.append("publication-maturity-validation-outdated")
         if status["markdown_fragment_validation_status"] == "revalidation-required":
             revalidation_reasons.append("markdown-fragment-validation-outdated")
+        if status["reader_projection_validation_status"] == "revalidation-required":
+            revalidation_reasons.append("reader-projection-validation-outdated")
         if status["current_stage"] == "completed" and revalidation_reasons:
             emit(
                 {
@@ -4661,6 +4961,12 @@ def command_resume(args: argparse.Namespace) -> int:
                     ],
                     "observed_markdown_fragment_validation_version": status[
                         "markdown_fragment_observed_version"
+                    ],
+                    "required_reader_projection_validation_version": status[
+                        "reader_projection_validation_version"
+                    ],
+                    "observed_reader_projection_validation_version": status[
+                        "reader_projection_observed_version"
                     ],
                     **status,
                 },
@@ -5082,6 +5388,25 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--json", action="store_true")
     scaffold.set_defaults(handler=command_scaffold)
 
+    refresh_projections_parser = subparsers.add_parser("refresh-projections")
+    refresh_projections_parser.add_argument("--output", type=Path, required=True)
+    refresh_projections_parser.add_argument("--transaction", required=True)
+    refresh_projections_parser.add_argument("--json", action="store_true")
+    refresh_projections_parser.set_defaults(handler=command_refresh_projections)
+
+    mark_projection_parser = subparsers.add_parser("mark-projection")
+    mark_projection_parser.add_argument("--output", type=Path, required=True)
+    mark_projection_parser.add_argument("--transaction", required=True)
+    mark_projection_parser.add_argument("--projection", required=True)
+    mark_projection_parser.add_argument(
+        "--status",
+        choices=("refreshed", "reviewed-no-change"),
+        required=True,
+    )
+    mark_projection_parser.add_argument("--reason")
+    mark_projection_parser.add_argument("--json", action="store_true")
+    mark_projection_parser.set_defaults(handler=command_mark_projection)
+
     begin = subparsers.add_parser("begin")
     begin.add_argument("--output", type=Path, required=True)
     begin.add_argument("--stage", choices=(MIGRATION_STAGE,) + STAGES[:-1], required=True)
@@ -5156,12 +5481,13 @@ def main() -> int:
             )
             emit(report, True)
             return 2
-        if args.command == "scaffold" and getattr(args, "json", False):
+        if args.command in {"scaffold", "refresh-projections", "mark-projection"} and getattr(args, "json", False):
             emit(
                 {
                     "result": "error",
                     "transaction_id": str(getattr(args, "transaction", "")),
-                    "artifact_type": str(getattr(args, "artifact_type", "")),
+                    "artifact_type": str(getattr(args, "artifact_type", "")) or None,
+                    "projection_id": str(getattr(args, "projection", "")) or None,
                     "error": str(exc),
                 },
                 True,
@@ -5186,12 +5512,13 @@ def main() -> int:
             )
             emit(report, True)
             return 2
-        if args.command == "scaffold" and getattr(args, "json", False):
+        if args.command in {"scaffold", "refresh-projections", "mark-projection"} and getattr(args, "json", False):
             emit(
                 {
                     "result": "error",
                     "transaction_id": str(getattr(args, "transaction", "")),
-                    "artifact_type": str(getattr(args, "artifact_type", "")),
+                    "artifact_type": str(getattr(args, "artifact_type", "")) or None,
+                    "projection_id": str(getattr(args, "projection", "")) or None,
                     "error": f"filesystem operation failed: {exc}",
                 },
                 True,

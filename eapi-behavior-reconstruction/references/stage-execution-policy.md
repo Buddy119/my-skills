@@ -44,7 +44,7 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 Resume has three outcomes:
 
 - A current Workflow 4 Pack with a valid Artifact Manifest resumes its explicit `current_stage`.
-- A completed current Pack whose latest Finalization Receipt predates the current publication-maturity or Markdown-Fragment validation returns `revalidation-required`. Resume remains read-only; begin `finalization` to create a new Working Generation from the formal Pack, revise only the affected Reader wording or deep links, and publish transactionally.
+- A completed current Pack whose latest Finalization Receipt predates the current publication-maturity, Markdown-Fragment, or Reader-Projection validation returns `revalidation-required`. Resume remains read-only; begin `finalization` to create a new Working Generation from the formal Pack, revise only the affected Reader wording, deep links, or projections, and publish transactionally.
 - Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Reader Packs, or Archive.
 
 Finalization-policy revalidation is not Migration. It does not archive or reinterpret Dossiers, Register, Synthesis, Business Model, or current Reader facts. Abort restores the prior completed State and removes the new Generation. Failed validation retains the Candidate while the formal Pack and previous published Generation remain unchanged.
@@ -139,6 +139,17 @@ python3 <skill-root>/scripts/stage_executor.py validate \
 ```
 
 The report separates content errors, trusted Candidate Manifest drift, cross-stage forward references, lifecycle/integrity blockers, and warnings. `ready` requires zero `semantic_or_document_errors` and zero `blocking_errors`. Expected Manifest refresh and Tech-stage API/BA forward references do not block. The command uses an ephemeral Synthesis or Business Model lifecycle projection, never edits the Candidate, and supports a sealed Migration Candidate without relaxing its immutability. Detailed output is capped while total and suppressed counts remain accurate.
+
+For API Contract Publication, BA Publication, and Reader-Projection revalidation, materialize the downstream artifacts first and then run:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py refresh-projections \
+  --output <output-dir> \
+  --transaction <transaction-id> \
+  --json
+```
+
+This command writes only deterministic Candidate navigation and the transaction-local `reader-projection-plan.json`. AI then updates every semantic item and records `refreshed` or `reviewed-no-change` with `mark-projection`. `validate` reports API and BA status independently as `current`, `deferred`, `stale`, `invalid`, or `not-applicable`. Missing plans, changed relationship hashes, and transaction mismatches are blockers; pending semantic review is a document error.
 
 Commit only after semantic work, checkpoints, review, and compact validation are complete:
 
@@ -268,9 +279,9 @@ Use this sequence without reordering:
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
 4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract destinations, but this stage creates neither Contract stubs nor Endpoint Matrix. Reader wording must already be durable; the execution report alone calls absent targets forward references. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, existing file and Fragment links, publication maturity, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`.
-5. `api-contract-publication`: Materialize every declared application Contract and the Endpoint Matrix in the Generation, reconcile source-document wording during `api-backlinks`, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, publication maturity, every materialized Fragment, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
+5. `api-contract-publication`: Materialize every declared application Contract and the Endpoint Matrix, refresh API Reader Projections, complete every semantic Projection review, then run the `complete` profile. API Projection must be `current`; BA remains `deferred`. Use an evidence-based skip only when no API publication intent exists.
 6. `business-model`: independent Business Model in the Generation.
-7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip. Reconcile source-document BA wording during `ba-backlinks`.
-8. `finalization`: Markdown-first mechanical validation, local Fragment and publication-maturity validation, fact/readability review, transactional formal publication, post-promotion validation, and completion. `release_readiness: ready` requires the current Fragment-validation version with zero Fragment errors and zero necessary skipped groups.
+7. `ba-publication`: BA Overview, Catalog, Journeys, and Scenarios in the Generation, followed by BA Reader Projection refresh and semantic review; both applicable Projection domains must be `current`. A blocked Business Model uses the existing skip path.
+8. `finalization`: Markdown-first mechanical validation, local Fragment, publication-maturity, and Reader-Projection validation, fact/readability review, transactional formal publication, post-promotion validation, and completion. `release_readiness: ready` requires current Fragment and Projection validation with zero pending Projection, Primary Error, or necessary skipped group.
 
 All workflow paths are relative to the active Candidate root. A normal stage Receipt uses `promotion_scope: generation` until Finalization. Only a successful Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true`.

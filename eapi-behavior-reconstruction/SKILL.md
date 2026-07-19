@@ -71,6 +71,7 @@ When no options are present, continue to accept a repository path and optional o
 - Treat [assets/artifact-schema.json](assets/artifact-schema.json) as the version registry for every long-lived working, Tech, BA, and operational Artifact. Do not infer a document generation from headings, directory names, old field names, or prose.
 - Treat [assets/migration-transform-registry.json](assets/migration-transform-registry.json) as the only executable migration-transform registry. A mechanical transform requires an exact source schema, target schema, registered handler, and test fixture. An unknown or unversioned schema is archived and rebuilt; it is never guessed or AI-adopted inside Migration.
 - Treat [assets/publication-maturity-rules.json](assets/publication-maturity-rules.json) as the mechanical contract for execution-stage residue in Reader artifacts. Explicit workflow phrases may block publication; ambiguous words remain review prompts and never become business-semantic decisions in Python.
+- Treat [assets/reader-projection-schema.json](assets/reader-projection-schema.json) as the cross-stage Reader Projection contract. The executor may refresh stable identities, paths, backlinks, navigation cells, and deterministic counts; AI must review and write every affected semantic summary.
 - Validate every local Markdown deep link against a real explicit HTML anchor or a deterministically parsed GFM heading slug. Use explicit stable anchors for Endpoint, `HTTP-*`, `DEP-*`, and `FAIL-*` identities; use heading fragments only for simple stable editorial sections. Never accept file existence alone as proof that `#fragment` is clickable.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
@@ -91,6 +92,8 @@ Before repository-wide synthesis, read [references/repository-synthesis-policy.m
 Before building the repository connection model, shared behavior model, or Repository Overview, read [references/repository-mental-model-publication-policy.md](references/repository-mental-model-publication-policy.md) completely.
 
 Before publishing final documents, read [references/editorial-review-policy.md](references/editorial-review-policy.md) completely.
+
+Before materializing API Contracts or BA Journeys/Scenarios, read [references/reader-projection-policy.md](references/reader-projection-policy.md) completely.
 
 Load these only when applicable:
 
@@ -153,7 +156,7 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 3. For a new output, run `stage_executor.py init --repo <repository-root> --output <output-dir> --json`. Do not copy or edit lifecycle templates manually.
 4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If the current Artifact versions and Manifest are valid, resume the existing stage. Otherwise this command performs a read-only audit of knowledge Artifacts and creates only `.work/migration-plan.yaml` plus a Migration Planning Receipt.
 5. When Resume returns `migration-planned`, read the complete plan, then automatically run `stage_executor.py begin --stage migration --plan <output>/.work/migration-plan.yaml`. The executor performs every declared mechanical transform, archive/reinitialization, ID/link rewrite, and check; it then seals the Candidate and returns a Mechanical Output Manifest. Do not edit that Candidate. Inspect the plan and report, then commit the unchanged Migration before beginning any semantic or publication stage. Do not ask for a second user confirmation.
-6. When Resume returns `revalidation-required`, begin `finalization` directly. The executor creates a new transactional Working Generation from the published Pack; revise only stale Reader publication wording, then validate and publish it. Do not create a Migration Plan or rebuild Dossiers, Register, Synthesis, or Business Model.
+6. When Resume returns `revalidation-required`, begin `finalization` directly. The executor creates a new transactional Working Generation from the published Pack; revise only stale Reader publication wording, deep links, or Reader Projections named by the revalidation reasons, then validate and publish it. Do not create a Migration Plan or rebuild Dossiers, Register, Synthesis, or Business Model.
 7. When the plan is `blocked`, preserve the output and report its `blocked_reasons`; do not edit State or Knowledge Artifacts.
 8. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported normal stage. Treat its returned Candidate as the only writable output root for that stage.
 
@@ -359,13 +362,14 @@ For every confirmed application endpoint:
 7. Use compact `[E#]` markers and grouped Source notes. Do not expose a repeated Evidence column or one citation per sentence when a meaningful row or paragraph can share support.
 8. Generate request and response examples only when code, schema, or tests support their fields, statuses, and wire shapes. Omit unsafe examples and record the caller impact instead of inventing values or serialization.
 9. Set the contract's `behavior_document` backlink.
-10. Materialize every Contract declared by the Tech Behavior and Catalog. Verify the Endpoint ID, Contract filename, Behavior backlink, visible link, Catalog path, and Matrix links as one relationship. During `api-backlinks`, reread the source Behavior and Catalog and remove any generation-order or pending-publication wording now that the destinations exist. Correct endpoint relationships only when reconciliation requires it; do not leave any declared Contract target missing when this stage commits.
+10. Materialize every Contract declared by the Tech Behavior and Catalog. Verify the Endpoint ID, Contract filename, Behavior backlink, visible link, Catalog path, and Matrix links as one relationship. Correct endpoint relationships only when reconciliation requires it; do not leave any declared Contract target missing when this stage commits.
+11. After every Contract and Matrix record is present, run `refresh-projections`. Read its plan, revise every semantic API Projection, then record each review with `mark-projection`. During `api-backlinks`, confirm the refreshed Behavior, Catalog, Repository Overview, optional Field Pack index, and affected Failure summaries describe the materialized API view and contain no generation-order wording.
 
 Do not generate a contract or behavior for an external-only, configuration-only, or ordinary protocol-support record. Multiple external entries mapped to one application endpoint share its one application contract.
 
 Validate each endpoint contract and its backlink before continuing.
 
-Complete the Endpoint Matrix, Contract, backlink, and validation checkpoints. Commit this stage after the executor strictly validates every forward reference, application Contract, Catalog path, Behavior backlink, and Matrix link. Use `--skip` only when there are no Contract files, no API Behaviors, and no declared `api_contracts` in the Tech Behavior or Catalog; do not create empty Contracts. Either result advances only the Working Generation.
+Complete the Endpoint Matrix, Contract, Reader Projection, backlink, and validation checkpoints. Commit this stage only when API Reader Projection status is `current`. Use `--skip` only when there are no Contract files, no API Behaviors, and no declared `api_contracts` in the Tech Behavior or Catalog; do not create empty Contracts. Either result advances only the Working Generation.
 
 ### 8. Build an independent Business Model and publish the BA Pack
 
@@ -377,12 +381,12 @@ Begin only after repository synthesis and the related Tech documents are complet
 4. Assign semantic Journey and Scenario IDs from supported business goals and contexts. Merge and split by actor goal, business context, decision meaning, business-object lifecycle, and visible outcome—not by endpoint, handler, event, or Behavior identity.
 5. Complete the Capability/Object, Journey/Scenario, Tech Coverage, and Business Model review checkpoints. Review the Business Model semantically and commit `business-model` with `--semantic-result complete`, `partial`, or `blocked`. Only the executor updates `business_model_status`; the commit advances only the Working Generation.
 6. When status is `complete` or `partial`, begin `ba-publication`; scaffold `ba-overview` and `ba-catalog`, one `ba-journey` with `journey_id` per Journey, and one `ba-scenario` with `scenario_id` per Scenario. Then write the BA content into those returned Candidate paths.
-7. Maintain direct many-to-many Scenario/Tech traceability: each Scenario lists all supporting Tech Behaviors; each supporting Tech Behavior and catalog entry lists the Scenario in `ba_scenarios`. A Journey links its Scenarios and their supporting Tech Behaviors, but Tech documents do not maintain Journey backlinks. `ba_scenarios: []` is valid for every Behavior category.
-   During `ba-backlinks`, reread every changed Tech source document and remove any wording that describes BA links, Journeys, or Scenarios as pending a later publication step.
+7. Author direct many-to-many Scenario/Tech and Journey/Scenario relationships. After every Journey and Scenario exists, run `refresh-projections` to generate the inverse Tech Behavior, Catalog, Journey-derived, and Repository Overview navigation. Revise every semantic BA Projection and record it with `mark-projection`. A Journey links its Scenarios and their supporting Tech Behaviors, but Tech documents do not maintain Journey backlinks. `ba_scenarios: []` is valid for Behaviors with no direct Scenario.
+   During `ba-backlinks`, confirm the refreshed Tech and BA documents describe the complete current business model and contain no wording that treats Journeys or Scenarios as pending a later publication step.
 8. Preserve evidence confidence without exposing raw source citations. Include only business-visible participants, interactions, shared rules, degradation, partial success, state risk, and recovery limitations. Do not copy the technical context diagram, connection matrix, internal components, Dependency tables, Failure tables, or Tech flows.
 9. When status is `blocked`, begin `ba-publication` only to commit it with `--skip` and the blocker reason; omit invented Journey and Scenario documents and keep the supported Tech Pack complete.
 
-Complete the Journey, Scenario, BA Overview/Catalog, backlink, and validation checkpoints. Commit `ba-publication` only after the executor verifies Journey, Scenario, backlink, and Pack-link mechanics. This commit advances only the Working Generation.
+Complete the Journey, Scenario, BA Overview/Catalog, Reader Projection, backlink, and validation checkpoints. Commit `ba-publication` only after both API and BA Reader Projection statuses are `current` or `not-applicable`. This commit advances only the Working Generation.
 
 ### 9. Review in three passes
 
@@ -393,6 +397,8 @@ Apply the editorial policy in this order:
 1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, file and Fragment links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
 3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack. Run the publication-maturity check across the complete Reader Pack. Rewrite every explicit execution-stage residue. Inspect warning-only words such as `planned` or `pending` in context and retain them only when they describe a real domain state.
+
+Before Release Readiness, confirm every applicable Reader Projection is `current`, its relationship graph matches the Candidate, and no semantic Projection item remains pending. A valid link alone does not prove that Overview, Catalog, Behavior, Field, or BA summaries are current.
 
 During reader review, also verify that each external Dependency appears once regardless of the number of Behaviors or Operations, and that each Failure Pattern explains a repository-level trigger-to-visible-result-and-state story instead of presenting an observation inventory.
 

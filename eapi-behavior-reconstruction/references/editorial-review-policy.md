@@ -72,6 +72,8 @@ Read the document without using source code and ask:
 
 Treat execution lifecycle and reader semantics as separate layers. Reader artifacts must describe the current published Generation, never a future Skill step. Reject explicit residue such as `forward reference`, `N/A until publication`, a planned Artifact path, or a statement that a later stage will generate or materialize a document. Review bare `planned`, `pending`, `not yet`, `temporary`, `future`, and `later` in context: rewrite them when they describe the documentation workflow, but retain them when evidence shows a real business, configuration, or runtime state. The publication-maturity Validator identifies candidates; AI performs the contextual decision.
 
+Treat cross-stage Reader Projection as a separate completeness check. After Contracts, Journeys, or Scenarios are materialized, review the transaction Projection Plan and confirm that Overview, Catalog, Behavior, Field, Failure, and BA summaries reflect the complete current Generation. A valid target link is insufficient when an upstream index omits the new Artifact or its surrounding explanation still describes an earlier model. Review every semantic Projection item; never mark it complete merely because the executor refreshed IDs and paths.
+
 For each API Contract, perform a caller-first review before reading its Source notes:
 
 - Can a developer identify the endpoint purpose, application method/route, authentication, content type, required inputs, success outcomes, caller-visible errors, contract confidence, and important limitations from the opening sections?
