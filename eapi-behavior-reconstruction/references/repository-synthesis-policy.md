@@ -39,6 +39,8 @@ Use the dossiers and register to answer:
 
 ## Reconcile rather than concatenate
 
+Treat migrated Observation rows and mechanical IDs only as navigation inputs. `Unresolved`, an ID Map, an exact table split, or membership in one legacy row set does not prove that two dependencies, remote operations, failures, rules, or scenarios are semantically identical. Re-establish every reconciliation from dossiers, executable code, configuration, tests, and the original evidence preserved by Migration.
+
 - Merge behavior candidates that are implementation layers of one flow.
 - Split a candidate when one entry point contains independently triggered or independently observable behaviors.
 - Keep multiple endpoints distinct in the Endpoint Matrix even when they share one behavior.

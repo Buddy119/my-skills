@@ -56,7 +56,7 @@ python3 <skill-root>/scripts/stage_executor.py begin \
   --json
 ```
 
-Migration and publication never share a transaction. Migration Candidate changes are limited by the Plan. Read the Artifact Migration Policy before adopting or invalidating any artifact.
+Migration and publication never share a transaction. The executor generates and seals the Migration Candidate from the Plan; AI must not edit it. Read the Artifact Migration Policy before inspecting or committing any migration result.
 
 Begin the exact `current_stage` reported by status:
 
@@ -71,7 +71,7 @@ The response includes a transaction ID, Candidate root, Generation information w
 
 ## Checkpoint protocol
 
-Every stage has a fixed ordered Checkpoint contract. After completing and reviewing one item, record it through:
+Every stage has a fixed ordered Checkpoint contract. For normal semantic stages, after completing and reviewing one item, record it through:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py checkpoint \
@@ -85,6 +85,8 @@ python3 <skill-root>/scripts/stage_executor.py checkpoint \
 Allowed statuses are `in-progress`, `complete`, `skipped`, `blocked`, and `failed`. `skipped`, `blocked`, and `failed` require `--reason`. Update checkpoints in order. A commit is rejected while a necessary checkpoint is `pending`, `in-progress`, or `failed`. A stage-level `--skip` marks that stage's checkpoints skipped using the stage reason.
 
 Checkpoint Ledgers are operational progress records, not business evidence. They do not judge whether a Dependency, Failure Pattern, Journey, or prose conclusion is semantically correct.
+
+Migration is the exception: its four checkpoints are completed only by the executor while it creates the deterministic Candidate and Mechanical Output Manifest. Do not call `checkpoint` for Migration.
 
 Fixed Checkpoints:
 
@@ -100,7 +102,7 @@ Fixed Checkpoints:
 | `ba-publication` | `journeys`, `scenarios`, `ba-overview-catalog`, `ba-backlinks`, `ba-validation` |
 | `finalization` | `mechanical-review`, `fact-sampling`, `readability-review`, `release-readiness` |
 
-Commit only after semantic work, checkpoints, and review are complete:
+For a normal stage, commit only after semantic work, checkpoints, and review are complete:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -179,6 +181,7 @@ Read at least:
 - Formal drift status.
 - Release readiness.
 - Active transaction, failed Validators, and recovery requirement.
+- For Migration, the sealed Mechanical Output Manifest path/hash and Transform count; do not treat an editable Candidate as valid.
 
 `failed` means the Candidate is retained and neither the current Generation nor formal Pack was advanced. Correct the Candidate and retry the same transaction, or abort it:
 
@@ -201,7 +204,7 @@ Do not infer completion from an agent message. A stage is complete only when its
 
 ## Versioned Artifact and Register contracts
 
-`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records path, identity, version, checksum, producing stage, invalidation, and latest transaction. `init` validates the Registry, Register Schema, API Contract structure contract, and active templates as one release set.
+`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. `assets/migration-transform-registry.json` is the registry for deterministic transforms and their exact source/target schemas and fixtures. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records path, identity, version, checksum, producing stage, invalidation, and latest transaction. `init` validates both Registries, the Register Schema, API Contract structure contract, and active templates as one release set.
 
 Never use headings, directories, old fields, or prose to detect a legacy generation. Only explicit Artifact metadata, Manifest entries, file existence, hashes, and registry migration chains may drive Resume.
 
@@ -213,7 +216,7 @@ The generic Markdown structure contract runs before frontmatter, specialized doc
 
 Use this sequence without reordering:
 
-0. `migration` (conditional Resume-only): version upgrade, evidence preservation, incompatible archive, invalidation, and recovery-stage selection. It never publishes reader documents.
+0. `migration` (conditional Resume-only): executor-owned registered transforms, byte preservation, incompatible archive, structural reinitialization, invalidation, and recovery-stage selection. Its sealed Candidate contains no AI reconciliation or Reader document generation.
 1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.

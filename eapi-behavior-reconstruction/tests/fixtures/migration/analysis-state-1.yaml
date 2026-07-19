@@ -1,0 +1,12 @@
+artifact_type: "analysis-state"
+artifact_schema_version: "1"
+workflow_schema_version: "3"
+repository: "fixture-repository"
+repository_path: "/tmp/fixture-repository"
+source_commit: "unknown"
+current_stage: "synthesis"
+stage_status: "pending"
+behaviors:
+  - behavior_id: "fixture.behavior"
+    status: "understood"
+    dossier: "behavior-dossiers/fixture.behavior.md"

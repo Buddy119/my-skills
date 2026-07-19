@@ -66,9 +66,10 @@ When no options are present, continue to accept a repository path and optional o
 - Use the evidence index only to navigate. Never treat its markers or role hints as behavioral conclusions.
 - Understand each behavior before drafting its Tech or BA document. Do not create a Claim Ledger or convert prose into atomic claim statements.
 - Do not publish the formal pack until full-repository synthesis is complete.
-- Let AI trace, interpret, synthesize, and write. Use scripts only for deterministic indexing, mechanical validation, and transactional stage control.
+- Let AI trace, interpret, reconcile meaning, model business behavior, and write. Use scripts for byte copying, deterministic indexing, registered schema transforms, stable structural IDs, explicit link rewrites, manifests, validation, archives, and transactional stage control. Never exchange these responsibilities.
 - Treat [assets/register-schema.json](assets/register-schema.json) as the single mechanical contract for `repository-register.md`. Do not rename, reorder, add, or remove Register table columns during an analysis. A Schema change is Skill development work and must update the Schema, Register template, Validator, Stage Executor, and tests together.
 - Treat [assets/artifact-schema.json](assets/artifact-schema.json) as the version registry for every long-lived working, Tech, BA, and operational Artifact. Do not infer a document generation from headings, directory names, old field names, or prose.
+- Treat [assets/migration-transform-registry.json](assets/migration-transform-registry.json) as the only executable migration-transform registry. A mechanical transform requires an exact source schema, target schema, registered handler, and test fixture. An unknown or unversioned schema is archived and rebuilt; it is never guessed or AI-adopted inside Migration.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
 - Do not access credentials, secret values, production customer data, live AWS resources, or repositories outside the supplied boundary.
@@ -149,13 +150,15 @@ Do not create empty reference documents to satisfy this tree. Record absent or i
 2. Exclude generated artifacts, vendored dependencies, build output, coverage output, and lockfiles unless they define runtime behavior.
 3. For a new output, run `stage_executor.py init --repo <repository-root> --output <output-dir> --json`. Do not copy or edit lifecycle templates manually.
 4. For `--resume`, run `stage_executor.py resume --repo <repository-root> --state <analysis-state-path> --json`. If the current Artifact versions and Manifest are valid, resume the existing stage. Otherwise this command performs a read-only audit of knowledge Artifacts and creates only `.work/migration-plan.yaml` plus a Migration Planning Receipt.
-5. When Resume returns `migration-planned`, read the complete plan, then automatically run `stage_executor.py begin --stage migration --plan <output>/.work/migration-plan.yaml`. Review/adopt only the working Artifacts named by the plan, then commit this Migration before beginning Synthesis or any publication stage. Do not ask for a second user confirmation.
+5. When Resume returns `migration-planned`, read the complete plan, then automatically run `stage_executor.py begin --stage migration --plan <output>/.work/migration-plan.yaml`. The executor performs every declared mechanical transform, archive/reinitialization, ID/link rewrite, and check; it then seals the Candidate and returns a Mechanical Output Manifest. Do not edit that Candidate. Inspect the plan and report, then commit the unchanged Migration before beginning any semantic or publication stage. Do not ask for a second user confirmation.
 6. When the plan is `blocked`, preserve the output and report its `blocked_reasons`; do not edit State or Knowledge Artifacts.
 7. Run `stage_executor.py status --output <output-dir> --json`, then begin the reported normal stage. Treat its returned Candidate as the only writable output root for that stage.
 
 Resume and migration decisions come only from explicit `artifact_type`, `artifact_schema_version`, `workflow_schema_version`, the Artifact Manifest, file existence, hashes, and registered migration chains. Missing versions are `unknown`; never guess a historical generation from headings, table labels, directories, Frontmatter field names, or body text.
 
-The generated Migration Plan is the complete scope contract. It explicitly lists preserved, mechanically migrated, review-and-adopted, archived/rebuilt, and blocked Artifacts plus the earliest safe recovery stage. Do not add an undeclared migration because a document "looks old". Old BA directories, stale Contracts, and other incompatible reader files are archived only by the Migration transaction, never as a side effect of `business-model` or another publication stage.
+The generated Migration Plan is the complete scope contract. It uses only `preserve`, `mechanical-migrate`, `archive-and-rebuild`, and `block`, and records the earliest safe recovery stage. Every mechanical step declares its Transform ID, exact source/target identity, paths, ID/link rules, expected counts, Manifest policy, and referential checks. There is no `review-and-adopt` action. Do not add an undeclared migration because a document "looks old". Old BA directories, stale Contracts, and other incompatible reader files are archived only by the Migration transaction, never as a side effect of `business-model` or another publication stage.
+
+Migration may produce structural shells and unresolved Observation rows, but never a Dependency identity, Failure Pattern, Connection Model, Shared Behavior Model, Journey, Scenario, Criticality/Risk judgment, or reader-facing prose. Build those only in Tracing, Synthesis, Business Model, and Publication from source evidence and dossiers. A mechanical ID is a reference handle, not a semantic conclusion.
 
 Keep only progress and paths in `analysis-state.yaml`. Store behavioral knowledge in dossiers and the repository register. Never edit lifecycle fields directly; only the stage executor may update them.
 
@@ -171,6 +174,8 @@ python3 <skill-root>/scripts/stage_executor.py checkpoint \
 ```
 
 Use `skipped`, `blocked`, or `failed` only with `--reason`. A stage cannot commit while a required checkpoint is `pending`, `in-progress`, or `failed`. Checkpoints record progress and gates; they never replace semantic review and never publish files.
+
+Do not call `checkpoint` for Migration. Its executor-owned mechanical checkpoints are completed while `begin --stage migration` builds and seals the Candidate. All later stages keep the normal main-agent checkpoint protocol.
 
 From `synthesis` onward, the executor creates or resumes one Working Generation under `.work/execution/generations/<generation-id>/candidate-root/`. Synthesis, Tech, API, Business Model, and BA stage commits update that Generation only. The previously published Register and Reader Packs remain byte-for-byte unchanged until `finalization`; on a first run they may be absent. Never bypass the Candidate to update the formal `.work` knowledge files, `tech-pack/`, or `ba-pack/`. The executor detects formal drift, restores the immutable baseline, and rejects the transaction.
 

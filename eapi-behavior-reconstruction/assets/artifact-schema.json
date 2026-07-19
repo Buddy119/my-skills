@@ -1,26 +1,33 @@
 {
-  "artifact_schema_registry_version": "2",
+  "artifact_schema_registry_version": "3",
   "manifest_schema_version": "2",
-  "migration_plan_schema_version": "1",
+  "migration_plan_schema_version": "2",
+  "transform_registry_ref": "migration-transform-registry.json",
   "artifact_types": {
     "analysis-state": {
       "current_version": "2",
       "paths": [".work/analysis-state.yaml"],
       "template": "analysis-state-template.yaml",
       "producing_stage": "init",
-      "rebuild_stage": "finalization",
-      "unknown_action": "mechanical-migrate",
+      "rebuild_stage": "inventory",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
-      "migrations": {"1": {"to": "2", "action": "mechanical-migrate"}}
+      "migrations": {
+        "1": {
+          "to": "2",
+          "action": "mechanical-migrate",
+          "transform_id": "analysis-state-1-to-2"
+        }
+      }
     },
     "evidence-index": {
       "current_version": "1",
       "paths": [".work/evidence-index.json"],
       "producing_stage": "inventory",
       "rebuild_stage": "inventory",
-      "unknown_action": "review-and-adopt",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
-      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "working-behavior-catalog": {
       "current_version": "1",
@@ -28,9 +35,9 @@
       "template": "behavior-catalog-template.yaml",
       "producing_stage": "inventory",
       "rebuild_stage": "inventory",
-      "unknown_action": "review-and-adopt",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": ["evidence-index"],
-      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "behavior-dossier": {
       "current_version": "1",
@@ -38,9 +45,9 @@
       "template": "behavior-dossier-template.md",
       "producing_stage": "tracing",
       "rebuild_stage": "tracing",
-      "unknown_action": "review-and-adopt",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": ["evidence-index", "working-behavior-catalog"],
-      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+      "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "repository-register": {
       "schema_ref": "register-schema.json",
@@ -48,9 +55,16 @@
       "template": "repository-register-template.md",
       "producing_stage": "synthesis",
       "rebuild_stage": "synthesis",
-      "unknown_action": "review-and-adopt",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": ["behavior-dossier"],
-      "migrations": {"0": {"to": "1", "action": "review-and-adopt"}}
+      "migrations": {
+        "0": {"to": "1", "action": "archive-and-rebuild"},
+        "flat-http-1": {
+          "to": "1",
+          "action": "mechanical-migrate",
+          "transform_id": "repository-register-flat-http-1-to-1"
+        }
+      }
     },
     "repository-synthesis": {
       "current_version": "1",
@@ -220,18 +234,21 @@
       "paths": [".work/artifact-manifest.json"],
       "producing_stage": "stage-executor",
       "rebuild_stage": "finalization",
-      "unknown_action": "mechanical-migrate",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
-      "migrations": {"1": {"to": "2", "action": "mechanical-migrate"}}
+      "migrations": {"1": {"to": "2", "action": "archive-and-rebuild"}}
     },
     "migration-plan": {
-      "current_version": "1",
+      "current_version": "2",
       "paths": [".work/migration-plan.yaml"],
       "producing_stage": "resume-audit",
       "rebuild_stage": "migration",
-      "unknown_action": "mechanical-migrate",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
-      "migrations": {"0": {"to": "1", "action": "mechanical-migrate"}}
+      "migrations": {
+        "0": {"to": "2", "action": "archive-and-rebuild"},
+        "1": {"to": "2", "action": "archive-and-rebuild"}
+      }
     },
     "stage-receipt": {
       "current_version": "2",
@@ -247,7 +264,7 @@
       "paths": [".work/execution/generations/*/generation-manifest.json"],
       "producing_stage": "stage-executor",
       "rebuild_stage": "synthesis",
-      "unknown_action": "mechanical-migrate",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
       "migrations": {}
     },
@@ -256,7 +273,7 @@
       "paths": [".work/execution/transactions/*/checkpoints.json"],
       "producing_stage": "stage-executor",
       "rebuild_stage": "finalization",
-      "unknown_action": "mechanical-migrate",
+      "unknown_action": "archive-and-rebuild",
       "dependencies": [],
       "migrations": {}
     }

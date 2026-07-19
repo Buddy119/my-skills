@@ -1,0 +1,9 @@
+artifact_type: "analysis-state"
+artifact_schema_version: "2"
+workflow_schema_version: "4"
+repository: "fixture-repository"
+repository_path: "/tmp/fixture-repository"
+source_commit: "unknown"
+current_stage: "synthesis"
+stage_status: "pending"
+behaviors: []

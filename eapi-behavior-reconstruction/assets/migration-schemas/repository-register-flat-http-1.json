@@ -1,0 +1,59 @@
+{
+  "source_schema_id": "repository-register-flat-http-1",
+  "artifact_type": "repository-register",
+  "artifact_schema_version": "flat-http-1",
+  "tables": {
+    "flat_http_mappings": {
+      "section": "Legacy outbound HTTP field mappings",
+      "headers": [
+        "Call ID",
+        "Usage ID",
+        "Mapping ID",
+        "Method",
+        "Logical Target",
+        "Client Operation",
+        "Behavior ID",
+        "Executable Call Site",
+        "Invocation Condition or Config",
+        "Observable Purpose",
+        "Direction",
+        "Source Field(s)",
+        "Target Field(s)",
+        "Transformation",
+        "Condition/Default",
+        "Lossy",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "dependency_rows": {
+      "section": "Legacy external dependency rows",
+      "headers": [
+        "Observation ID",
+        "Candidate dependency",
+        "Boundary type",
+        "Behavior ID",
+        "Operation or resource",
+        "Exchanged concept or observed effect",
+        "Availability observation",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "failure_rows": {
+      "section": "Legacy failure rows",
+      "headers": [
+        "Observation ID",
+        "Failure category",
+        "Behavior ID",
+        "Trigger or source",
+        "Handling and propagation",
+        "Caller-visible result",
+        "State outcome",
+        "Retry or recovery",
+        "Status",
+        "Evidence"
+      ]
+    }
+  }
+}

@@ -153,6 +153,37 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertIn("Artifact Schema and templates are out of sync", result.stderr)
         self.assertFalse(output.exists())
 
+    def test_init_rejects_unregistered_mechanical_transform(self) -> None:
+        copied = self.root / "skill-copy-transform-drift"
+        shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        registry = copied / "assets" / "artifact-schema.json"
+        registry.write_text(
+            registry.read_text(encoding="utf-8").replace(
+                '"transform_id": "analysis-state-1-to-2"',
+                '"transform_id": "not-registered"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "transform-drift-output"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(copied / "scripts" / "stage_executor.py"),
+                "init",
+                "--repo",
+                str(self.repo),
+                "--output",
+                str(output),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unregistered transform", result.stderr)
+        self.assertFalse(output.exists())
+
     def test_begin_rejects_manifest_and_artifact_metadata_mismatch(self) -> None:
         register = self.output / ".work" / "repository-register.md"
         register.write_text(
@@ -317,7 +348,7 @@ class ArtifactMigrationTests(unittest.TestCase):
             begun["transaction_id"],
             expected=1,
         )
-        self.assertIn("outside the plan", " ".join(failed["errors"]))
+        self.assertIn("sealed Migration Candidate", " ".join(failed["errors"]))
         self.assertFalse((self.output / ".work" / "repository-synthesis.md").exists())
 
     def test_migration_and_publication_receipts_have_separate_roles(self) -> None:
@@ -337,9 +368,153 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(receipt["kind"], "migration")
         self.assertEqual(receipt["stage"], "migration")
         self.assertNotIn("publication_status", receipt)
+        self.assertIn("mechanical_output_manifest_sha256", receipt)
+        self.assertIn("transform_reports", receipt)
         state = (self.output / ".work" / "analysis-state.yaml").read_text()
         self.assertIn('migration_status: "committed"', state)
         self.assertIn('publication_status: "pending"', state)
+
+    def test_registered_transform_is_planned_executed_and_sealed(self) -> None:
+        fixture = (
+            SKILL_ROOT
+            / "tests"
+            / "fixtures"
+            / "migration"
+            / "repository-register-flat-http-1.md"
+        )
+        register = self.output / ".work" / "repository-register.md"
+        shutil.copy2(fixture, register)
+        self.resume()
+        step = next(
+            item
+            for item in self.plan()["steps"]
+            if item["artifact_type"] == "repository-register"
+        )
+        self.assertEqual(step["action"], "mechanical-migrate")
+        self.assertEqual(
+            step["transform_id"], "repository-register-flat-http-1-to-1"
+        )
+        self.assertEqual(step["source_artifact"]["artifact_schema_version"], "flat-http-1")
+        self.assertEqual(step["expected"]["source_record_counts"]["flat_http_mappings"], 2)
+
+        begun = self.begin_migration()
+        mechanical_manifest = json.loads(
+            Path(begun["mechanical_output_manifest"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(len(mechanical_manifest["transform_reports"]), 2)
+        candidate_register = Path(begun["candidate"]) / ".work" / "repository-register.md"
+        candidate_text = candidate_register.read_text(encoding="utf-8")
+        self.assertIn('artifact_schema_version: "1"', candidate_text)
+        self.assertIn("HTTP-007-U01", candidate_text)
+        self.assertIn("Unresolved", candidate_text)
+        status = self.run_cmd("status", "--output", str(self.output))
+        self.assertTrue(status["mechanical_output_manifest"]["candidate_sealed"])
+        self.assertEqual(status["mechanical_output_manifest"]["transform_count"], 2)
+
+        checkpoint = self.run_cmd(
+            "checkpoint",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+            "--checkpoint",
+            "plan-verification",
+            "--status",
+            "complete",
+            expected=2,
+        )
+        self.assertIn("executor-owned", checkpoint["stderr"])
+
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        receipt = json.loads(Path(committed["receipt"]).read_text(encoding="utf-8"))
+        transform_ids = {item["transform_id"] for item in receipt["transform_reports"]}
+        self.assertIn("repository-register-flat-http-1-to-1", transform_ids)
+        register_report = next(
+            item
+            for item in receipt["transform_reports"]
+            if item["transform_id"] == "repository-register-flat-http-1-to-1"
+        )
+        self.assertEqual(register_report["input_summary"]["file_count"], 1)
+        self.assertEqual(register_report["output_records"]["http_mappings"], 2)
+        self.assertTrue(register_report["id_map"])
+        self.assertNotIn("dependency_contracts", receipt)
+        self.assertNotIn("failure_patterns", receipt)
+
+    def test_known_analysis_state_schema_migrates_lifecycle_mechanically(self) -> None:
+        state = self.output / ".work" / "analysis-state.yaml"
+        text = state.read_text(encoding="utf-8")
+        text = text.replace('artifact_schema_version: "2"', 'artifact_schema_version: "1"', 1)
+        text = text.replace('workflow_schema_version: "4"', 'workflow_schema_version: "3"', 1)
+        text = 'phase: "inventory"\n' + text
+        state.write_text(text, encoding="utf-8")
+        self.resume()
+        state_step = next(
+            item
+            for item in self.plan()["steps"]
+            if item["artifact_type"] == "analysis-state"
+        )
+        self.assertEqual(state_step["transform_id"], "analysis-state-1-to-2")
+        begun = self.begin_migration()
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        self.assertEqual(committed["next_stage"], "inventory")
+        migrated = state.read_text(encoding="utf-8")
+        self.assertIn('artifact_schema_version: "2"', migrated)
+        self.assertIn('workflow_schema_version: "4"', migrated)
+        self.assertIn('migration_status: "committed"', migrated)
+        self.assertNotIn("\nphase:", "\n" + migrated)
+
+    def test_unknown_register_is_archived_and_reinitialized_without_ai_adoption(self) -> None:
+        register = self.output / ".work" / "repository-register.md"
+        legacy_bytes = register.read_bytes()
+        register.write_text(
+            "\n".join(
+                line
+                for line in register.read_text(encoding="utf-8").splitlines()
+                if not line.startswith(("artifact_type:", "artifact_schema_version:"))
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.resume()
+        step = next(
+            item
+            for item in self.plan()["steps"]
+            if item["artifact_type"] == "repository-register"
+        )
+        self.assertEqual(step["action"], "archive-and-rebuild")
+        self.assertEqual(
+            step["reinitialize_from_template"], "repository-register-template.md"
+        )
+        begun = self.begin_migration()
+        candidate_register = Path(begun["candidate"]) / ".work" / "repository-register.md"
+        self.assertIn(
+            'artifact_type: "repository-register"',
+            candidate_register.read_text(encoding="utf-8"),
+        )
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        legacy_root = Path(committed["legacy_artifacts_archive"])
+        archived = legacy_root / ".work" / "repository-register.md"
+        self.assertTrue(archived.is_file())
+        self.assertNotEqual(archived.read_bytes(), legacy_bytes)
+        self.assertNotIn("artifact_type:", archived.read_text(encoding="utf-8"))
 
     def test_completed_without_finalization_receipt_is_integrity_error(self) -> None:
         state = self.output / ".work" / "analysis-state.yaml"

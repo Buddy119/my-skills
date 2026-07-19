@@ -18,6 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from migration_transforms import (
+    MigrationTransformError,
+    TransformRegistry,
+    load_transform_registry,
+    preview_transform,
+)
+
 
 DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "assets" / "artifact-schema.json"
 CURRENT_WORKFLOW_SCHEMA_VERSION = "4"
@@ -39,9 +46,17 @@ DISCOVERY_EXCLUDES = (
 MIGRATION_ACTIONS = {
     "preserve",
     "mechanical-migrate",
-    "review-and-adopt",
     "archive-and-rebuild",
     "block",
+}
+MECHANICAL_ARTIFACT_TYPES = {
+    "analysis-state",
+    "evidence-index",
+    "working-behavior-catalog",
+    "behavior-dossier",
+    "repository-register",
+    "artifact-manifest",
+    "migration-plan",
 }
 NORMAL_STAGES = (
     "inventory",
@@ -79,6 +94,7 @@ class ArtifactRegistry:
     manifest_version: str
     migration_plan_version: str
     definitions: dict[str, ArtifactDefinition]
+    transform_registry: TransformRegistry
 
     def match(self, relative: str) -> ArtifactDefinition | None:
         matches = [
@@ -146,8 +162,15 @@ def load_registry(path: Path = DEFAULT_REGISTRY_PATH) -> ArtifactRegistry:
     registry_version = payload.get("artifact_schema_registry_version")
     manifest_version = payload.get("manifest_schema_version")
     plan_version = payload.get("migration_plan_schema_version")
+    transform_registry_ref = payload.get("transform_registry_ref")
     if not all(isinstance(item, str) and item for item in (registry_version, manifest_version, plan_version)):
         raise ArtifactSchemaError("artifact registry versions must be non-empty strings")
+    if not isinstance(transform_registry_ref, str) or not transform_registry_ref:
+        raise ArtifactSchemaError("artifact registry must declare transform_registry_ref")
+    try:
+        transform_registry = load_transform_registry(path.parent / transform_registry_ref)
+    except MigrationTransformError as exc:
+        raise ArtifactSchemaError(f"invalid migration transform registry: {exc}") from exc
     raw_definitions = payload.get("artifact_types")
     if not isinstance(raw_definitions, dict) or not raw_definitions:
         raise ArtifactSchemaError("artifact registry must define artifact_types")
@@ -184,6 +207,10 @@ def load_registry(path: Path = DEFAULT_REGISTRY_PATH) -> ArtifactRegistry:
             raise ArtifactSchemaError(f"artifact type {artifact_type} has invalid rebuild_stage")
         if unknown_action not in MIGRATION_ACTIONS:
             raise ArtifactSchemaError(f"artifact type {artifact_type} has invalid unknown_action")
+        if unknown_action == "mechanical-migrate":
+            raise ArtifactSchemaError(
+                f"artifact type {artifact_type} cannot mechanically migrate an unknown schema"
+            )
         if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
             raise ArtifactSchemaError(f"artifact type {artifact_type} has invalid dependencies")
         if not isinstance(migrations, dict):
@@ -194,11 +221,42 @@ def load_registry(path: Path = DEFAULT_REGISTRY_PATH) -> ArtifactRegistry:
                 raise ArtifactSchemaError(f"artifact type {artifact_type} has invalid migration")
             target = migration.get("to")
             action = migration.get("action")
+            transform_id = migration.get("transform_id")
             if not isinstance(target, str) or action not in MIGRATION_ACTIONS:
                 raise ArtifactSchemaError(
                     f"artifact type {artifact_type} has invalid migration from {source}"
                 )
-            normalized_migrations[source] = {"to": target, "action": action}
+            if action == "mechanical-migrate":
+                if artifact_type not in MECHANICAL_ARTIFACT_TYPES:
+                    raise ArtifactSchemaError(
+                        f"semantic or reader Artifact {artifact_type} cannot be mechanically migrated"
+                    )
+                if not isinstance(transform_id, str) or not transform_id:
+                    raise ArtifactSchemaError(
+                        f"mechanical migration {artifact_type} {source}->{target} has no transform_id"
+                    )
+                transform = transform_registry.definitions.get(transform_id)
+                if transform is None:
+                    raise ArtifactSchemaError(
+                        f"mechanical migration {artifact_type} {source}->{target} uses an unregistered transform"
+                    )
+                if (
+                    transform.artifact_type != artifact_type
+                    or transform.source_version != source
+                    or transform.target_version != target
+                ):
+                    raise ArtifactSchemaError(
+                        f"transform {transform_id} does not match {artifact_type} {source}->{target}"
+                    )
+            elif transform_id is not None:
+                raise ArtifactSchemaError(
+                    f"non-mechanical migration {artifact_type} {source}->{target} cannot declare transform_id"
+                )
+            normalized_migrations[source] = {
+                "to": target,
+                "action": action,
+                **({"transform_id": transform_id} if isinstance(transform_id, str) else {}),
+            }
         definitions[artifact_type] = ArtifactDefinition(
             artifact_type=artifact_type,
             current_version=version,
@@ -218,7 +276,13 @@ def load_registry(path: Path = DEFAULT_REGISTRY_PATH) -> ArtifactRegistry:
                 f"artifact type {definition.artifact_type} has unknown dependencies: "
                 + ", ".join(missing)
             )
-    registry = ArtifactRegistry(registry_version, manifest_version, plan_version, definitions)
+    registry = ArtifactRegistry(
+        registry_version,
+        manifest_version,
+        plan_version,
+        definitions,
+        transform_registry,
+    )
     _validate_path_patterns(registry)
     return registry
 
@@ -484,17 +548,32 @@ def _action_for(
     definition: ArtifactDefinition,
     observed_type: str | None,
     observed_version: str | None,
-) -> tuple[str, str, str | None]:
+) -> tuple[str, str, str | None, str | None]:
     if observed_type not in {None, definition.artifact_type}:
-        return "block", "artifact_type conflicts with its registered path", None
+        return "block", "artifact_type conflicts with its registered path", None, None
     if observed_version == definition.current_version and observed_type == definition.artifact_type:
-        return "preserve", "artifact already uses the current schema", definition.current_version
+        return "preserve", "artifact already uses the current schema", definition.current_version, None
     if observed_version is None:
-        return definition.unknown_action, "artifact has no explicit schema version", definition.current_version
+        return (
+            definition.unknown_action,
+            "artifact has no explicit schema version",
+            definition.current_version,
+            None,
+        )
     migration = definition.migrations.get(observed_version)
     if migration and migration.get("to") == definition.current_version:
-        return migration["action"], f"registered migration {observed_version}->{definition.current_version}", definition.current_version
-    return "block", f"no migration path from {observed_version} to {definition.current_version}", None
+        return (
+            migration["action"],
+            f"registered migration {observed_version}->{definition.current_version}",
+            definition.current_version,
+            migration.get("transform_id"),
+        )
+    return (
+        "block",
+        f"no migration path from {observed_version} to {definition.current_version}",
+        None,
+        None,
+    )
 
 
 def _unregistered_step(relative: str) -> tuple[str, str, str]:
@@ -554,7 +633,7 @@ def build_migration_plan(
     source_commit: str,
 ) -> dict[str, Any]:
     snapshot, snapshot_hash = source_snapshot(root)
-    grouped: dict[tuple[str, str, str, str, str], list[str]] = {}
+    grouped: dict[tuple[str, str, str, str, str, str | None], list[str]] = {}
     changed_types: set[str] = set()
     direct_rebuild_stages: list[str] = []
     blocked_reasons: list[str] = []
@@ -571,7 +650,7 @@ def build_migration_plan(
             action, rebuilding_stage, reason = _unregistered_step(relative)
             if action != "block" and rebuilding_stage in STAGE_INDEX:
                 direct_rebuild_stages.append(rebuilding_stage)
-            key = ("unregistered", "unknown", "unknown", action, rebuilding_stage)
+            key = ("unregistered", "unknown", "unknown", action, rebuilding_stage, None)
             grouped.setdefault(key, []).append(relative)
             if action == "block":
                 blocked_reasons.append(f"{relative}: {reason}")
@@ -579,9 +658,16 @@ def build_migration_plan(
                 expected_archives.append(relative)
             continue
         observed_type, observed_version = artifact_metadata(path)
-        action, reason, target = _action_for(definition, observed_type, observed_version)
-        if definition.artifact_type == "analysis-state":
+        action, reason, target, transform_id = _action_for(
+            definition, observed_type, observed_version
+        )
+        if (
+            definition.artifact_type == "analysis-state"
+            and action == "preserve"
+            and observed_version == definition.current_version
+        ):
             action = "mechanical-migrate"
+            transform_id = "analysis-state-2-workflow-4"
             reason = "migration lifecycle fields and recovery stage are executor-owned"
         source = observed_version or "unknown"
         key = (
@@ -590,50 +676,20 @@ def build_migration_plan(
             target or definition.current_version,
             action,
             definition.rebuild_stage,
+            transform_id,
         )
         grouped.setdefault(key, []).append(relative)
-        if action in {"review-and-adopt", "archive-and-rebuild"}:
+        if action == "archive-and-rebuild" or (
+            action == "mechanical-migrate"
+            and definition.artifact_type not in {"analysis-state", "artifact-manifest"}
+        ):
             changed_types.add(definition.artifact_type)
         if action == "archive-and-rebuild":
             expected_archives.append(relative)
+            if definition.rebuild_stage in STAGE_INDEX:
+                direct_rebuild_stages.append(definition.rebuild_stage)
         if action == "block":
             blocked_reasons.append(f"{relative}: {reason}")
-
-    manifest_path = root / ".work" / "artifact-manifest.json"
-    manifest_definition = registry.definitions["artifact-manifest"]
-    if manifest_path.is_file():
-        observed_type, observed_version = artifact_metadata(manifest_path)
-        action, _reason, target = _action_for(
-            manifest_definition, observed_type, observed_version
-        )
-        # The Manifest is a derived inventory of the post-migration pack and is
-        # always rebuilt, even when its own envelope version is already current.
-        action = "mechanical-migrate"
-        grouped.setdefault(
-            (
-                manifest_definition.artifact_type,
-                observed_version or "unknown",
-                target or manifest_definition.current_version,
-                action,
-                manifest_definition.rebuild_stage,
-            ),
-            [],
-        ).append(".work/artifact-manifest.json")
-        if action == "block":
-            blocked_reasons.append(
-                ".work/artifact-manifest.json: no registered migration path"
-            )
-    else:
-        grouped.setdefault(
-            (
-                manifest_definition.artifact_type,
-                "missing",
-                manifest_definition.current_version,
-                "mechanical-migrate",
-                manifest_definition.rebuild_stage,
-            ),
-            [],
-        ).append(".work/artifact-manifest.json")
 
     invalidated = _dependency_closure(registry, changed_types)
     invalidated -= {
@@ -698,12 +754,6 @@ def build_migration_plan(
         )
         if missing_dossier or incomplete_behavior:
             resume_stage = "tracing"
-        elif any(
-            action == "review-and-adopt"
-            for (_artifact, _source, _target, action, _stage) in grouped
-        ):
-            resume_stage = "synthesis"
-            invalidated |= _dependency_closure(registry, {"repository-synthesis"})
         else:
             stages = direct_rebuild_stages + [
                 registry.definitions[item].rebuild_stage
@@ -711,6 +761,10 @@ def build_migration_plan(
                 if item in registry.definitions
                 and registry.definitions[item].rebuild_stage in STAGE_INDEX
             ]
+            if not stages and explicit_stage in STAGE_INDEX:
+                stages.append(str(explicit_stage))
+            elif not stages and explicit_stage == "completed":
+                stages.append("finalization")
             resume_stage = min(stages, key=STAGE_INDEX.get) if stages else "finalization"
 
     steps: list[dict[str, Any]] = []
@@ -718,7 +772,7 @@ def build_migration_plan(
         sorted(grouped, key=lambda item: (STAGE_INDEX.get(item[4], -1), item[0], item[1], item[3])),
         1,
     ):
-        artifact_type, source, target, action, rebuilding_stage = key
+        artifact_type, source, target, action, rebuilding_stage, transform_id = key
         effective_action = (
             "archive-and-rebuild"
             if artifact_type in invalidated and action == "preserve"
@@ -735,18 +789,69 @@ def build_migration_plan(
             if source not in {"unknown", "missing"}
             else "artifact version is missing or the current manifest must be created"
         )
-        steps.append(
-            {
-                "step_id": f"MIG-{index:03d}",
-                "artifact_type": artifact_type,
-                "source_version": source,
-                "target_version": target,
-                "action": effective_action,
-                "paths": sorted(grouped[key]),
-                "reason": reason,
-                "rebuilding_stage": rebuilding_stage,
-            }
-        )
+        paths = sorted(grouped[key])
+        step: dict[str, Any] = {
+            "step_id": f"MIG-{index:03d}",
+            "artifact_type": artifact_type,
+            "source_version": source,
+            "target_version": target,
+            "action": effective_action,
+            "paths": paths,
+            "input_paths": paths,
+            "output_paths": paths if effective_action in {"preserve", "mechanical-migrate"} else [],
+            "reason": reason,
+            "rebuilding_stage": rebuilding_stage,
+        }
+        if effective_action == "mechanical-migrate":
+            if not transform_id:
+                blocked_reasons.append(
+                    f"{artifact_type}@{source}: mechanical migration has no registered transform"
+                )
+                step["action"] = "block"
+            else:
+                transform = registry.transform_registry.definitions[transform_id]
+                try:
+                    expected = preview_transform(
+                        transform, root, paths, registry.transform_registry.root
+                    )
+                except MigrationTransformError as exc:
+                    blocked_reasons.append(f"{artifact_type}@{source}: {exc}")
+                    step["action"] = "block"
+                else:
+                    step.update(
+                        {
+                            "source_artifact": {
+                                "artifact_type": artifact_type,
+                                "artifact_schema_version": source,
+                                "schema": transform.source_schema,
+                            },
+                            "target_artifact": {
+                                "artifact_type": artifact_type,
+                                "artifact_schema_version": target,
+                                "schema": transform.target_schema,
+                            },
+                            "transform_id": transform_id,
+                            "id_generation_rule": transform.id_generation_rule,
+                            "link_rewrite_rule": transform.link_rewrite_rule,
+                            "expected": {
+                                **expected,
+                                "manifest": "sha256-size-and-line-count",
+                                "referential_checks": list(transform.referential_checks),
+                            },
+                        }
+                    )
+        elif effective_action == "archive-and-rebuild":
+            definition = registry.definitions.get(artifact_type)
+            if (
+                definition is not None
+                and definition.template
+                and artifact_type
+                in {"analysis-state", "working-behavior-catalog", "repository-register"}
+                and len(paths) == 1
+            ):
+                step["reinitialize_from_template"] = definition.template
+                step["output_paths"] = paths
+        steps.append(step)
 
     invalidated_records = [
         {
@@ -819,8 +924,36 @@ def load_migration_plan(path: Path, registry: ArtifactRegistry) -> dict[str, Any
     for step in steps:
         if not isinstance(step, dict) or step.get("action") not in MIGRATION_ACTIONS:
             raise ArtifactSchemaError("migration plan contains an invalid step")
-        if not isinstance(step.get("paths"), list):
-            raise ArtifactSchemaError("migration step paths must be a list")
+        if not all(isinstance(step.get(name), list) for name in ("paths", "input_paths", "output_paths")):
+            raise ArtifactSchemaError("migration step paths must be explicit lists")
+        if step.get("action") == "mechanical-migrate":
+            transform_id = step.get("transform_id")
+            transform = (
+                registry.transform_registry.definitions.get(transform_id)
+                if isinstance(transform_id, str)
+                else None
+            )
+            if transform is None:
+                raise ArtifactSchemaError("mechanical migration step has no registered transform")
+            if (
+                step.get("artifact_type") != transform.artifact_type
+                or step.get("source_version") != transform.source_version
+                or step.get("target_version") != transform.target_version
+            ):
+                raise ArtifactSchemaError(
+                    f"migration step does not match transform {transform.transform_id}"
+                )
+            for name in (
+                "source_artifact",
+                "target_artifact",
+                "id_generation_rule",
+                "link_rewrite_rule",
+                "expected",
+            ):
+                if name not in step:
+                    raise ArtifactSchemaError(
+                        f"mechanical migration step is missing {name}"
+                    )
     return plan
 
 
@@ -843,11 +976,12 @@ def migration_allowed_paths(plan: dict[str, Any]) -> tuple[set[str], set[str], s
     for step in plan.get("steps", []):
         action = step.get("action")
         paths = {str(item) for item in step.get("paths", [])}
-        if action in {"mechanical-migrate", "review-and-adopt"}:
+        if action == "mechanical-migrate":
             mutable |= paths
         elif action == "archive-and-rebuild":
             mutable |= paths
-            must_remove |= paths
+            if not step.get("reinitialize_from_template"):
+                must_remove |= paths
         elif action == "preserve":
             preserve |= paths
     return mutable, must_remove, preserve

@@ -49,6 +49,7 @@ from markdown_structure import (
     parse_markdown,
     validate_api_contract_tables,
 )
+from migration_transforms import MigrationTransformError, execute_transform
 
 
 WORKFLOW_SCHEMA_VERSION = "4"
@@ -1287,6 +1288,70 @@ def _remove_candidate_path(path: Path) -> None:
         parent = parent.parent
 
 
+def _reinitialize_archived_artifact(
+    candidate: Path,
+    step: dict[str, Any],
+    repo: Path,
+    commit: str,
+    output: Path,
+) -> str:
+    paths = [str(item) for item in step.get("output_paths", [])]
+    if len(paths) != 1:
+        raise ExecutorError("template reinitialization requires exactly one output path")
+    target = candidate / paths[0]
+    artifact_type = str(step.get("artifact_type"))
+    if artifact_type == "analysis-state":
+        text = initial_state(repo.name, repo, commit, output)
+    elif artifact_type == "working-behavior-catalog":
+        text = initial_catalog(repo.name, commit)
+    elif artifact_type == "repository-register":
+        text = render_template("repository-register-template.md", repo.name, commit)
+    else:
+        raise ExecutorError(
+            f"archive-and-rebuild cannot reinitialize unsupported artifact type: {artifact_type}"
+        )
+    atomic_write_text(target, text)
+    return paths[0]
+
+
+def _assert_transform_report_matches_plan(
+    step: dict[str, Any], report: dict[str, Any]
+) -> None:
+    expected = step.get("expected", {})
+    comparisons = {
+        "input_file_count": report.get("input_summary", {}).get("file_count"),
+        "output_file_count": report.get("output_summary", {}).get("file_count"),
+        "source_record_counts": report.get("source_records"),
+        "output_record_counts": report.get("output_records"),
+    }
+    mismatches = [
+        f"{key}: expected {expected.get(key)!r}, observed {observed!r}"
+        for key, observed in comparisons.items()
+        if expected.get(key) != observed
+    ]
+    expected_checks = set(expected.get("referential_checks", []))
+    observed_checks = report.get("referential_check_results", {})
+    missing_checks = sorted(
+        check for check in expected_checks if observed_checks.get(check) != "passed"
+    )
+    if mismatches or missing_checks:
+        detail = mismatches + ["failed referential checks: " + ", ".join(missing_checks)]
+        raise ExecutorError(
+            f"registered transform {step.get('transform_id')} violated its plan: "
+            + " | ".join(detail)
+        )
+
+
+def _complete_migration_checkpoints(tx_dir: Path, transaction_id: str) -> dict[str, Any]:
+    ledger = initialize_checkpoints(tx_dir, transaction_id, MIGRATION_STAGE)
+    for item in ledger["checkpoints"]:
+        item["status"] = "complete"
+        item["reason"] = "completed by the deterministic migration executor"
+        item["updated_at"] = now_utc()
+    atomic_write_json(checkpoint_path(tx_dir), ledger)
+    return ledger
+
+
 def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
     plan_path = _migration_plan_path(output, args.plan)
     try:
@@ -1322,11 +1387,9 @@ def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
         if not candidate_plan_path.is_file():
             candidate_plan_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(plan_path, candidate_plan_path)
-        candidate_plan = dict(plan)
-        candidate_plan["status"] = "in-progress"
-        write_migration_plan(candidate_plan_path, candidate_plan)
-
         automatic_actions: list[str] = []
+        transform_reports: list[dict[str, Any]] = []
+        reinitialized_artifacts: list[str] = []
         for step in plan.get("steps", []):
             action = step.get("action")
             for relative in step.get("paths", []):
@@ -1334,37 +1397,76 @@ def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
                 if action == "archive-and-rebuild":
                     _remove_candidate_path(target)
                     automatic_actions.append(f"invalidated {relative}")
-                elif action == "mechanical-migrate" and target.is_file():
-                    definition = registry.definitions.get(str(step.get("artifact_type")))
-                    if definition is None:
-                        raise ExecutorError(
-                            f"Migration step references unknown artifact type: {step.get('artifact_type')}"
-                        )
-                    add_artifact_metadata(
-                        target, definition.artifact_type, definition.current_version
+            if action == "archive-and-rebuild" and step.get("reinitialize_from_template"):
+                relative = _reinitialize_archived_artifact(
+                    candidate, step, repo, commit, output
+                )
+                reinitialized_artifacts.append(relative)
+                automatic_actions.append(f"reinitialized structural shell for {relative}")
+            elif action == "mechanical-migrate":
+                transform_id = str(step.get("transform_id", ""))
+                transform = registry.transform_registry.definitions.get(transform_id)
+                if transform is None:
+                    raise ExecutorError(
+                        f"Migration step references unregistered transform: {transform_id or '<missing>'}"
                     )
-                    automatic_actions.append(f"upgraded metadata for {relative}")
+                try:
+                    report = execute_transform(
+                        transform,
+                        candidate,
+                        [str(item) for item in step.get("input_paths", [])],
+                        [str(item) for item in step.get("output_paths", [])],
+                        registry.transform_registry.root,
+                    )
+                except MigrationTransformError as exc:
+                    raise ExecutorError(
+                        f"registered transform {transform_id} failed: {exc}"
+                    ) from exc
+                _assert_transform_report_matches_plan(step, report)
+                transform_reports.append(report)
+                automatic_actions.append(f"executed {transform_id}")
 
         candidate_state_path = candidate / STATE_FILE
         if not candidate_state_path.is_file():
-            raise ExecutorError("Migration Candidate has no analysis state")
-        add_artifact_metadata(candidate_state_path, "analysis-state", "2")
-        candidate_state = candidate_state_path.read_text(encoding="utf-8")
-        candidate_state = remove_scalar(candidate_state, "phase")
-        candidate_state = set_scalar(candidate_state, "workflow_schema_version", WORKFLOW_SCHEMA_VERSION)
-        candidate_state = set_scalar(candidate_state, "repository_path", str(repo))
-        candidate_state = set_scalar(candidate_state, "migration_status", "in-progress")
-        candidate_state = set_scalar(candidate_state, "publication_status", "stale")
-        candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
-        first_checkpoint = STAGE_CHECKPOINTS[MIGRATION_STAGE][0]
-        candidate_state = set_scalar(candidate_state, "current_checkpoint", first_checkpoint)
-        candidate_state = set_scalar(candidate_state, "checkpoint_status", "in-progress")
-        candidate_state = set_scalar(candidate_state, "working_generation_id", None)
-        candidate_state = set_scalar(candidate_state, "published_generation_id", None)
-        candidate_state = set_scalar(candidate_state, "published_source_commit", None)
-        candidate_state = set_scalar(candidate_state, "formal_drift_status", "clean")
-        atomic_write_text(candidate_state_path, candidate_state)
-        initialize_checkpoints(tx_dir, transaction_id, MIGRATION_STAGE)
+            raise ExecutorError("Migration Candidate has no reinitialized or migrated analysis state")
+        candidate_state = _finalize_migration_candidate_state(candidate, plan, repo)
+        candidate_plan = dict(plan)
+        candidate_plan["status"] = "committed"
+        write_migration_plan(candidate_plan_path, candidate_plan)
+        write_artifact_manifest(
+            candidate,
+            registry,
+            str(repo),
+            commit,
+            MIGRATION_STAGE,
+            transaction_id,
+            plan.get("invalidated_artifacts", []),
+        )
+        checkpoints = _complete_migration_checkpoints(tx_dir, transaction_id)
+        errors, diff = _validate_migration_candidate(
+            output, candidate, plan, registry, repo, commit, transaction_id
+        )
+        if errors:
+            raise ExecutorError(
+                "deterministic Migration Candidate failed validation: " + " | ".join(errors)
+            )
+        mechanical_output_manifest = {
+            "mechanical_output_manifest_schema_version": "1",
+            "plan_id": plan["plan_id"],
+            "transaction_id": transaction_id,
+            "repository": str(repo),
+            "source_commit": commit,
+            "candidate_manifest": file_manifest(candidate),
+            "candidate_summary": manifest_summary(file_manifest(candidate)),
+            "changes": diff,
+            "transform_reports": transform_reports,
+            "reinitialized_artifacts": reinitialized_artifacts,
+            "invalidated_artifacts": plan.get("invalidated_artifacts", []),
+            "checkpoint_summary": checkpoint_summary(checkpoints),
+            "sealed_at": now_utc(),
+        }
+        mechanical_manifest_path = tx_dir / "mechanical-output-manifest.json"
+        atomic_write_json(mechanical_manifest_path, mechanical_output_manifest)
 
         transaction = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
@@ -1378,6 +1480,9 @@ def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
             "candidate": str(candidate),
             "created_at": now_utc(),
             "automatic_actions": automatic_actions,
+            "mechanical_output_manifest": str(mechanical_manifest_path),
+            "mechanical_output_manifest_sha256": sha256_file(mechanical_manifest_path),
+            "candidate_sealed": True,
         }
         atomic_write_text(tx_dir / "pre-state.yaml", state_text(output))
         atomic_write_json(tx_dir / "transaction.json", transaction)
@@ -1404,10 +1509,8 @@ def command_begin_migration(args: argparse.Namespace, output: Path) -> int:
             "plan_id": plan["plan_id"],
             "candidate": str(candidate),
             "automatic_actions": automatic_actions,
-            "instruction": (
-                "review-and-adopt only the planned working artifacts in Candidate; "
-                "do not write synthesis or reader documents"
-            ),
+            "mechanical_output_manifest": str(tx_dir / "mechanical-output-manifest.json"),
+            "instruction": "Candidate is executor-generated and sealed; inspect the plan and mechanical report, then commit without editing Candidate",
         },
         args.json,
     )
@@ -1545,7 +1648,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     tx_dir, transaction, candidate = load_transaction(output, args.transaction)
     stage = str(transaction.get("stage"))
     if stage == MIGRATION_STAGE:
-        formal = state_text(output)
+        raise ExecutorError(
+            "migration checkpoints are executor-owned and complete when the sealed Candidate is created"
+        )
     else:
         formal = state_text(output)
         if scalar_value(formal, "active_transaction") != args.transaction:
@@ -1925,7 +2030,7 @@ def archive_legacy_artifacts(
         {
             str(relative)
             for step in plan.get("steps", [])
-            if step.get("action") == "review-and-adopt"
+            if step.get("action") == "archive-and-rebuild"
             for relative in step.get("paths", [])
             if (output / str(relative)).is_file()
         }
@@ -2038,7 +2143,11 @@ def _validate_migration_candidate(
             errors.append(f"preserved Artifact changed during Migration: {relative}")
 
     for step in plan.get("steps", []):
-        if step.get("action") not in {"mechanical-migrate", "review-and-adopt", "preserve"}:
+        retained = step.get("action") in {"mechanical-migrate", "preserve"} or (
+            step.get("action") == "archive-and-rebuild"
+            and step.get("reinitialize_from_template")
+        )
+        if not retained:
             continue
         definition = registry.definitions.get(str(step.get("artifact_type")))
         if definition is None:
@@ -2056,7 +2165,7 @@ def _validate_migration_candidate(
                 or observed_version != definition.current_version
             ):
                 errors.append(
-                    f"Artifact was not adopted to the current schema: {relative}; expected "
+                    f"mechanical Migration output does not use the current schema: {relative}; expected "
                     f"{definition.artifact_type}@{definition.current_version}"
                 )
 
@@ -2075,21 +2184,39 @@ def _validate_migration_candidate(
             )
             if register_errors:
                 errors.append(
-                    "review-and-adopt Register does not match the current schema: "
+                    "mechanically migrated or reinitialized Register does not match the current schema: "
                     + " | ".join(register_errors)
                 )
-
-    write_artifact_manifest(
-        candidate,
-        registry,
-        str(repo),
-        commit,
-        MIGRATION_STAGE,
-        transaction_id,
-        plan.get("invalidated_artifacts", []),
-    )
     errors.extend(validate_artifact_manifest(candidate, registry))
     return errors, diff
+
+
+def _load_sealed_mechanical_output(
+    tx_dir: Path,
+    transaction: dict[str, Any],
+    candidate: Path,
+) -> dict[str, Any]:
+    path = tx_dir / "mechanical-output-manifest.json"
+    if not path.is_file():
+        raise ExecutorError("migration transaction has no Mechanical Output Manifest")
+    expected_hash = transaction.get("mechanical_output_manifest_sha256")
+    if not isinstance(expected_hash, str) or sha256_file(path) != expected_hash:
+        raise ExecutorError("Mechanical Output Manifest was modified after Candidate sealing")
+    payload = read_json(path)
+    if (
+        payload.get("mechanical_output_manifest_schema_version") != "1"
+        or payload.get("transaction_id") != transaction.get("transaction_id")
+        or payload.get("plan_id") != transaction.get("plan_id")
+    ):
+        raise ExecutorError("Mechanical Output Manifest identity is invalid")
+    sealed_manifest = payload.get("candidate_manifest")
+    if not isinstance(sealed_manifest, dict):
+        raise ExecutorError("Mechanical Output Manifest has no Candidate file inventory")
+    if file_manifest(candidate) != sealed_manifest:
+        raise ExecutorError(
+            "sealed Migration Candidate was modified after deterministic execution"
+        )
+    return payload
 
 
 def command_commit_migration(
@@ -2121,11 +2248,28 @@ def command_commit_migration(
     if plan.get("status") != "planned":
         raise ExecutorError("formal Migration Plan is no longer planned")
     repo, commit = _plan_repository_and_commit(plan)
-
-    candidate_plan = dict(plan)
-    candidate_plan["status"] = "committed"
-    write_migration_plan(candidate / ".work" / "migration-plan.yaml", candidate_plan)
-    candidate_state = _finalize_migration_candidate_state(candidate, plan, repo)
+    try:
+        mechanical_output = _load_sealed_mechanical_output(
+            tx_dir, transaction, candidate
+        )
+    except ExecutorError as exc:
+        transaction["status"] = "failed"
+        transaction["last_attempt_at"] = now_utc()
+        transaction["errors"] = [str(exc)]
+        atomic_write_json(tx_dir / "transaction.json", transaction)
+        emit(
+            {
+                "result": "failed",
+                "stage": MIGRATION_STAGE,
+                "transaction_id": args.transaction,
+                "errors": [str(exc)],
+                "candidate": str(candidate),
+            },
+            args.json,
+        )
+        return 1
+    candidate_state_path = candidate / STATE_FILE
+    candidate_state = candidate_state_path.read_text(encoding="utf-8")
     errors, diff = _validate_migration_candidate(
         output, candidate, plan, registry, repo, commit, args.transaction
     )
@@ -2178,6 +2322,14 @@ def command_commit_migration(
             "source_manifest_sha256": plan["source_manifest_sha256"],
             "resume_stage_after_migration": plan["resume_stage_after_migration"],
             "steps": plan["steps"],
+            "mechanical_output_manifest_sha256": transaction.get(
+                "mechanical_output_manifest_sha256"
+            ),
+            "mechanical_output_manifest": mechanical_output,
+            "transform_reports": mechanical_output.get("transform_reports", []),
+            "reinitialized_artifacts": mechanical_output.get(
+                "reinitialized_artifacts", []
+            ),
             "invalidated_artifacts": plan["invalidated_artifacts"],
             "expected_archives": plan["expected_archives"],
             "archive": str(archive) if archive else None,
@@ -2982,19 +3134,44 @@ def status_payload(output: Path) -> dict[str, Any]:
                 payload["checkpoints"] = ledger.get("checkpoints", [])
             except ExecutorError as exc:
                 payload["integrity_errors"].append(f"Checkpoint ledger invalid: {exc}")
-            try:
-                repo, _commit = verify_repo_and_commit(text)
-                requirements, status_validators = stage_gates(stage, candidate, repo)
-                payload["requirements"] = requirements
-                payload["validator_summary"] = [
-                    {
-                        "command": result["command"],
-                        "exit_code": result["exit_code"],
+            if stage == MIGRATION_STAGE:
+                try:
+                    mechanical = _load_sealed_mechanical_output(
+                        tx_dir, transaction, candidate
+                    )
+                except ExecutorError as exc:
+                    payload["integrity_errors"].append(str(exc))
+                    payload["requirements"] = [
+                        "restore or abort the invalid sealed Migration transaction"
+                    ]
+                else:
+                    payload["mechanical_output_manifest"] = {
+                        "path": str(tx_dir / "mechanical-output-manifest.json"),
+                        "sha256": transaction.get(
+                            "mechanical_output_manifest_sha256"
+                        ),
+                        "transform_count": len(
+                            mechanical.get("transform_reports", [])
+                        ),
+                        "candidate_sealed": True,
                     }
-                    for result in status_validators
-                ]
-            except ExecutorError as exc:
-                payload["requirements"] = [str(exc)]
+                    payload["requirements"] = [
+                        "inspect the Migration Plan and Mechanical Output Manifest, then commit without editing Candidate"
+                    ]
+            else:
+                try:
+                    repo, _commit = verify_repo_and_commit(text)
+                    requirements, status_validators = stage_gates(stage, candidate, repo)
+                    payload["requirements"] = requirements
+                    payload["validator_summary"] = [
+                        {
+                            "command": result["command"],
+                            "exit_code": result["exit_code"],
+                        }
+                        for result in status_validators
+                    ]
+                except ExecutorError as exc:
+                    payload["requirements"] = [str(exc)]
             journal_path = tx_dir / "promotion-journal.json"
             payload["promotion_journal"] = read_json(journal_path) if journal_path.is_file() else None
         except ExecutorError as exc:

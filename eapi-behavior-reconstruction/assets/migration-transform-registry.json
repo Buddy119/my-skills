@@ -1,0 +1,51 @@
+{
+  "migration_transform_registry_version": "1",
+  "transforms": {
+    "analysis-state-1-to-2": {
+      "artifact_type": "analysis-state",
+      "source_version": "1",
+      "target_version": "2",
+      "source_schema": "analysis-state@1",
+      "target_schema": "analysis-state@2",
+      "handler": "analysis-state-envelope",
+      "fixture": "../tests/fixtures/migration/analysis-state-1.yaml",
+      "id_generation_rule": "preserve-existing-identities",
+      "link_rewrite_rule": "none",
+      "referential_checks": [
+        "repository-and-source-commit-preserved",
+        "behavior-identities-preserved"
+      ]
+    },
+    "analysis-state-2-workflow-4": {
+      "artifact_type": "analysis-state",
+      "source_version": "2",
+      "target_version": "2",
+      "source_schema": "analysis-state@2",
+      "target_schema": "analysis-state@2-workflow-4",
+      "handler": "analysis-state-envelope",
+      "fixture": "../tests/fixtures/migration/analysis-state-2.yaml",
+      "id_generation_rule": "preserve-existing-identities",
+      "link_rewrite_rule": "none",
+      "referential_checks": [
+        "repository-and-source-commit-preserved",
+        "behavior-identities-preserved"
+      ]
+    },
+    "repository-register-flat-http-1-to-1": {
+      "artifact_type": "repository-register",
+      "source_version": "flat-http-1",
+      "target_version": "1",
+      "source_schema": "migration-schemas/repository-register-flat-http-1.json",
+      "target_schema": "register-schema.json",
+      "handler": "repository-register-flat-http-1",
+      "fixture": "../tests/fixtures/migration/repository-register-flat-http-1.md",
+      "id_generation_rule": "preserve-valid-explicit-ids-otherwise-hash-explicit-source-record",
+      "link_rewrite_rule": "rewrite-only-relations-declared-by-the-source-record-and-generated-id-map",
+      "referential_checks": [
+        "usage-call-references-exist",
+        "mapping-call-and-usage-references-exist",
+        "dependency-and-failure-observations-remain-unresolved"
+      ]
+    }
+  }
+}

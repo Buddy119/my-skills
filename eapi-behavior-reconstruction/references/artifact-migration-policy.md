@@ -2,16 +2,49 @@
 
 Load this policy only for `--resume`.
 
+## Contents
+
+- Trust boundaries and ownership matrix
+- Explicit identity and registered transforms
+- Resume Audit and Migration transaction
+- Transform semantics
+- Unknown legacy Packs
+- Receipts and completion
+
 ## Trust boundaries
 
-Migration and publication are different transactions, Receipts, and claims of trust.
+Migration and semantic reconstruction are different transactions, Receipts, and claims of trust:
+
+```text
+Resume Audit
+→ deterministic Migration Transaction
+→ Tracing / Synthesis / Business Model / Publication
+```
 
 - Resume Audit may create only `.work/migration-plan.yaml` and a Migration Planning Receipt.
-- Migration may upgrade Artifact envelopes, preserve raw evidence, adopt working material, archive incompatible files, invalidate derived Artifacts, and update lifecycle state.
-- Migration must not synthesize repository conclusions, publish reader documents, construct business Journeys/Scenarios, or claim that a Tech/BA Pack is complete.
-- Synthesis and publication begin only after a committed Migration Receipt.
+- Migration may copy bytes, execute a registered deterministic schema transform, preserve explicit IDs, generate deterministic structural IDs, rewrite links declared by an ID map, archive incompatible files, create an empty current-schema working shell, invalidate derived Artifacts, and update lifecycle state.
+- Migration must not reconcile dependencies, group failures, construct repository connections/shared behavior, model Journeys/Scenarios, judge Criticality/Risk/Caller Visibility/state meaning, or write reader prose.
+- Semantic reconstruction begins only after a committed Migration Receipt.
 
-## Explicit identity
+## Ownership matrix
+
+| Work | Owner | Allowed during Migration |
+|---|---|---|
+| Byte copy, checksum, count, archive, staging swap | Stage Executor | Yes |
+| Frontmatter and lifecycle-envelope migration | Registered transform | Yes |
+| Stable ID preservation or deterministic ID generation from one explicit source record | Registered transform | Yes |
+| Link rewrite explicitly determined by an ID Map | Registered transform | Yes |
+| Table split defined by an exact source schema | Registered transform | Yes |
+| Referential integrity and Manifest checks | Validator / Stage Executor | Yes |
+| Dependency identity reconciliation | AI in Synthesis | No |
+| Failure Pattern grouping and risk meaning | AI in Synthesis | No |
+| Connection and Shared Behavior models | AI in Synthesis | No |
+| Capability, Journey, and Scenario modeling | AI in Business Model | No |
+| Reader-facing Tech/BA prose | AI in Publication | No |
+
+Do not ask AI to perform copying or archival work. Do not ask a script to decide whether two dependencies, failures, operations, rules, or business scenarios mean the same thing.
+
+## Explicit identity and registered transforms
 
 Every long-lived Artifact declares:
 
@@ -20,17 +53,20 @@ artifact_type: "registered-type"
 artifact_schema_version: "registered-version"
 ```
 
-JSON operational Artifacts carry the same keys. `workflow_schema_version` describes executor lifecycle semantics; it is not a document-format version. The Repository Register's Artifact version is resolved through `artifact-schema.json`, which references `register-schema.json` for its table contract.
+JSON operational Artifacts carry the same keys. `workflow_schema_version` describes executor lifecycle semantics; it is not a document-format version. The Repository Register's Artifact version is resolved through `artifact-schema.json`, which references `register-schema.json`.
 
-Use only explicit identity/version, Manifest entries, file existence, checksums, repository identity, source commit, and registry migration chains. Never choose a migration from:
+Use only explicit identity/version, Manifest entries, file existence, checksums, repository identity, source commit, and registry migration chains. Never select a migration from headings, directories, table labels, L1/L2/L3 text, old Frontmatter fields, or body prose. A missing version is `unknown` even when the file resembles a current template.
 
-- Headings or section names.
-- Directory names such as an old BA layout.
-- L1/L2/L3 or other prose.
-- Presence/absence of an old Frontmatter business field.
-- A table column label found by text search.
+`assets/migration-transform-registry.json` is the only transform registry. A `mechanical-migrate` step is executable only when it has:
 
-A missing version is `unknown`, even when the body resembles the latest template.
+- Exact source Artifact type and schema version.
+- Exact target Artifact type and schema version.
+- Registered `transform_id` and handler.
+- Source and target Schema declarations.
+- A committed test fixture for the source schema.
+- Input/output paths, ID rule, link rule, expected record/file counts, Manifest policy, and referential checks.
+
+Do not register a Version `0`, `unknown`, or unversioned transform by guessing a historical format.
 
 ## Resume Audit
 
@@ -43,21 +79,13 @@ python3 <skill-root>/scripts/stage_executor.py resume \
   --json
 ```
 
-For a current Workflow 4 pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a plan.
+For a current Workflow 4 Pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a Migration Plan.
 
-Otherwise inspect `.work/migration-plan.yaml` before continuing. Confirm:
+Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `3`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
 
-- `plan_id`, repository, source commit, and source snapshot hash.
-- Target Workflow and Registry versions.
-- Each planned action and path.
-- Invalidated Artifact types and their responsible rebuild stages.
-- Expected archives, blocked reasons, and post-migration recovery stage.
+Each mechanical step must visibly declare the Transform ID and its expected mechanical results. The plan is JSON-compatible YAML so the standard-library executor parses it deterministically. It must not contain repository knowledge conclusions.
 
-The current release targets Workflow Schema `4`, Artifact Registry `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`. Generation Manifest and Checkpoint Ledger start at Artifact Schema `1`.
-
-The plan is JSON-compatible YAML so the standard-library executor can parse it deterministically. The plan may not contain repository knowledge conclusions.
-
-If the plan is blocked, stop. Do not modify knowledge Artifacts or lifecycle state. If the Pack changes after planning, discard no evidence; rerun Resume Audit to produce a new snapshot-bound plan.
+If the plan is blocked, stop. If the Pack changes after planning, rerun Resume Audit; the snapshot-bound plan is no longer executable.
 
 ## Migration transaction
 
@@ -71,21 +99,18 @@ python3 <skill-root>/scripts/stage_executor.py begin \
   --json
 ```
 
-The formal Pack and State remain unchanged while the Candidate is prepared. Work only inside the returned Candidate.
+The executor automatically applies the plan and completes these mechanical checkpoints: plan verification, evidence preservation, Artifact migration, and migration validation. It writes transaction-local `mechanical-output-manifest.json` with Candidate hashes, Transform reports, input/output counts, ID Maps, archives/reinitializations, and referential-check results.
 
 Actions mean:
 
-- `preserve`: do not alter the file or checksum.
-- `mechanical-migrate`: perform only the registry-declared deterministic envelope conversion.
-- `review-and-adopt`: preserve the source under `.work/legacy-artifacts/<plan-id>/`, review the working content, convert it to the current working schema, and keep uncertainty as `Unknown`, `Unresolved`, or a blocked Dossier.
-- `archive-and-rebuild`: remove the Candidate copy after verified archive; do not replace it during Migration.
-- `block`: no safe migration exists; no Migration may begin.
+- `preserve`: keep the exact source checksum.
+- `mechanical-migrate`: execute the named registered transform and nothing else.
+- `archive-and-rebuild`: checksum-archive the source, invalidate it, and defer its meaning to the named later stage. The executor may create an empty current-schema shell for State, Catalog, or Register so that the later stage has a safe structural target.
+- `block`: no safe preservation or recovery path exists; Migration cannot begin.
 
-For review-and-adopt, do not make new repository-level conclusions. Keep existing evidence and citations, normalize only what can be safely mapped, and defer reconciliation to Synthesis.
+There is no `review-and-adopt` action. The Candidate returned by `begin --stage migration` is executor-generated and sealed. AI may read the plan and Mechanical Output Manifest but must not edit, copy into, organize, or enrich the Candidate. Migration checkpoints are executor-owned and cannot be updated manually.
 
-Legacy `ba-pack/behaviors/` is additionally archived as one checksum-verified tree under `.work/legacy-ba-pack/<transaction-id>/`; this archive is created only by Migration commit.
-
-Commit only after every retained Artifact has the current explicit type/version and all changes are inside the plan:
+Commit the unchanged Candidate:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -94,28 +119,45 @@ python3 <skill-root>/scripts/stage_executor.py commit \
   --json
 ```
 
-Do not pass `--semantic-result` or `--skip`. A successful Migration Receipt records preserved/migrated/archived/invalidated files and the next normal stage. Publication remains `stale` or `pending`.
+Commit recomputes every Candidate hash and rejects any manual or AI change before archive or promotion. Do not pass `--semantic-result` or `--skip`.
 
-Workflow 3 migration uses only the explicit old `current_stage`. Do not infer the recovery point from the retired `phase` field or document content. If `current_stage` is absent or invalid, the plan is `blocked`. Preserve the old formal Pack as the published baseline, archive historical Receipts without rewriting them, and create a new Working Generation only when the post-migration Synthesis stage begins. API Contract Schema `1` is invalidated and rebuilt from `api-contract-publication`; Migration itself does not rewrite it as a Reader document.
+The Migration Receipt records Transform IDs, source/output hashes and counts, ID Maps, referential checks, archive manifests, invalidated Artifact types, and recovery stage. It must not contain Dependency identities, Failure Patterns, Journeys, Scenarios, or publication claims.
+
+## Transform semantics
+
+A registered transform may:
+
+- Preserve a valid explicit ID.
+- Generate a repeatable ID from one normalized explicit source record and retain its ID Map.
+- Split an exact legacy flat HTTP row into Operation, Usage, and Mapping rows when the source schema exposes the necessary identity and call-site fields.
+- Move legacy dependency and failure rows into Observation tables with `Reconciliation: Unresolved`.
+- Rewrite only links whose old/new identity is explicit in the ID Map.
+
+A transform must not:
+
+- Merge records from name, Host, URL, method/target similarity, field names, or prose.
+- Generate `DEP-nnn`, `FAIL-nnn`, Connection/Shared models, Journeys, or Scenarios.
+- Decide Criticality, Risk, Caller Visibility, State Outcome, business meaning, or remote behavior.
+- Generate Repository Synthesis or Reader documents.
+
+If an explicit old ID has conflicting structural rows, or the source lacks safe split fields, fail the registered transform or use `archive-and-rebuild`. Never repair the ambiguity semantically inside Migration.
 
 ## Unknown legacy Packs
 
-When a Pack has no Artifact Manifest or explicit versions:
+An unknown or unversioned Artifact has no registered transform:
 
-- Preserve same-commit Evidence Index, Working Behavior Catalog, Dossiers, and Repository Register as raw material.
-- Copy review-and-adopt sources to the verified legacy-artifacts archive.
-- Mark unsafe Dossiers blocked and unsafe Register relationships Unknown/Unresolved rather than inventing conversions.
-- Archive Repository Synthesis, Business Model, Tech Pack, and BA Pack; do not treat their prose as current reader truth.
-- Resume from Synthesis when the evidence and necessary Dossiers remain usable, otherwise Tracing or Inventory.
+1. Preserve its exact bytes under `.work/legacy-artifacts/<plan-id>/`.
+2. Invalidate the old Artifact and every derived Artifact declared by the Registry dependency graph.
+3. Create only safe empty structural shells when required.
+4. Resume from the earliest necessary `inventory`, `tracing`, or `synthesis` stage.
 
-Do not infer a specific historical schema version.
+Unknown Evidence Index or Catalog normally returns to Inventory. Unknown or unusable Dossiers return to Tracing or Inventory. An unknown Register returns to Synthesis only when current Evidence and Dossiers remain sufficient; otherwise use the earlier stage. Old Reader Packs are archived and republished later. Never infer a historical schema from its text.
 
 ## Receipts and completion
 
 - Migration Planning, Migration, Synthesis, Tech/API Publication, Business Model, BA Publication, and Finalization have distinct Receipts.
-- A Migration Receipt must not claim reader documents were published.
-- A pre-Finalization Publication Receipt has `promotion_scope: generation` and must not claim that formal Reader documents were published.
+- A Migration Receipt must not claim Reader documents were published.
+- A pre-Finalization Publication Receipt has `promotion_scope: generation` and does not publish the formal Pack.
 - A Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true` only after post-promotion validation succeeds.
-- A Publication Receipt must not contain migration decisions outside its normal release archive.
-- `completed` requires a committed Finalization Receipt and zero unresolved invalidated Artifact types.
-- A current `completed` State without its Finalization Receipt is an integrity failure. Do not rewrite State to manufacture a recovery point.
+- `completed` requires a committed Finalization Receipt and no unresolved invalidated Artifact type.
+- A current `completed` State without its Finalization Receipt is an integrity failure; never rewrite State to manufacture a recovery point.

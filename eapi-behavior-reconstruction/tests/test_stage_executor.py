@@ -519,7 +519,11 @@ class StageExecutorTests(unittest.TestCase):
             step for step in plan["steps"] if step["artifact_type"] == "repository-register"
         ]
         self.assertEqual(register_steps[0]["source_version"], "unknown")
-        self.assertEqual(register_steps[0]["action"], "review-and-adopt")
+        self.assertEqual(register_steps[0]["action"], "archive-and-rebuild")
+        self.assertEqual(
+            register_steps[0]["reinitialize_from_template"],
+            "repository-register-template.md",
+        )
 
     def test_recover_rolls_back_an_interrupted_promotion(self) -> None:
         transaction, _candidate = self.begin("inventory")
