@@ -71,6 +71,7 @@ When no options are present, continue to accept a repository path and optional o
 - Treat [assets/artifact-schema.json](assets/artifact-schema.json) as the version registry for every long-lived working, Tech, BA, and operational Artifact. Do not infer a document generation from headings, directory names, old field names, or prose.
 - Treat [assets/migration-transform-registry.json](assets/migration-transform-registry.json) as the only executable migration-transform registry. A mechanical transform requires an exact source schema, target schema, registered handler, and test fixture. An unknown or unversioned schema is archived and rebuilt; it is never guessed or AI-adopted inside Migration.
 - Treat [assets/publication-maturity-rules.json](assets/publication-maturity-rules.json) as the mechanical contract for execution-stage residue in Reader artifacts. Explicit workflow phrases may block publication; ambiguous words remain review prompts and never become business-semantic decisions in Python.
+- Validate every local Markdown deep link against a real explicit HTML anchor or a deterministically parsed GFM heading slug. Use explicit stable anchors for Endpoint, `HTTP-*`, `DEP-*`, and `FAIL-*` identities; use heading fragments only for simple stable editorial sections. Never accept file existence alone as proof that `#fragment` is clickable.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
 - Do not access credentials, secret values, production customer data, live AWS resources, or repositories outside the supplied boundary.
@@ -389,7 +390,7 @@ Begin `finalization` from the complete Working Generation and review its Candida
 
 Apply the editorial policy in this order:
 
-1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
+1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, file and Fragment links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
 3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack. Run the publication-maturity check across the complete Reader Pack. Rewrite every explicit execution-stage residue. Inspect warning-only words such as `planned` or `pending` in context and retain them only when they describe a real domain state.
 
@@ -399,13 +400,13 @@ For Repository Overview, verify that the context diagram and connection matrix m
 
 For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
-Complete `mechanical-review`, `fact-sampling`, `readability-review`, and `release-readiness` in order. Generic Markdown validation covers every formal Tech and BA Markdown file. Publication maturity covers Reader Markdown and Catalog YAML. A structurally invalid file produces one root-cause group and its specialized checks are `SKIPPED`, preventing cascades. Explicit lifecycle residue is a document error; ambiguous lifecycle words are review warnings and do not become artificial business constraints.
+Complete `mechanical-review`, `fact-sampling`, `readability-review`, and `release-readiness` in order. Generic Markdown validation covers every formal Tech and BA Markdown file. Fragment validation resolves same-document and cross-document links through explicit anchors first and GFM heading slugs second; a future API/BA target remains deferred only until it is materialized. Publication maturity covers Reader Markdown and Catalog YAML. A structurally invalid Fragment target produces one root-cause prerequisite failure instead of one error per incoming link. Explicit lifecycle residue is a document error; ambiguous lifecycle words are review warnings and do not become artificial business constraints.
 
 The finalization commit validates the complete Generation, computes a release Manifest, archives the previously published knowledge Artifacts, promotes the complete Generation under a recovery Journal, validates the result again, and only then writes the final Receipt and completed State. A result with any Primary Error or skipped necessary validation group is incomplete and cannot be reported as全面验证通过. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
 
 ### 10. Deliver
 
-Commit `finalization`. Deliver only when `status --json` reports `current_stage: completed`, `stage_status: committed`, `working_generation_status: published`, matching `working_generation_id` and `published_generation_id`, `artifact_manifest_status: valid`, `manifest_refresh_pending: none`, `formal_drift_status: clean`, `release_readiness: ready`, and a successful finalization Receipt with `formal_pack_published: true`. A Manifest reported as `stale` during an active transaction is pending deterministic commit refresh, not corruption and not completion; inspect the separate formal/Candidate status fields described in the Stage Execution Policy. Report:
+Commit `finalization`. Deliver only when `status --json` reports `current_stage: completed`, `stage_status: committed`, `working_generation_status: published`, matching `working_generation_id` and `published_generation_id`, `artifact_manifest_status: valid`, `markdown_fragment_validation_status: current`, `manifest_refresh_pending: none`, `formal_drift_status: clean`, `release_readiness: ready`, and a successful finalization Receipt with `formal_pack_published: true`. A Manifest reported as `stale` during an active transaction is pending deterministic commit refresh, not corruption and not completion; inspect the separate formal/Candidate status fields described in the Stage Execution Policy. Report:
 
 - Repository path and commit.
 - Full-repository coverage and any blocked areas.
@@ -443,3 +444,4 @@ Before delivering, confirm:
 - Technical triggers, branches, validations, Dependencies, and exceptions are not promoted to business concepts without supported business-visible meaning.
 - BA flows are independently modeled business views, not copied or mechanically renamed Tech call chains.
 - The final prose reads as documentation, not as a Claim Ledger or validator transcript.
+- Every published local Markdown link with a non-empty Fragment resolves to an explicit anchor or supported GFM heading slug; deferred API/BA links have been materialized and rechecked.

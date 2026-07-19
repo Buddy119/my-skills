@@ -44,10 +44,10 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 Resume has three outcomes:
 
 - A current Workflow 4 Pack with a valid Artifact Manifest resumes its explicit `current_stage`.
-- A completed current Pack whose latest Finalization Receipt predates the current publication-maturity validation returns `revalidation-required`. Resume remains read-only; begin `finalization` to create a new Working Generation from the formal Pack, revise only Reader publication wording, and publish transactionally.
+- A completed current Pack whose latest Finalization Receipt predates the current publication-maturity or Markdown-Fragment validation returns `revalidation-required`. Resume remains read-only; begin `finalization` to create a new Working Generation from the formal Pack, revise only the affected Reader wording or deep links, and publish transactionally.
 - Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Reader Packs, or Archive.
 
-Publication-maturity revalidation is not Migration. It does not archive or reinterpret Dossiers, Register, Synthesis, Business Model, or current Reader facts. Abort restores the prior completed State and removes the new Generation. Failed validation retains the Candidate while the formal Pack and previous published Generation remain unchanged.
+Finalization-policy revalidation is not Migration. It does not archive or reinterpret Dossiers, Register, Synthesis, Business Model, or current Reader facts. Abort restores the prior completed State and removes the new Generation. Failed validation retains the Candidate while the formal Pack and previous published Generation remain unchanged.
 
 For a planned migration, begin the conditional stage before any normal stage:
 
@@ -257,7 +257,7 @@ Never use headings, directories, old fields, or prose to detect a legacy generat
 
 `assets/register-schema.json` is the only mechanical source for Register Schema version, sections, exact table columns, and domain prerequisites. During an analysis, edit Register rows only. A Schema failure invalidates only its domain; downstream checks report `SKIPPED` instead of treating an unavailable index as empty. Unrelated validation continues. Primary Errors or skipped necessary groups mean validation is incomplete.
 
-The generic Markdown structure contract runs before frontmatter, specialized document, and cross-link validation. A malformed document reports its structural root cause and specialized checks for that document are `SKIPPED`; an invalid table must not become hundreds of missing-field or backlink errors.
+The generic Markdown structure contract runs before frontmatter, specialized document, and cross-link validation. The Pack Validator then resolves every local Markdown Fragment against explicit HTML anchors or deterministic GFM heading slugs, including same-document links. A malformed target reports one prerequisite failure and suppresses incoming Fragment cascades; an invalid table or target must not become hundreds of missing-field, backlink, or missing-Fragment errors.
 
 ## Stage sequence and trust boundary
 
@@ -267,10 +267,10 @@ Use this sequence without reordering:
 1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
-4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract destinations, but this stage creates neither Contract stubs nor Endpoint Matrix. Reader wording must already be durable; the execution report alone calls absent targets forward references. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, ordinary links, publication maturity, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`.
-5. `api-contract-publication`: Materialize every declared application Contract and the Endpoint Matrix in the Generation, reconcile source-document wording during `api-backlinks`, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, publication maturity, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
+4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract destinations, but this stage creates neither Contract stubs nor Endpoint Matrix. Reader wording must already be durable; the execution report alone calls absent targets forward references. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, existing file and Fragment links, publication maturity, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`.
+5. `api-contract-publication`: Materialize every declared application Contract and the Endpoint Matrix in the Generation, reconcile source-document wording during `api-backlinks`, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, publication maturity, every materialized Fragment, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
 6. `business-model`: independent Business Model in the Generation.
 7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip. Reconcile source-document BA wording during `ba-backlinks`.
-8. `finalization`: Markdown-first mechanical validation, publication-maturity validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.
+8. `finalization`: Markdown-first mechanical validation, local Fragment and publication-maturity validation, fact/readability review, transactional formal publication, post-promotion validation, and completion. `release_readiness: ready` requires the current Fragment-validation version with zero Fragment errors and zero necessary skipped groups.
 
 All workflow paths are relative to the active Candidate root. A normal stage Receipt uses `promotion_scope: generation` until Finalization. Only a successful Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true`.

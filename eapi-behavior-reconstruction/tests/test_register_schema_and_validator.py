@@ -86,6 +86,19 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertTrue(result.stdout, result.stderr)
         return result, json.loads(result.stdout)
 
+    def write_markdown(self, relative: str, body: str) -> Path:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "---\n"
+            'artifact_type: "test-reader"\n'
+            'artifact_schema_version: "1"\n'
+            "---\n\n"
+            + body,
+            encoding="utf-8",
+        )
+        return path
+
     def add_dependency_and_failure_records(self, fixture: RegisterFixture) -> None:
         fixture.add(
             "dependency_observations",
@@ -205,6 +218,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         path = self.root / "tech-pack" / "external-dependency-contracts.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
+            "---\nartifact_type: \"external-dependency-contracts\"\n"
+            "artifact_schema_version: \"1\"\n---\n\n"
             "# External dependency contracts\n\n"
             "## Dependency landscape\n\n"
             "| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Status | Details |\n"
@@ -222,6 +237,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         path = self.root / "tech-pack" / "field-validation-and-mapping.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
+            "---\nartifact_type: \"field-validation-and-mapping\"\n"
+            "artifact_schema_version: \"1\"\n---\n\n"
             "# Field validation and mapping\n\n"
             "## Outbound HTTP operation index\n\n"
             "| Call ID | Method and Logical Target | Client Operation | Observable Purpose | Related Behaviors | Status | Details |\n"
@@ -250,6 +267,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         path = self.root / "tech-pack" / "failure-taxonomy.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
+            "---\nartifact_type: \"failure-taxonomy\"\n"
+            "artifact_schema_version: \"1\"\n---\n\n"
             "# Failure taxonomy\n\n"
             "## Failure pattern index\n\n"
             "| Failure pattern | Category | Affected capabilities | Caller visibility | State outcome | Retry safety | Risk attention | Details |\n"
@@ -279,7 +298,12 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertEqual(payload["skipped_validation_groups"], 0)
         self.assertEqual(
             payload["domain_statuses"],
-            {"dependency": "valid", "failure": "valid", "http": "valid"},
+            {
+                "dependency": "valid",
+                "failure": "valid",
+                "http": "valid",
+                "markdown-fragment": "valid",
+            },
         )
 
     def test_reader_catalog_template_instruction_is_rejected(self) -> None:
@@ -349,6 +373,114 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertTrue(any("broken local link" in message for message in errors))
         self.assertTrue(any("escapes pack root" in message for message in errors))
 
+    def test_local_fragments_resolve_explicit_heading_duplicate_and_encoded_targets(self) -> None:
+        RegisterFixture(self.root).write()
+        self.write_markdown(
+            "tech-pack/target.md",
+            "# Target\n\n"
+            '<a id="stable-entry"></a>\n\n'
+            "## Protocol support summary\n\n"
+            "## 重复 标题\n\n"
+            "## 重复 标题\n",
+        )
+        self.write_markdown(
+            "tech-pack/source.md",
+            "# Source\n\n"
+            "## Local section\n\n"
+            "[same](#local-section)\n"
+            "[explicit](target.md#stable-entry)\n"
+            "[heading](target.md?view=reader#protocol-support-summary)\n"
+            "[duplicate](target.md#%E9%87%8D%E5%A4%8D-%E6%A0%87%E9%A2%98-1)\n",
+        )
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(payload["markdown_fragment_validation_version"], "1")
+        self.assertEqual(payload["checked_fragments"], 4)
+        self.assertEqual(payload["fragment_target_documents"], 2)
+        self.assertEqual(payload["fragment_error_count"], 0)
+        self.assertEqual(payload["fragment_skipped_group_count"], 0)
+
+    def test_existing_file_with_missing_fragment_is_rejected_at_source_line(self) -> None:
+        RegisterFixture(self.root).write()
+        self.write_markdown("tech-pack/target.md", "# Target\n")
+        self.write_markdown(
+            "tech-pack/source.md",
+            "# Source\n\n[Broken](target.md#missing-section)\n",
+        )
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["fragment_error_count"], 1)
+        errors = payload["errors"]["MARKDOWN-FRAGMENT"]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("tech-pack/source.md:8", errors[0])
+        self.assertIn("target.md#missing-section", errors[0])
+
+    def test_invalid_fragment_target_suppresses_incoming_error_cascade(self) -> None:
+        RegisterFixture(self.root).write()
+        target = self.root / "tech-pack" / "invalid.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# No frontmatter\n", encoding="utf-8")
+        links = "\n".join(
+            f"[Link {index}](invalid.md#missing-{index})" for index in range(25)
+        )
+        self.write_markdown("tech-pack/source.md", f"# Source\n\n{links}\n")
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("MARKDOWN-FRAGMENT", payload["errors"])
+        self.assertEqual(payload["fragment_error_count"], 0)
+        self.assertEqual(payload["fragment_skipped_group_count"], 1)
+        self.assertIn("MARKDOWN-FRAGMENT:tech-pack/invalid.md", payload["skipped"])
+
+    def test_non_markdown_fragment_warns_and_external_fragment_is_ignored(self) -> None:
+        RegisterFixture(self.root).write()
+        data = self.root / "tech-pack" / "data.json"
+        data.parent.mkdir(parents=True, exist_ok=True)
+        data.write_text("{}\n", encoding="utf-8")
+        self.write_markdown(
+            "tech-pack/source.md",
+            "# Source\n\n"
+            "[Local data](data.json#value)\n"
+            "[External](https://example.test/docs#value)\n",
+        )
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(payload["checked_fragments"], 0)
+        self.assertEqual(payload["warnings"], 1)
+        self.assertIn("MARKDOWN-FRAGMENT-UNVERIFIED", payload["warning_messages"][0])
+
+    def test_links_inside_fenced_and_inline_code_are_not_validated(self) -> None:
+        RegisterFixture(self.root).write()
+        self.write_markdown(
+            "tech-pack/source.md",
+            "# Source\n\n"
+            "```md\n[Example](missing.md#missing)\n```\n\n"
+            "`[Inline example](also-missing.md#missing)`\n",
+        )
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(payload["checked_links"], 0)
+        self.assertEqual(payload["checked_fragments"], 0)
+
+    def test_tech_profile_defers_fragment_until_contract_is_materialized(self) -> None:
+        RegisterFixture(self.root).write()
+        self.write_markdown(
+            "tech-pack/behaviors/fixture.md",
+            "# Fixture\n\n"
+            "[Contract](../contracts/fixture.get.api-contract.md#quick-reference)\n",
+        )
+        result, payload = self.validate("tech-publication")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(payload["deferred_link_count"], 1)
+        self.assertEqual(payload["checked_fragments"], 0)
+
+        self.write_markdown(
+            "tech-pack/contracts/fixture.get.api-contract.md",
+            "# Contract\n\n## Request\n",
+        )
+        materialized, materialized_payload = self.validate("tech-publication")
+        self.assertEqual(materialized.returncode, 1)
+        self.assertIn("MARKDOWN-FRAGMENT", materialized_payload["errors"])
+
     def test_tech_profile_accepts_reader_models_with_contract_deferred(self) -> None:
         fixture = RegisterFixture(self.root)
         self.add_http_records(fixture)
@@ -387,7 +519,12 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertEqual(payload["deferred_link_count"], 1)
         self.assertEqual(
             payload["domain_statuses"],
-            {"dependency": "valid", "failure": "valid", "http": "valid"},
+            {
+                "dependency": "valid",
+                "failure": "valid",
+                "http": "valid",
+                "markdown-fragment": "valid",
+            },
         )
 
     def test_tech_profile_rejects_dependency_reader_enum_error(self) -> None:

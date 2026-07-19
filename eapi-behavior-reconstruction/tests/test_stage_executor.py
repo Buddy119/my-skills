@@ -1145,6 +1145,9 @@ class StageExecutorTests(unittest.TestCase):
                     "errors": {
                         "DEP-DOCUMENT": ["invalid Criticality value"],
                         "FAIL-DOCUMENT": ["invalid Retry Safety value"],
+                        "MARKDOWN-FRAGMENT": [
+                            "fragment target does not exist: tech-pack/a.md:8 -> b.md#missing"
+                        ],
                     },
                     "primary_errors": 14,
                     "skipped": {
@@ -1180,7 +1183,12 @@ class StageExecutorTests(unittest.TestCase):
         ) = executor.parse_validator_diagnostics(pack_result)
         self.assertEqual(
             {item["code"] for item in semantic},
-            {"DEP-DOCUMENT", "FAIL-DOCUMENT", "SKIPPED:FAIL-DEP-XREF"},
+            {
+                "DEP-DOCUMENT",
+                "FAIL-DOCUMENT",
+                "MARKDOWN-FRAGMENT",
+                "SKIPPED:FAIL-DEP-XREF",
+            },
         )
         self.assertEqual(blocking, [])
         self.assertEqual(len(warnings), 1)
@@ -2571,6 +2579,14 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["publication_maturity_validation_version"], "1")
         self.assertEqual(final_receipt["publication_maturity_blocking_count"], 0)
         self.assertEqual(final_receipt["publication_maturity_review_count"], 0)
+        self.assertEqual(final_receipt["markdown_fragment_validation_version"], "1")
+        self.assertGreater(final_receipt["markdown_fragment_checked_count"], 0)
+        self.assertGreater(
+            final_receipt["markdown_fragment_target_document_count"], 0
+        )
+        self.assertEqual(final_receipt["markdown_fragment_error_count"], 0)
+        self.assertEqual(final_receipt["markdown_fragment_skipped_group_count"], 0)
+        self.assertEqual(status["markdown_fragment_validation_status"], "current")
 
         artifact_manifest_path = self.output / ".work" / "artifact-manifest.json"
         artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
@@ -2629,6 +2645,8 @@ class StageExecutorTests(unittest.TestCase):
         independent_payload = json.loads(independent.stdout)
         self.assertEqual(independent_payload["primary_errors"], 0)
         self.assertEqual(independent_payload["skipped_validation_groups"], 0)
+        self.assertEqual(independent_payload["markdown_fragment_validation_version"], "1")
+        self.assertGreater(independent_payload["checked_fragments"], 0)
 
         # Simulate a current-schema Pack finalized before publication-maturity
         # validation existed. Resume must request a transactional Finalization
@@ -2853,6 +2871,75 @@ class StageExecutorTests(unittest.TestCase):
             ).exists()
         )
 
+        # A Pack whose latest Finalization Receipt predates Markdown fragment
+        # validation uses the same transactional revalidation boundary, not a
+        # schema Migration.
+        fragment_old_receipt = json.loads(
+            latest_receipt_path.read_text(encoding="utf-8")
+        )
+        fragment_old_receipt["publication_maturity_validation_version"] = "1"
+        fragment_old_receipt["publication_maturity_blocking_count"] = 0
+        fragment_old_receipt["publication_maturity_review_count"] = 0
+        for key in (
+            "markdown_fragment_validation_version",
+            "markdown_fragment_checked_count",
+            "markdown_fragment_target_document_count",
+            "markdown_fragment_error_count",
+            "markdown_fragment_skipped_group_count",
+        ):
+            fragment_old_receipt.pop(key, None)
+        latest_receipt_path.write_text(
+            json.dumps(fragment_old_receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        state_text = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        executor.write_artifact_manifest(
+            self.output,
+            executor.load_registry(),
+            str(self.repo),
+            executor.scalar_value(state_text, "source_commit") or "unknown",
+            "finalization",
+            revalidation,
+            [],
+        )
+        fragment_resume = json.loads(
+            self.run_cmd(
+                "resume",
+                "--repo",
+                str(self.repo),
+                "--state",
+                str(self.output / ".work" / "analysis-state.yaml"),
+            ).stdout
+        )
+        self.assertEqual(fragment_resume["result"], "revalidation-required")
+        self.assertEqual(
+            fragment_resume["reason"], "markdown-fragment-validation-outdated"
+        )
+        self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+        fragment_revalidation, _fragment_candidate = self.begin("finalization")
+        fragment_transaction = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / fragment_revalidation
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            fragment_transaction["revalidation_kind"], "markdown-fragments"
+        )
+        self.run_cmd(
+            "abort",
+            "--output",
+            str(self.output),
+            "--transaction",
+            fragment_revalidation,
+        )
+
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         source = self.repo / "src" / "Handler.java"
         source.parent.mkdir(parents=True)
@@ -3069,6 +3156,7 @@ class StageExecutorTests(unittest.TestCase):
                 "failure": "valid",
                 "http": "valid",
                 "markdown": "valid",
+                "markdown-fragment": "valid",
             },
         )
         self.assertEqual(receipt_payload["primary_error_count"], 0)

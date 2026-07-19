@@ -9,8 +9,10 @@ meaning.
 
 from __future__ import annotations
 
+import html
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,10 @@ FENCE_RE = re.compile(r"^\s*(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
 HEADING_RE = re.compile(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$")
 ANCHOR_RE = re.compile(r"<a\s+(?:id|name)=[\"'](?P<anchor>[^\"']+)[\"']\s*></a>", re.I)
 DELIMITER_CELL_RE = re.compile(r"^:?-{3,}:?$")
+INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)(?P<value>.*?)(?P=ticks)")
+INLINE_LINK_RE = re.compile(r"!?\[(?P<label>[^\]\n]*)\]\([^\n)]*\)")
+HTML_TAG_RE = re.compile(r"<[^>\n]+>")
+MARKDOWN_FRAGMENT_VALIDATION_VERSION = "1"
 
 
 @dataclass(frozen=True)
@@ -41,12 +47,24 @@ class MarkdownTable:
 
 
 @dataclass(frozen=True)
+class MarkdownFragment:
+    identifier: str
+    kind: str
+    line: int
+
+
+@dataclass(frozen=True)
 class MarkdownStructure:
     frontmatter: str
     body: str
     headings: tuple[tuple[int, str, int], ...]
     tables: tuple[MarkdownTable, ...]
+    fragments: tuple[MarkdownFragment, ...]
     issues: tuple[MarkdownIssue, ...]
+
+    @property
+    def fragment_ids(self) -> frozenset[str]:
+        return frozenset(fragment.identifier for fragment in self.fragments)
 
 
 def split_frontmatter(text: str) -> tuple[str, str, int]:
@@ -59,6 +77,65 @@ def split_frontmatter(text: str) -> tuple[str, str, int]:
     body = text[end + 5 :]
     body_start_line = text[: end + 5].count("\n") + 1
     return frontmatter, body, body_start_line
+
+
+def _visible_heading_text(title: str) -> str | None:
+    """Return deterministic rendered text for the inline forms the Skill publishes.
+
+    This is deliberately narrower than a complete Markdown inline parser.  When a
+    heading contains an unsupported construct, callers must use an explicit HTML
+    anchor instead of accepting a guessed renderer slug.
+    """
+
+    value = title.strip()
+    value = re.sub(r"\s+#+\s*$", "", value).strip()
+    if re.search(r"!?\[[^\]\n]+\]\([^\n)]*\([^\n)]*\)", value):
+        return None
+    if re.search(r"!?\[[^\]\n]+\]\[[^\]\n]*\]", value):
+        return None
+    value = INLINE_CODE_RE.sub(lambda match: match.group("value"), value)
+    previous = None
+    while previous != value:
+        previous = value
+        value = INLINE_LINK_RE.sub(lambda match: match.group("label"), value)
+    value = HTML_TAG_RE.sub("", value)
+    value = html.unescape(value)
+    value = re.sub(r"\\([\\`*{}\[\]()#+.!_>~-])", r"\1", value)
+    value = re.sub(r"(?P<marks>\*{1,3}|_{1,3})(?P<body>.+?)(?P=marks)", r"\g<body>", value)
+    value = re.sub(r"~~(?P<body>.+?)~~", r"\g<body>", value)
+    if "`" in value or re.search(r"!?\[[^\]]*$|\]\s*\(", value):
+        return None
+    return value.strip()
+
+
+def github_heading_slug(title: str) -> str | None:
+    """Generate a conservative GitHub-compatible slug for one rendered heading."""
+
+    visible = _visible_heading_text(title)
+    if visible is None:
+        return None
+    normalized: list[str] = []
+    for char in visible.lower():
+        if char.isspace():
+            normalized.append(" ")
+            continue
+        category = unicodedata.category(char)
+        if category.startswith(("P", "S", "C")) and char not in {"-", "_"}:
+            continue
+        normalized.append(char)
+    slug = "".join(normalized).replace(" ", "-")
+    return slug or None
+
+
+def _unique_heading_slug(base: str, occurrences: dict[str, int]) -> str:
+    """Apply github-slugger-compatible duplicate suffix handling."""
+
+    result = base
+    while result in occurrences:
+        occurrences[base] = occurrences.get(base, 0) + 1
+        result = f"{base}-{occurrences[base]}"
+    occurrences[result] = 0
+    return result
 
 
 def _structural_pipe_count(line: str) -> int:
@@ -206,12 +283,21 @@ def parse_markdown(text: str, *, max_issues: int = 10) -> MarkdownStructure:
     try:
         frontmatter, body, body_start = split_frontmatter(text)
     except ValueError as exc:
-        return MarkdownStructure("", text, (), (), (MarkdownIssue("MD-FRONTMATTER", 1, str(exc)),))
+        return MarkdownStructure(
+            "",
+            text,
+            (),
+            (),
+            (),
+            (MarkdownIssue("MD-FRONTMATTER", 1, str(exc)),),
+        )
 
     lines = body.splitlines()
     headings: list[tuple[int, str, int]] = []
     tables: list[MarkdownTable] = []
     anchors: dict[str, int] = {}
+    fragments: list[MarkdownFragment] = []
+    heading_occurrences: dict[str, int] = {}
     fence_marker: str | None = None
     fence_line = 0
     previous_heading_level = 0
@@ -238,6 +324,20 @@ def parse_markdown(text: str, *, max_issues: int = 10) -> MarkdownStructure:
             level = len(heading.group("marks"))
             title = heading.group("title").strip()
             headings.append((level, title, absolute_line))
+            base_slug = github_heading_slug(title)
+            if base_slug is not None:
+                slug = _unique_heading_slug(base_slug, heading_occurrences)
+                if slug in anchors:
+                    issues.append(
+                        MarkdownIssue(
+                            "MD-ANCHOR-DUPLICATE",
+                            absolute_line,
+                            f"generated heading anchor '{slug}' duplicates line {anchors[slug]}",
+                        )
+                    )
+                else:
+                    anchors[slug] = absolute_line
+                fragments.append(MarkdownFragment(slug, "heading", absolute_line))
             if previous_heading_level and level > previous_heading_level + 1:
                 issues.append(
                     MarkdownIssue(
@@ -260,6 +360,7 @@ def parse_markdown(text: str, *, max_issues: int = 10) -> MarkdownStructure:
                 )
             else:
                 anchors[identifier] = absolute_line
+            fragments.append(MarkdownFragment(identifier, "explicit", absolute_line))
 
         if _is_table_start(lines, index):
             table_issues, table = _table_issues(lines, index, body_start)
@@ -289,6 +390,7 @@ def parse_markdown(text: str, *, max_issues: int = 10) -> MarkdownStructure:
         body=body,
         headings=tuple(headings),
         tables=tuple(tables),
+        fragments=tuple(fragments),
         issues=tuple(issues[:max_issues]),
     )
 

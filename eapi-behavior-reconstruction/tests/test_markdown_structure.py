@@ -12,6 +12,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from markdown_structure import (  # noqa: E402
+    github_heading_slug,
     load_api_contract_structure,
     parse_markdown,
     validate_api_contract_tables,
@@ -62,6 +63,54 @@ class MarkdownStructureTests(unittest.TestCase):
             {"MD-HEADING-JUMP", "MD-ANCHOR-DUPLICATE", "MD-FENCE-UNCLOSED"} - codes,
             set(),
         )
+
+    def test_fragment_index_contains_explicit_and_gfm_heading_anchors(self) -> None:
+        parsed = parse_markdown(
+            document(
+                "# API *Guide*\n\n"
+                '<a id="stable-entry"></a>\n\n'
+                "## `POST /customers` &amp; rules\n\n"
+                "## 重复 标题\n\n"
+                "## 重复 标题\n"
+            )
+        )
+        self.assertEqual(parsed.issues, ())
+        self.assertEqual(
+            parsed.fragment_ids,
+            {
+                "api-guide",
+                "stable-entry",
+                "post-customers--rules",
+                "重复-标题",
+                "重复-标题-1",
+            },
+        )
+        self.assertEqual(github_heading_slug("Status: `READY`!"), "status-ready")
+        self.assertEqual(github_heading_slug("Shared_rules"), "shared_rules")
+        self.assertEqual(github_heading_slug("_Visible_ rule"), "visible-rule")
+
+    def test_explicit_anchor_collision_with_generated_heading_is_rejected(self) -> None:
+        parsed = parse_markdown(
+            document('<a id="details"></a>\n\n# Details\n')
+        )
+        self.assertIn("MD-ANCHOR-DUPLICATE", {item.code for item in parsed.issues})
+
+    def test_code_fence_headings_and_anchors_do_not_enter_fragment_index(self) -> None:
+        parsed = parse_markdown(
+            document(
+                "# Visible\n\n"
+                "```md\n## Hidden\n<a id=\"hidden\"></a>\n```\n"
+            )
+        )
+        self.assertEqual(parsed.issues, ())
+        self.assertEqual(parsed.fragment_ids, {"visible"})
+
+    def test_unsupported_complex_heading_requires_explicit_anchor(self) -> None:
+        parsed = parse_markdown(
+            document("# [Nested](docs/(preview))\n")
+        )
+        self.assertEqual(parsed.issues, ())
+        self.assertEqual(parsed.fragment_ids, set())
 
     def test_api_contract_structure_schema_detects_wrong_required_headers(self) -> None:
         value = document(

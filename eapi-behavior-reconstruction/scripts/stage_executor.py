@@ -53,6 +53,7 @@ from register_schema import (
     validate_register_file,
 )
 from markdown_structure import (
+    MARKDOWN_FRAGMENT_VALIDATION_VERSION,
     load_api_contract_structure,
     parse_markdown,
     validate_api_contract_tables,
@@ -906,6 +907,51 @@ def publication_maturity_receipt_status(output: Path, state: str) -> dict[str, A
         "review_count": review if isinstance(review, int) else None,
         "receipt": str(receipt),
     }
+
+
+def markdown_fragment_receipt_status(output: Path, state: str) -> dict[str, Any]:
+    expected = MARKDOWN_FRAGMENT_VALIDATION_VERSION
+    published_generation_id = scalar_value(state, "published_generation_id")
+    receipt = committed_finalization_receipt(output, published_generation_id)
+    if receipt is None:
+        return {
+            "status": "unknown",
+            "expected_version": expected,
+            "observed_version": None,
+            "checked_count": None,
+            "target_document_count": None,
+            "error_count": None,
+            "skipped_group_count": None,
+            "receipt": None,
+        }
+    payload = read_json(receipt)
+    observed = payload.get("markdown_fragment_validation_version")
+    checked = payload.get("markdown_fragment_checked_count")
+    targets = payload.get("markdown_fragment_target_document_count")
+    errors = payload.get("markdown_fragment_error_count")
+    skipped = payload.get("markdown_fragment_skipped_group_count")
+    current = observed == expected and errors == 0 and skipped == 0
+    return {
+        "status": "current" if current else "revalidation-required",
+        "expected_version": expected,
+        "observed_version": observed if isinstance(observed, str) else None,
+        "checked_count": checked if isinstance(checked, int) else None,
+        "target_document_count": targets if isinstance(targets, int) else None,
+        "error_count": errors if isinstance(errors, int) else None,
+        "skipped_group_count": skipped if isinstance(skipped, int) else None,
+        "receipt": str(receipt),
+    }
+
+
+def finalization_revalidation_reasons(output: Path, state: str) -> tuple[list[str], dict[str, Any], dict[str, Any]]:
+    maturity = publication_maturity_receipt_status(output, state)
+    fragments = markdown_fragment_receipt_status(output, state)
+    reasons: list[str] = []
+    if maturity["status"] == "revalidation-required":
+        reasons.append("publication-maturity-validation-outdated")
+    if fragments["status"] == "revalidation-required":
+        reasons.append("markdown-fragment-validation-outdated")
+    return reasons, maturity, fragments
 
 
 def audit_archive_directory(path: Path) -> dict[str, Any]:
@@ -2048,23 +2094,31 @@ def command_begin(args: argparse.Namespace) -> int:
             + " | ".join(manifest_errors)
         )
     revalidation_kind: str | None = None
+    revalidation_reasons: list[str] = []
     previous_published_generation_id: str | None = None
     if current_stage == "completed":
         if args.stage != "finalization":
             raise ExecutorError("workflow is already completed")
         try:
-            maturity = publication_maturity_receipt_status(output, formal_state)
+            revalidation_reasons, maturity, fragments = finalization_revalidation_reasons(
+                output, formal_state
+            )
         except PublicationMaturityError as exc:
             raise ExecutorError(
                 f"bundled publication maturity rules are invalid: {exc}"
             ) from exc
-        if maturity["status"] == "unknown":
+        if maturity["status"] == "unknown" or fragments["status"] == "unknown":
             raise ExecutorError(
                 "completed workflow has no trusted Finalization Receipt for its published Generation"
             )
-        if maturity["status"] == "current":
-            raise ExecutorError("workflow is already completed and publication maturity is current")
-        revalidation_kind = "publication-maturity"
+        if not revalidation_reasons:
+            raise ExecutorError("workflow is already completed and finalization validation is current")
+        if revalidation_reasons == ["publication-maturity-validation-outdated"]:
+            revalidation_kind = "publication-maturity"
+        elif revalidation_reasons == ["markdown-fragment-validation-outdated"]:
+            revalidation_kind = "markdown-fragments"
+        else:
+            revalidation_kind = "finalization-validation"
         previous_published_generation_id = scalar_value(
             formal_state, "published_generation_id"
         )
@@ -2171,6 +2225,7 @@ def command_begin(args: argparse.Namespace) -> int:
             "generation_id": generation_id,
             "generation_created": generation_created,
             "revalidation_kind": revalidation_kind,
+            "revalidation_reasons": revalidation_reasons,
             "previous_published_generation_id": previous_published_generation_id,
             "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "created_at": now_utc(),
@@ -2206,6 +2261,7 @@ def command_begin(args: argparse.Namespace) -> int:
             "candidate": str(candidate),
             "generation_id": generation_id,
             "revalidation_kind": revalidation_kind,
+            "revalidation_reasons": revalidation_reasons,
             "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "instruction": "write every stage artifact under candidate, then run commit",
         },
@@ -2722,6 +2778,11 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "publication_maturity_validation_version": None,
         "publication_maturity_blocking_count": 0,
         "publication_maturity_review_count": 0,
+        "markdown_fragment_validation_version": None,
+        "markdown_fragment_checked_count": 0,
+        "markdown_fragment_target_document_count": 0,
+        "markdown_fragment_error_count": 0,
+        "markdown_fragment_skipped_group_count": 0,
     }
     for result in results:
         try:
@@ -2746,6 +2807,18 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
                 summary["publication_maturity_review_count"] = max(
                     summary["publication_maturity_review_count"], review_count
                 )
+        fragment_version = payload.get("markdown_fragment_validation_version")
+        if isinstance(fragment_version, str):
+            summary["markdown_fragment_validation_version"] = fragment_version
+            for source_key, target_key in (
+                ("checked_fragments", "markdown_fragment_checked_count"),
+                ("fragment_target_documents", "markdown_fragment_target_document_count"),
+                ("fragment_error_count", "markdown_fragment_error_count"),
+                ("fragment_skipped_group_count", "markdown_fragment_skipped_group_count"),
+            ):
+                value = payload.get(source_key)
+                if isinstance(value, int):
+                    summary[target_key] = max(summary[target_key], value)
         for source_key, target_key in (
             ("primary_errors", "primary_error_count"),
             ("skipped_validation_groups", "skipped_group_count"),
@@ -4191,6 +4264,14 @@ def status_payload(output: Path) -> dict[str, Any]:
         "publication_maturity_blocking_count": None,
         "publication_maturity_review_count": None,
         "publication_maturity_receipt": None,
+        "markdown_fragment_validation_status": "unknown",
+        "markdown_fragment_validation_version": None,
+        "markdown_fragment_observed_version": None,
+        "markdown_fragment_checked_count": None,
+        "markdown_fragment_target_document_count": None,
+        "markdown_fragment_error_count": None,
+        "markdown_fragment_skipped_group_count": None,
+        "markdown_fragment_receipt": None,
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
@@ -4308,6 +4389,25 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["requirements"].append(
                 "resume and revalidate Finalization under the current publication maturity policy"
             )
+
+    fragments = markdown_fragment_receipt_status(output, text)
+    payload["markdown_fragment_validation_status"] = fragments["status"]
+    payload["markdown_fragment_validation_version"] = fragments["expected_version"]
+    payload["markdown_fragment_observed_version"] = fragments["observed_version"]
+    payload["markdown_fragment_checked_count"] = fragments["checked_count"]
+    payload["markdown_fragment_target_document_count"] = fragments[
+        "target_document_count"
+    ]
+    payload["markdown_fragment_error_count"] = fragments["error_count"]
+    payload["markdown_fragment_skipped_group_count"] = fragments[
+        "skipped_group_count"
+    ]
+    payload["markdown_fragment_receipt"] = fragments["receipt"]
+    if payload["current_stage"] == "completed" and fragments["status"] != "current":
+        payload["release_readiness"] = "not-ready"
+        payload["requirements"].append(
+            "resume and revalidate Finalization under the current Markdown fragment policy"
+        )
 
     active = payload["active_transaction"]
     if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
@@ -4462,6 +4562,11 @@ def status_payload(output: Path) -> dict[str, Any]:
         and payload["publication_maturity_status"] != "current"
     ):
         payload["release_readiness"] = "not-ready"
+    if (
+        payload["current_stage"] == "completed"
+        and payload["markdown_fragment_validation_status"] != "current"
+    ):
+        payload["release_readiness"] = "not-ready"
     return payload
 
 
@@ -4526,15 +4631,22 @@ def command_resume(args: argparse.Namespace) -> int:
                 "completed state has no committed finalization Receipt; "
                 "this is an integrity failure and cannot be repaired by rewriting State"
             )
-        if (
-            status["current_stage"] == "completed"
-            and status["publication_maturity_status"] == "revalidation-required"
-        ):
+        revalidation_reasons: list[str] = []
+        if status["publication_maturity_status"] == "revalidation-required":
+            revalidation_reasons.append("publication-maturity-validation-outdated")
+        if status["markdown_fragment_validation_status"] == "revalidation-required":
+            revalidation_reasons.append("markdown-fragment-validation-outdated")
+        if status["current_stage"] == "completed" and revalidation_reasons:
             emit(
                 {
                     "result": "revalidation-required",
                     "required_stage": "finalization",
-                    "reason": "publication-maturity-validation-outdated",
+                    "reason": (
+                        revalidation_reasons[0]
+                        if len(revalidation_reasons) == 1
+                        else "finalization-validation-outdated"
+                    ),
+                    "revalidation_reasons": revalidation_reasons,
                     "required_validation_version": status[
                         "publication_maturity_validation_version"
                     ],
@@ -4543,6 +4655,12 @@ def command_resume(args: argparse.Namespace) -> int:
                     ],
                     "finalization_receipt": status[
                         "publication_maturity_receipt"
+                    ],
+                    "required_markdown_fragment_validation_version": status[
+                        "markdown_fragment_validation_version"
+                    ],
+                    "observed_markdown_fragment_validation_version": status[
+                        "markdown_fragment_observed_version"
                     ],
                     **status,
                 },

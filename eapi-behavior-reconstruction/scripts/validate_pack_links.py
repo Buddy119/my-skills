@@ -10,9 +10,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from artifact_schema import ArtifactSchemaError, load_registry, validate_artifact_manifest
+from markdown_structure import MARKDOWN_FRAGMENT_VALIDATION_VERSION, parse_markdown
 from register_schema import (
     RegisterSchema,
     load_register_schema,
@@ -174,6 +175,20 @@ class DomainResult:
             raise ValueError(f"invalid domain status: {self.status}")
 
 
+@dataclass(frozen=True)
+class LocalLinkTarget:
+    path: str
+    query: str
+    fragment: str | None
+    same_document: bool
+
+
+@dataclass(frozen=True)
+class MarkdownLinkReference:
+    raw_target: str
+    line: int
+
+
 class ValidationReport:
     """Group, de-duplicate, budget, and summarize mechanical validation results."""
 
@@ -194,6 +209,8 @@ class ValidationReport:
         self.deferred_links: list[dict[str, str]] = []
         self.checked_links = 0
         self.checked_documents = 0
+        self.checked_fragments = 0
+        self.fragment_target_documents: set[str] = set()
 
     def add_errors(self, code: str, messages: list[str]) -> None:
         target = self.error_groups.setdefault(code, [])
@@ -217,6 +234,10 @@ class ValidationReport:
             self.deferred_links.append(
                 {"check": check, "source": source, "target": target}
             )
+
+    def warn(self, message: str) -> None:
+        if message not in self.warnings:
+            self.warnings.append(message)
 
     @property
     def primary_error_count(self) -> int:
@@ -255,6 +276,13 @@ class ValidationReport:
             "suppressed_row_errors": self.suppressed_error_count,
             "checked_links": self.checked_links,
             "checked_documents": self.checked_documents,
+            "markdown_fragment_validation_version": MARKDOWN_FRAGMENT_VALIDATION_VERSION,
+            "checked_fragments": self.checked_fragments,
+            "fragment_target_documents": len(self.fragment_target_documents),
+            "fragment_error_count": len(self.error_groups.get("MARKDOWN-FRAGMENT", [])),
+            "fragment_skipped_group_count": sum(
+                1 for code in self.skipped_groups if code.startswith("MARKDOWN-FRAGMENT:")
+            ),
             "markdown_files": markdown_count,
             "domain_statuses": self.domain_statuses,
             "errors": visible_errors,
@@ -285,6 +313,7 @@ class ValidationReport:
             f"suppressed_errors={payload['suppressed_row_errors']} "
             f"deferred_links={payload['deferred_link_count']} "
             f"checked_links={payload['checked_links']} "
+            f"checked_fragments={payload['checked_fragments']} "
             f"checked_documents={payload['checked_documents']}"
         )
         if not self.failed:
@@ -317,14 +346,89 @@ REGISTER_FAILURE_OBSERVATION_HEADERS = register_headers(
 REGISTER_FAILURE_PATTERN_HEADERS = register_headers(_REGISTER_SCHEMA, "failure_patterns")
 
 
-def local_target(raw: str) -> str | None:
+def local_target(raw: str) -> LocalLinkTarget | None:
     target = raw.strip()
     if target.startswith("<") and target.endswith(">"):
         target = target[1:-1]
-    if target.startswith(("http://", "https://", "mailto:", "#")):
+    split = urlsplit(target)
+    if split.scheme or split.netloc:
         return None
-    target = target.split("#", 1)[0].split("?", 1)[0]
-    return unquote(target) if target else None
+    fragment = unquote(split.fragment) if "#" in target else None
+    path = unquote(split.path)
+    if not path and fragment is None:
+        return None
+    return LocalLinkTarget(
+        path=path,
+        query=split.query,
+        fragment=fragment,
+        same_document=path == "",
+    )
+
+
+def _mask_inline_code(line: str) -> str:
+    pattern = re.compile(r"(?P<ticks>`+).*?(?P=ticks)")
+    return pattern.sub(lambda match: " " * len(match.group(0)), line)
+
+
+def markdown_link_references(text: str) -> list[MarkdownLinkReference]:
+    """Extract inline Markdown links outside Frontmatter and fenced/inline code."""
+
+    references: list[MarkdownLinkReference] = []
+    in_frontmatter = text.startswith("---\n")
+    in_fence = False
+    fence_marker: str | None = None
+    for line_number, original in enumerate(text.splitlines(), start=1):
+        if in_frontmatter:
+            if line_number > 1 and original.strip() == "---":
+                in_frontmatter = False
+            continue
+        fence = re.match(r"^\s*(?P<marker>`{3,}|~{3,})", original)
+        if fence:
+            marker = fence.group("marker")
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif fence_marker and marker[0] == fence_marker[0] and len(marker) >= len(fence_marker):
+                in_fence = False
+                fence_marker = None
+            continue
+        if in_fence:
+            continue
+        masked = _mask_inline_code(original)
+        for match in MARKDOWN_LINK_RE.finditer(masked):
+            start, end = match.span("target")
+            references.append(MarkdownLinkReference(original[start:end], line_number))
+    return references
+
+
+def target_fragment_ids(
+    target: Path,
+    root: Path,
+    report: ValidationReport,
+    cache: dict[Path, frozenset[str] | None],
+) -> frozenset[str] | None:
+    if target in cache:
+        return cache[target]
+    relative = target.relative_to(root).as_posix()
+    try:
+        structure = parse_markdown(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError) as exc:
+        report.skip(
+            f"MARKDOWN-FRAGMENT:{relative}",
+            f"cannot read Markdown fragment target: {exc}",
+        )
+        cache[target] = None
+        return None
+    if structure.issues:
+        report.skip(
+            f"MARKDOWN-FRAGMENT:{relative}",
+            "fragment checks require a structurally valid target Markdown document",
+        )
+        cache[target] = None
+        return None
+    cache[target] = structure.fragment_ids
+    report.fragment_target_documents.add(relative)
+    return cache[target]
 
 
 def within_root(path: Path, root: Path) -> bool:
@@ -1669,20 +1773,23 @@ def main() -> int:
     markdown_files = sorted(
         path for path in root.rglob("*.md") if ".work" not in path.relative_to(root).parts
     )
+    fragment_cache: dict[Path, frozenset[str] | None] = {}
     for document in markdown_files:
         text = document.read_text(encoding="utf-8")
         document_errors: list[str] = []
+        fragment_errors: list[str] = []
         if any(placeholder in text for placeholder in PLACEHOLDERS):
             document_errors.append(f"template placeholder remains: {document.relative_to(root)}")
-        for match in MARKDOWN_LINK_RE.finditer(text):
-            target = local_target(match.group("target"))
+        for reference in markdown_link_references(text):
+            target = local_target(reference.raw_target)
             if target is None:
                 continue
             report.checked_links += 1
-            resolved = (document.parent / target).resolve()
+            resolved = document if target.same_document else (document.parent / target.path).resolve()
             if not within_root(resolved, root):
                 document_errors.append(
-                    f"local link escapes pack root: {document.relative_to(root)} -> {match.group('target')}"
+                    f"local link escapes pack root: {document.relative_to(root)}:{reference.line} "
+                    f"-> {reference.raw_target}"
                 )
             elif not resolved.exists():
                 deferred_check = deferred_check_for_missing_target(
@@ -1692,13 +1799,35 @@ def main() -> int:
                     report.defer_link(
                         deferred_check,
                         document.relative_to(root).as_posix(),
-                        match.group("target"),
+                        reference.raw_target,
                     )
                 else:
                     document_errors.append(
-                        f"broken local link: {document.relative_to(root)} -> {match.group('target')}"
+                        f"broken local link: {document.relative_to(root)}:{reference.line} "
+                        f"-> {reference.raw_target}"
+                    )
+            elif target.fragment:
+                if resolved.suffix.lower() != ".md":
+                    report.warn(
+                        "MARKDOWN-FRAGMENT-UNVERIFIED: "
+                        f"{document.relative_to(root)}:{reference.line} -> {reference.raw_target} "
+                        "targets a non-Markdown file"
+                    )
+                    continue
+                fragment_ids = target_fragment_ids(
+                    resolved, root, report, fragment_cache
+                )
+                if fragment_ids is None:
+                    continue
+                report.checked_fragments += 1
+                if target.fragment not in fragment_ids:
+                    fragment_errors.append(
+                        f"fragment target does not exist: "
+                        f"{document.relative_to(root)}:{reference.line} -> "
+                        f"{reference.raw_target} (target {resolved.relative_to(root)})"
                     )
         report.add_errors("MARKDOWN-LINK", document_errors)
+        report.add_errors("MARKDOWN-FRAGMENT", fragment_errors)
 
     catalog = root / "tech-pack" / "behavior-catalog.yaml"
     if catalog.is_file():
@@ -1881,6 +2010,12 @@ def main() -> int:
         validate_ba_traceability(root, ba_errors)
         report.add_errors("BA-LINK", ba_errors)
 
+    if report.error_groups.get("MARKDOWN-FRAGMENT"):
+        report.domain_statuses["markdown-fragment"] = "invalid"
+    elif any(code.startswith("MARKDOWN-FRAGMENT:") for code in report.skipped_groups):
+        report.domain_statuses["markdown-fragment"] = "skipped"
+    else:
+        report.domain_statuses["markdown-fragment"] = "valid"
     report.checked_documents = len(markdown_files)
     if args.json:
         print(json.dumps(report.payload(len(markdown_files)), indent=2, sort_keys=True))
