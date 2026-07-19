@@ -1,6 +1,6 @@
 {
-  "reader_projection_schema_version": "1",
-  "validation_version": "1",
+  "reader_projection_schema_version": "2",
+  "validation_version": "2",
   "stages": {
     "tech-publication": {
       "api": "deferred",
@@ -29,15 +29,13 @@
       "tech-behavior.api-contract-links",
       "tech-behavior-catalog.api_contracts",
       "repository-overview.endpoint-counts",
-      "repository-overview.behavior-api-links",
       "repository-overview.endpoint-availability"
     ],
     "ba": [
       "tech-behavior.ba_scenarios",
       "tech-behavior.ba-scenario-links",
       "tech-behavior-catalog.ba_scenarios",
-      "ba-journey.supporting_tech_behaviors",
-      "repository-overview.behavior-ba-links"
+      "ba-journey.supporting_tech_behaviors"
     ]
   },
   "semantic_surfaces": {
@@ -45,13 +43,16 @@
       "tech-pack/repository-overview.md",
       "tech-pack/behaviors/*.md",
       "tech-pack/field-validation-and-mapping.md",
-      "tech-pack/failure-taxonomy.md"
+      "tech-pack/failure-taxonomy.md",
+      "repository-overview.capability-contract-navigation",
+      "repository-overview.variant-and-risk-summary"
     ],
     "ba": [
       "tech-pack/repository-overview.md",
       "tech-pack/behaviors/*.md",
       "ba-pack/business-overview.md",
-      "ba-pack/business-catalog.md"
+      "ba-pack/business-catalog.md",
+      "repository-overview.capability-scenario-navigation"
     ]
   }
 }

@@ -71,6 +71,7 @@ Review status and evidence density explicitly. Reader tables must not repeat gen
 
 Read the document without using source code and ask:
 
+- Can a developer explain the repository responsibility, each principal Capability path, the behavior-changing Variants, and the highest-attention risks before entering Technical Reference?
 - Can a developer retell the complete success and material failure paths?
 - Can a BA identify the business trigger, decisions, affected object, outcome, and exceptions?
 - Can either reader find deeper contract, lifecycle, mapping, configuration, dependency, or failure detail with one link?
@@ -90,6 +91,17 @@ For each API Contract, perform a caller-first review before reading its Source n
 - Does the Contract summarize and link to Endpoint Matrix, Tech Behavior, field mappings, dependencies, and Failure Taxonomy instead of copying their detailed content?
 - Do request and response rows avoid downstream target paths, field renames, propagation, encoding, client-library checks, and other boundary-mapping detail that belongs in Field Validation and Mapping or External Dependency Contracts?
 - Do evidence markers stay visually secondary while still allowing a reader to reach the supporting source note?
+- For a large Schema, are required, conditionally required, and behaviorally significant fields visible before the remaining field reference, with no duplicate `Location + Field path` identity?
+- For a small Schema, was the optional complete field reference omitted rather than filled for template completeness?
+
+For progressive Reader priority, perform a five-minute-orientation review:
+
+- Does `Repository in 5 minutes` answer responsibility, boundary, and where to start without leading with technology or inventories?
+- Does each Capability path combine the necessary Behaviors into one retellable normal story rather than reproduce the Behavior Catalog?
+- Is a path called default or primary only when selection evidence supports that wording?
+- Do Market, Country, Tenant, Channel, Profile, Environment, Feature Flag, and other Variants appear only when they change observable behavior?
+- Are High and materially Unknown partial-state, false-success, retry, Dependency, and recovery concerns visible before Technical Reference?
+- Can a reader reach complete Endpoint, Schema, Mapping, Lifecycle, Dependency, and Failure detail with one purposeful link instead of seeing those tables copied into the Overview?
 
 For Endpoint Matrix, perform a reader-value review:
 

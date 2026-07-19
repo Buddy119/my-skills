@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-synthesis"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 synthesis_status: "complete|partial|blocked"
@@ -18,6 +18,32 @@ Explain what the repository demonstrably does and distinguish supported responsi
 ## Capability and behavior model
 
 Describe how behaviors combine into capabilities. Include a behavior-level Mermaid map when relationships materially aid understanding.
+
+## Capability path model
+
+Create one semantic Capability record per developer-meaningful repository capability. Do not create one record per Behavior. Use a stable semantic ID such as `repository.capability.<goal-slug>` and record:
+
+- Observable goal and repository boundary.
+- Supported trigger or entry.
+- Normal successful path, principal decisions, and observable result.
+- Supporting Behaviors, Endpoints, Object transitions, and deep-dive documents.
+- Applicable Variant and Risk Hotspot identities.
+
+Call a path default, primary, or normal only when executable selection, configuration, or tests establish that choice. Otherwise record the supported alternatives without inventing a baseline.
+
+## Variant model
+
+Reconcile behavior-changing differences across the repository. Use `Market`, `Country`, `Tenant`, `Channel`, `Profile`, `Environment`, `Feature Flag`, or `Other` only as explanatory axes backed by executable behavior or configuration.
+
+For every Variant record capture its semantic identity, selection source, scope, proven baseline or absence of a repository-proven default, alternative paths, affected Capabilities and Behaviors, and observable differences in rules, inputs, Dependencies, Mappings, state, outputs, failures, retry, or recovery.
+
+Do not promote every configuration value to a Variant. Keep values that do not change observable behavior in the Runtime Config model only.
+
+## Risk hotspot model
+
+Select only evidence-supported `High` Failure attention and materially `Unknown` Dependency, Lifecycle, caller-visibility, partial-state, false-success, unsafe-retry, or recovery concerns. Reuse existing `FAIL-*`, `DEP-*`, `OBJ-*`, `TRANS-*`, and Behavior identities; do not create a second risk score or duplicate the Failure Pattern index.
+
+For each hotspot record the affected Capability, visible impact, state/retry/recovery concern, and deep-dive documents. Explain why it deserves early reader attention.
 
 ## Behavior relationships
 

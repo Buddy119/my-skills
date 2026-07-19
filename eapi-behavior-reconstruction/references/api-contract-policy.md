@@ -36,16 +36,19 @@ Organize the body in this order:
 
 1. A one- or two-sentence statement of what the endpoint lets a caller do and its visible result.
 2. `Quick reference` with method, application route, explicitly correlated external path when present, authentication, content type, contract status, external reachability, and the Matrix link.
-3. `Request`, divided only into the input locations actually observed.
+3. `Request`, divided only into the input locations actually observed and led by required, conditionally required, and behaviorally significant fields.
 4. `Responses`, covering success and caller-visible errors.
 5. `Examples` when a reliable request or response example can be reconstructed.
 6. `Contract completeness and limitations` only when a material Unknown, Conflict, schema/runtime gap, opaque transformation, or missing example affects use.
-7. `Related documents` linking to the Behavior, Matrix, and only the applicable field, dependency, configuration, or failure references.
-8. `Source notes`, containing compact evidence definitions used by the body.
+7. `Complete field reference` only when a large observed Schema has remaining fields that would obscure the caller-first request or response sections.
+8. `Related documents` linking to the Behavior, Matrix, and only the applicable field, dependency, configuration, or failure references.
+9. `Source notes`, containing compact evidence definitions used by the body.
 
 Always include Quick reference, Request, Responses, Related documents, and Source notes. When no caller-supplied input exists, say so briefly under Request. Remove empty input-location subsections, empty tables, template instructions, and optional sections that add no reader value.
 
 `assets/api-contract-structure.json` is the mechanical table contract shared by the template and Validator. Quick reference uses exactly `Property | Value`. Responses uses exactly `HTTP status | When | Body/schema | Relevant headers`. When present, Header, Path/Query, Body, Validation, and Response-field tables use the registered headers for their caller-facing role. A no-input Request may use a short sentence instead of an empty table. Do not rename columns during an analysis; changing the structure contract is Skill development and must update the JSON contract, template, Validator, Artifact version, and tests together.
+
+For a large Schema, keep the caller-first field tables and `Complete field reference` mutually exclusive by `Location + Field path`. The complete-reference table uses the registered `Location`, field, requirement/presence, rule, and Basis columns. It lists only remaining fields and identifies `Executable`, `Schema only`, `Shared or opaque`, or `Conflict` basis. Do not mechanically require a minimum field count or force this section into a small Contract.
 
 Generic Markdown structure validation runs before this specialized contract. If Frontmatter, headings, fences, anchors, or a table is malformed, specialized API checks are skipped for that document so one structural defect does not create a cascade of missing-section, field, or backlink errors.
 

@@ -35,7 +35,7 @@ def behavior_document(*, include_ba: bool = False) -> str:
         else "ba_scenarios: []\n"
     )
     ba_section = (
-        "## BA scenarios\n\n"
+        "### BA scenarios\n\n"
         "- [Complete request](../../ba-pack/scenarios/repo.scenario.complete.md)\n\n"
         if include_ba
         else ""
@@ -43,7 +43,7 @@ def behavior_document(*, include_ba: bool = False) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "4"\n'
         'behavior_id: "repo.behavior"\n'
         'title: "Behavior"\n'
         'repository: "repo"\n'
@@ -57,10 +57,13 @@ def behavior_document(*, include_ba: bool = False) -> str:
         "---\n\n"
         "# Behavior\n\n"
         "## Summary\n\nHandles an item request.\n\n"
-        "## API contracts\n\n"
+        "## Main path\n\n1. Accept the request.\n2. Return the result.\n\n"
+        "## Behavior flow\n\n```mermaid\nflowchart LR\n A --> B\n```\n\n"
+        "## Related documents\n\n"
+        "### API contracts\n\n"
         "- [Old label](../contracts/repo.get-items.api-contract.md)\n\n"
         + ba_section
-        + "## Behavior flow\n\n```mermaid\nflowchart LR\n A --> B\n```\n"
+        + "## Source notes\n\nNo source note is required by this projection fixture.\n"
     )
 
 
@@ -87,35 +90,34 @@ def catalog_document(*, include_ba: bool = False) -> str:
     )
 
 
-def overview_document(*, include_ba: bool = False) -> str:
-    ba_cell = (
-        "[Complete request](../ba-pack/scenarios/repo.scenario.complete.md)"
-        if include_ba
-        else "N/A"
-    )
+def overview_document() -> str:
     return (
         "---\n"
         'artifact_type: "repository-overview"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "3"\n'
         'repository: "repo"\n'
         'source_commit: "abc"\n'
         "---\n\n"
         "# Repository overview\n\n"
-        "## Endpoint exposure summary\n\n"
+        "## Repository in 5 minutes\n\nThe repository handles item requests.\n\n"
+        "## Capability paths\n\n### Retrieve item\n\nThe caller requests an item and receives the result.\n\n"
+        "## Behavior variants\n\nNo material variant was observed.\n\n"
+        "## Risk hotspots\n\nNo high-attention risk was observed.\n\n"
+        "## System context and shared behavior\n\nThe API caller is the observable upstream.\n\n"
+        "## Technical reference\n\n"
+        "### Endpoint exposure summary\n\n"
         "| Category | Count | Interpretation | Details |\n"
         "|---|---|---|---|\n"
         "| Application endpoints | 99 | Routes | [Matrix](endpoint-matrix.md) |\n"
         "| Meaningful external exposures | 99 | Exposures | [Matrix](endpoint-matrix.md) |\n"
         "| Aggregated protocol-support declarations | 0 | Support | Not observed |\n"
         "| Unresolved or conflicting exceptions | 99 | Exceptions | [Matrix](endpoint-matrix.md) |\n\n"
-        "## Behavior summary\n\n"
-        "| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |\n"
-        "|---|---|---|---|---|---|---|\n"
-        f"| repo.behavior | Handles items | Request | Response | [Tech](behaviors/repo.behavior.md) | {ba_cell} | N/A |\n\n"
-        "## Knowledge pack index\n\n"
+        "### Knowledge pack index\n\n"
         "| Knowledge area | Document | Availability | What it explains |\n"
         "|---|---|---|---|\n"
-        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Routes |\n"
+        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Routes |\n\n"
+        "## Coverage and unknowns\n\nRuntime deployment was not observed.\n\n"
+        "## Source notes\n\nNo source note is required by this projection fixture.\n"
     )
 
 
@@ -143,7 +145,7 @@ class ReaderProjectionTests(unittest.TestCase):
         (self.root / "tech-pack" / "contracts" / "repo.get-items.api-contract.md").write_text(
             "---\n"
             'artifact_type: "api-contract"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'endpoint_id: "repo.get-items"\n'
             'behavior_id: "repo.behavior"\n'
             'title: "Get items"\n'
@@ -202,7 +204,10 @@ class ReaderProjectionTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("| Application endpoints | 1 |", overview)
-        self.assertIn("contracts/repo.get-items.api-contract.md", overview)
+        self.assertNotIn("contracts/repo.get-items.api-contract.md", overview)
+        self.assertTrue(
+            any(item["path"] == "tech-pack/repository-overview.md" for item in plan["semantic_items"])
+        )
 
         pending = self.module.evaluate_projection(
             root=self.root,
@@ -334,7 +339,7 @@ class ReaderProjectionTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('scenario_id: "repo.scenario.complete"', behavior)
-        self.assertIn("## BA scenarios", behavior)
+        self.assertIn("### BA scenarios", behavior)
         catalog = (self.root / "tech-pack" / "behavior-catalog.yaml").read_text(
             encoding="utf-8"
         )
@@ -342,7 +347,10 @@ class ReaderProjectionTests(unittest.TestCase):
         overview = (self.root / "tech-pack" / "repository-overview.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("../ba-pack/scenarios/repo.scenario.complete.md", overview)
+        self.assertNotIn("../ba-pack/scenarios/repo.scenario.complete.md", overview)
+        self.assertTrue(
+            any(item["path"] == "tech-pack/repository-overview.md" for item in plan["semantic_items"])
+        )
 
 
 if __name__ == "__main__":

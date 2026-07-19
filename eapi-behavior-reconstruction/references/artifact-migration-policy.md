@@ -82,7 +82,7 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 
 For a current Workflow 4 Pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a Migration Plan.
 
-Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `4`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, API Contract Artifact Schema `2`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
+Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `6`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, Repository Synthesis Artifact Schema `3`, Repository Overview Artifact Schema `3`, Tech Behavior Artifact Schema `4`, API Contract Artifact Schema `3`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
 
 Each mechanical step must visibly declare the Transform ID and its expected mechanical results. The plan is JSON-compatible YAML so the standard-library executor parses it deterministically. It must not contain repository knowledge conclusions.
 
@@ -144,6 +144,8 @@ A transform must not:
 - Generate Repository Synthesis or Reader documents.
 
 If an explicit old ID has conflicting structural rows, or the source lacks safe split fields, fail the registered transform or use `archive-and-rebuild`. Never repair the ambiguity semantically inside Migration.
+
+Reader-first changes to Repository Synthesis, Tech Behaviors, or API Contracts do not by themselves mechanically invalidate a current Business Model or BA Pack. Preserve those business artifacts, then revalidate Scenario-to-Tech traceability and business-visible Variant differences against the rebuilt Tech Generation. Rebuild only the affected business artifacts when that semantic review finds a changed business fact or outcome.
 
 ## Unknown legacy Packs
 

@@ -40,7 +40,7 @@ def api_behavior_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "3"\n'
+        'artifact_schema_version: "4"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -65,18 +65,12 @@ def api_behavior_fixture() -> str:
         "---\n\n"
         "# Get customer\n\n"
         "## Summary\n\nReturns the observed customer result. [E1](#e1)\n\n"
-        "## Trigger and entry point\n\nThe application route invokes the handler.\n\n"
-        "## API contracts\n\n"
-        "- [GET /customers/{id}](../contracts/sample-repo.get-customer.api-contract.md)\n\n"
+        "## Trigger, result, and scope\n\nThe application route invokes the handler and returns the customer result.\n\n"
+        "## Main path\n\n1. Accept the request.\n2. Return the customer result.\n\n"
         "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
-        "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
-        "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"
-        "## Happy path\n\n1. Accept the request.\n2. Return the result.\n\n"
-        "## Data access and processing\n\nNo processing action is modeled by this fixture.\n\n"
-        "## Object state transitions\n\nNo object state transition was observed.\n\n"
-        "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
-        "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
-        "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
+        "## Implementation reference\n\n### Inputs\n\nThe caller input is defined in the API Contract.\n\n"
+        "## Related documents\n\n### API contracts\n\n"
+        "- [GET /customers/{id}](../contracts/sample-repo.get-customer.api-contract.md)\n\n"
         "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the observed behavior.\n'
     )
@@ -114,7 +108,7 @@ def api_contract_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "api-contract"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'endpoint_id: "sample-repo.get-customer"\n'
         'title: "Get customer API"\n'
@@ -176,7 +170,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
             f'    document: "../../ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md"\n'
         )
         ba_section = (
-            "## BA scenarios\n\n"
+            "### BA scenarios\n\n"
             f"- [Customer profile request completed]"
             f"(../../ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md)\n\n"
         )
@@ -187,7 +181,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "3"\n'
+        'artifact_schema_version: "4"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -210,23 +204,18 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "---\n\n"
         "# Manage customer profile\n\n"
         "## Summary\n\nGets or updates the observed customer profile. [E1](#e1)\n\n"
-        "## Trigger and entry point\n\nThe application routes invoke the same profile behavior.\n\n"
-        "## API contracts\n\n"
+        "## Trigger, result, and scope\n\nThe application routes invoke the same profile behavior and return a visible profile result.\n\n"
+        "## Main path\n\n1. Accept a read or update request.\n2. Return the observed profile result.\n\n"
+        "## Behavior flow\n\n"
+        "```mermaid\nflowchart TD\n    A[Profile request] --> B{Read or update}\n"
+        "    B --> C[Return profile result]\n```\n\n"
+        "## Implementation reference\n\n### Inputs\n\nCaller inputs are defined by the endpoint Contracts.\n\n"
+        "### Rules\n\nThe route selects the requested profile operation.\n\n"
+        "## Related documents\n\n### API contracts\n\n"
         + contract_links
         + "\n"
         + ba_section
-        + "## Behavior flow\n\n"
-        "```mermaid\nflowchart TD\n    A[Profile request] --> B{Read or update}\n"
-        "    B --> C[Return profile result]\n```\n\n"
-        "## Inputs\n\nCaller inputs are defined by the endpoint Contracts.\n\n"
-        "## Preconditions and business rules\n\nThe route selects the requested profile operation.\n\n"
-        "## Happy path\n\n1. Accept the profile request.\n2. Return the observed result.\n\n"
-        "## Data access and processing\n\nNo processing action is modeled by this fixture.\n\n"
-        "## Object state transitions\n\nNo durable state transition is modeled by this fixture.\n\n"
-        "## Outputs and side effects\n\nReturns the caller-visible profile result.\n\n"
-        "## Failures, retries, and partial success\n\nNo retry or partial success is modeled.\n\n"
-        "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
-        "## Source notes\n\n"
+        + "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:2-3` supports the observed behavior.\n'
     )
 
@@ -273,28 +262,33 @@ def complete_repository_overview_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "repository-overview"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
         "# Repository overview\n\n"
+        "## Repository in 5 minutes\n\n"
         "The fixture provides the observed customer profile capability. [E1](#e1)\n\n"
-        "## Endpoint exposure summary\n\n"
+        "## Capability paths\n\n### Manage customer profile\n\n"
+        "A channel requests a read or update and receives the observed profile result.\n\n"
+        "## Behavior variants\n\nRead and update are explicit operation variants; no default operation is asserted.\n\n"
+        "## Risk hotspots\n\nExternal deployment remains Unknown; no data-consistency hotspot is modeled.\n\n"
+        "## System context and shared behavior\n\nThe channel is the observable API caller.\n\n"
+        "## Technical reference\n\n"
+        f"- [Manage customer profile Behavior](behaviors/{COMPLETE_BEHAVIOR_ID}.md)\n"
+        "- [Technical Behavior Catalog](behavior-catalog.yaml)\n\n"
+        "### Endpoint exposure summary\n\n"
         "| Category | Count | Interpretation | Details |\n"
         "|---|---|---|---|\n"
         "| Application endpoints | 0 | Executable routes | [Endpoint Matrix](endpoint-matrix.md) |\n"
         "| Meaningful external exposures | 0 | Reader-relevant external entries | [Endpoint Matrix](endpoint-matrix.md) |\n"
         "| Aggregated protocol-support declarations | 0 | Protocol support | Not observed |\n"
         "| Unresolved or conflicting exceptions | 0 | Configuration exceptions | [Endpoint Matrix](endpoint-matrix.md) |\n\n"
-        "## Behavior summary\n\n"
-        "| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |\n"
-        "|---|---|---|---|---|---|---|\n"
-        f"| {COMPLETE_BEHAVIOR_ID} | Gets or updates a customer profile | Caller request | Profile response | "
-        f"[Tech](behaviors/{COMPLETE_BEHAVIOR_ID}.md) | N/A | N/A |\n\n"
-        "## Knowledge pack index\n\n"
+        "### Knowledge pack index\n\n"
         "| Knowledge area | Document | Availability | What it explains |\n"
         "|---|---|---|---|\n"
         "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application routes and contracts |\n\n"
+        "## Coverage and unknowns\n\nRuntime deployment was not observed.\n\n"
         "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:2-3` supports the repository summary.\n'
     )
@@ -304,31 +298,36 @@ def single_repository_overview_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "repository-overview"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
         "# Repository overview\n\n"
-        "The fixture exposes one application route. [E1](#e1)\n\n"
-        "## Endpoint exposure summary\n\n"
+        "## Repository in 5 minutes\n\nThe fixture exposes one application route. [E1](#e1)\n\n"
+        "## Capability paths\n\n### Get customer\n\nA caller requests and receives a customer result.\n\n"
+        "## Behavior variants\n\nNo material variant was observed.\n\n"
+        "## Risk hotspots\n\nExternal deployment remains Unknown.\n\n"
+        "## System context and shared behavior\n\nThe API caller is the observable upstream.\n\n"
+        "## Technical reference\n\n"
+        "- [Get customer Behavior](behaviors/sample-repo.get-customer.md)\n"
+        "- [Technical Behavior Catalog](behavior-catalog.yaml)\n\n"
+        "### Endpoint exposure summary\n\n"
         "| Category | Count | Interpretation | Details |\n"
         "|---|---|---|---|\n"
         "| Application endpoints | 0 | Executable routes | [Endpoint Matrix](endpoint-matrix.md) |\n"
         "| Meaningful external exposures | 0 | External entries | [Endpoint Matrix](endpoint-matrix.md) |\n"
         "| Aggregated protocol-support declarations | 0 | Protocol support | Not observed |\n"
         "| Unresolved or conflicting exceptions | 0 | Exceptions | [Endpoint Matrix](endpoint-matrix.md) |\n\n"
-        "## Behavior summary\n\n"
-        "| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |\n"
-        "|---|---|---|---|---|---|---|\n"
-        "| sample-repo.get-customer | Gets a customer | Request | Response | "
-        "[Tech](behaviors/sample-repo.get-customer.md) | N/A | N/A |\n\n"
-        "## Knowledge pack index\n\n"
+        "### Knowledge pack index\n\n"
         "| Knowledge area | Document | Availability | What it explains |\n"
         "|---|---|---|---|\n"
         "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application route and contract |\n\n"
+        "## Coverage and unknowns\n\nRuntime deployment was not observed.\n\n"
         "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the repository summary.\n'
     )
+
+
 def complete_endpoint_matrix_fixture() -> str:
     rows = "".join(
         f"| `{endpoint_id}` | application-endpoint | Confirmed — `{method} {route}` | "
@@ -375,7 +374,7 @@ def complete_api_contract_fixture(
     return (
         "---\n"
         'artifact_type: "api-contract"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         f'endpoint_id: "{endpoint_id}"\n'
         f'title: "{method} customer profile API"\n'
@@ -639,7 +638,7 @@ def complete_repository_synthesis_fixture(executor) -> str:
     return (
         "---\n"
         'artifact_type: "repository-synthesis"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
@@ -2875,7 +2874,7 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["markdown_fragment_error_count"], 0)
         self.assertEqual(final_receipt["markdown_fragment_skipped_group_count"], 0)
         self.assertEqual(status["markdown_fragment_validation_status"], "current")
-        self.assertEqual(final_receipt["reader_projection_validation_version"], "1")
+        self.assertEqual(final_receipt["reader_projection_validation_version"], "2")
         self.assertEqual(final_receipt["reader_projection_api_status"], "current")
         self.assertEqual(final_receipt["reader_projection_ba_status"], "current")
         self.assertEqual(final_receipt["reader_projection_pending_count"], 0)
@@ -2886,7 +2885,7 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_validation["reader_review_status"], "current")
         self.assertEqual(final_validation["finalization_review_unresolved_count"], 0)
         self.assertEqual(final_validation["finalization_review_stale_count"], 0)
-        self.assertEqual(final_receipt["finalization_review_validation_version"], "3")
+        self.assertEqual(final_receipt["finalization_review_validation_version"], "4")
         self.assertEqual(final_receipt["reader_presentation_validation_version"], "1")
         self.assertEqual(final_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(final_receipt["semantic_fact_review_status"], "current")
@@ -3343,7 +3342,7 @@ class StageExecutorTests(unittest.TestCase):
         projection_receipt = json.loads(
             Path(projection_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(projection_receipt["reader_projection_validation_version"], "1")
+        self.assertEqual(projection_receipt["reader_projection_validation_version"], "2")
         self.assertEqual(projection_receipt["reader_projection_api_status"], "current")
         self.assertEqual(projection_receipt["reader_projection_ba_status"], "current")
         projection_status = json.loads(
@@ -3421,7 +3420,7 @@ class StageExecutorTests(unittest.TestCase):
         review_receipt = json.loads(
             Path(review_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(review_receipt["finalization_review_validation_version"], "3")
+        self.assertEqual(review_receipt["finalization_review_validation_version"], "4")
         self.assertEqual(review_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(review_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(review_receipt["reader_review_status"], "current")
@@ -3475,7 +3474,7 @@ class StageExecutorTests(unittest.TestCase):
         synthesis_text = (
             "---\n"
             'artifact_type: "repository-synthesis"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'repository: "sample-repo"\n'
             'source_commit: "unknown"\n'
             "---\n\n"

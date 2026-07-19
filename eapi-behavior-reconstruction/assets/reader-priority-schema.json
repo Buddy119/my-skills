@@ -1,0 +1,71 @@
+{
+  "reader_priority_schema_version": "1",
+  "validation_version": "1",
+  "artifacts": {
+    "repository-overview": {
+      "artifact_schema_version": "3",
+      "template": "repository-overview-template.md",
+      "required_h2": [
+        "Repository in 5 minutes",
+        "Capability paths",
+        "Behavior variants",
+        "Risk hotspots",
+        "System context and shared behavior",
+        "Technical reference",
+        "Coverage and unknowns",
+        "Source notes"
+      ],
+      "ordered_h2": [
+        "Repository in 5 minutes",
+        "Capability paths",
+        "Behavior variants",
+        "Risk hotspots",
+        "System context and shared behavior",
+        "Technical reference",
+        "Coverage and unknowns",
+        "Source notes"
+      ]
+    },
+    "tech-behavior": {
+      "artifact_schema_version": "4",
+      "template": "behavior-document-template.md",
+      "required_h2": [
+        "Summary",
+        "Main path",
+        "Behavior flow",
+        "Source notes"
+      ],
+      "ordered_h2": [
+        "Summary",
+        "Trigger, result, and scope",
+        "Main path",
+        "Behavior flow",
+        "Material variants and risks",
+        "Implementation reference",
+        "Related documents",
+        "Source notes"
+      ]
+    },
+    "api-contract": {
+      "artifact_schema_version": "3",
+      "template": "api-contract-document-template.md",
+      "required_h2": [
+        "Quick reference",
+        "Request",
+        "Responses",
+        "Related documents",
+        "Source notes"
+      ],
+      "ordered_h2": [
+        "Quick reference",
+        "Request",
+        "Responses",
+        "Examples",
+        "Contract completeness and limitations",
+        "Complete field reference",
+        "Related documents",
+        "Source notes"
+      ]
+    }
+  }
+}

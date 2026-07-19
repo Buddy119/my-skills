@@ -1,6 +1,6 @@
 {
-  "finalization_review_schema_version": "3",
-  "validation_version": "3",
+  "finalization_review_schema_version": "4",
+  "validation_version": "4",
   "outcomes": [
     "passed",
     "corrected",
@@ -54,7 +54,12 @@
         "catalog-navigation-and-projection",
         "publication-language-and-diagrams",
         "lifecycle-model-and-diagrams",
-        "status-and-evidence-density"
+        "status-and-evidence-density",
+        "five-minute-repository-orientation",
+        "capability-main-path",
+        "variant-priority-and-differences",
+        "high-risk-visibility",
+        "schema-progressive-disclosure"
       ]
     }
   }

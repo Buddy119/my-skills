@@ -95,6 +95,11 @@ from reader_presentation import (
     ReaderPresentationError,
     validate_bundled_reader_contract,
 )
+from reader_priority import (
+    ReaderPriorityError,
+    load_reader_priority_schema,
+    validate_bundled_reader_priority_contract,
+)
 
 
 WORKFLOW_SCHEMA_VERSION = "4"
@@ -190,6 +195,9 @@ REGISTER_HEADINGS = {
 SYNTHESIS_HEADINGS = {
     "Observable repository responsibility",
     "Capability and behavior model",
+    "Capability path model",
+    "Variant model",
+    "Risk hotspot model",
     "Behavior relationships",
     "Object state model",
     "Processing model",
@@ -1123,7 +1131,17 @@ def command_init(args: argparse.Namespace) -> int:
         load_projection_schema()
         load_review_schema()
         load_lifecycle_schema()
+        load_reader_priority_schema()
         validate_bundled_reader_contract(registry, assets_root=template_root())
+        priority_errors = validate_bundled_reader_priority_contract(
+            assets_root=template_root(),
+            registry_versions={
+                artifact_type: definition.current_version
+                for artifact_type, definition in registry.definitions.items()
+            },
+        )
+        if priority_errors:
+            raise ReaderPriorityError(" | ".join(priority_errors))
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
@@ -1140,6 +1158,8 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(f"bundled Lifecycle Model Schema is invalid: {exc}") from exc
     except ReaderPresentationError as exc:
         raise ExecutorError(f"bundled Reader Presentation Schema is invalid: {exc}") from exc
+    except ReaderPriorityError as exc:
+        raise ExecutorError(f"bundled Reader Priority Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1394,6 +1414,14 @@ def validator_commands(
             else "--require-artifact-manifest"
         )
         commands.append(command)
+        commands.append(
+            [
+                python,
+                str(scripts / "validate_reader_priority.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
     return commands
 
 

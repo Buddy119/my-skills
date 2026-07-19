@@ -140,7 +140,7 @@ python3 <skill-root>/scripts/stage_executor.py validate \
   --json
 ```
 
-The report separates content errors, trusted Candidate Manifest drift, cross-stage forward references, lifecycle/integrity blockers, and warnings. `ready` requires zero `semantic_or_document_errors` and zero `blocking_errors`. Expected Manifest refresh and Tech-stage API/BA forward references do not block. The command uses an ephemeral Synthesis or Business Model lifecycle projection, never edits the Candidate, and supports a sealed Migration Candidate without relaxing its immutability. Detailed output is capped while total and suppressed counts remain accurate.
+The report separates content errors, trusted Candidate Manifest drift, cross-stage forward references, lifecycle/integrity blockers, and warnings. `ready` requires zero `semantic_or_document_errors` and zero `blocking_errors`. Expected Manifest refresh and Tech-stage API/BA forward references do not block. Publication stages also run the Reader Priority Validator, which checks only progressive section identity and order; it never proves Capability, Variant, risk, Schema completeness, or prose quality. The command uses an ephemeral Synthesis or Business Model lifecycle projection, never edits the Candidate, and supports a sealed Migration Candidate without relaxing its immutability. Detailed output is capped while total and suppressed counts remain accurate.
 
 For API Contract Publication, BA Publication, and Reader-Projection revalidation, materialize the downstream artifacts first and then run:
 

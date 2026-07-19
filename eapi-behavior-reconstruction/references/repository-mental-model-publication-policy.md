@@ -2,7 +2,7 @@
 
 ## Purpose and sources
 
-Turn the completed repository synthesis into a developer-facing orientation map. `repository-overview.md` must help a reader understand the repository's position, meaningful connections, and shared behavior-shaping mechanisms before opening deeper documents.
+Turn the completed repository synthesis into a developer-facing orientation map. `repository-overview.md` must first explain responsibility, Capability paths, behavior-changing Variants, and highest-attention risks; then help a reader understand the repository's position, meaningful connections, and shared behavior-shaping mechanisms before opening deeper documents.
 
 Build the view from completed dossiers plus reconciled Endpoint, Dependency, HTTP Operation, Data Lifecycle, Runtime Config, Failure Pattern, and cross-behavior models. Do not build it from Evidence Index markers, filenames, dependency names, hosts, configuration keys, or raw register rows.
 
@@ -65,4 +65,4 @@ Link every shared item to the affected Tech Behaviors and applicable Contract, F
 
 Contribute only business-visible participants, interactions, shared business rules, incomplete outcomes, and recovery constraints to the independent Business Model. The Business Model—not this technical projection—decides Journey and Scenario boundaries. Do not copy the technical context diagram, connection matrix, class/module identity, or technical component table into the BA Pack.
 
-Before publication, verify that a reader can answer direction, boundary type, interaction role, affected capabilities, exchanged concepts, configuration selection, criticality, failure impact, and the correct deep-dive destination. Reject a name-only connection list and a shared-component inventory that does not explain behavior impact.
+Before publication, verify that a reader can explain each principal Capability path and its result before reaching the connection model, can distinguish supported Variants without an invented default, and can find High or materially Unknown risks early. Then verify direction, boundary type, interaction role, affected capabilities, exchanged concepts, configuration selection, criticality, failure impact, and the correct deep-dive destination. Reject a name-only connection list and a shared-component inventory that does not explain behavior impact.

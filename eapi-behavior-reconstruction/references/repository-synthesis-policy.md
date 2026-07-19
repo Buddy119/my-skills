@@ -37,6 +37,9 @@ Use the dossiers and register to answer:
 17. Which dependency and failure conclusions are High-attention or materially Unknown, and what repository evidence supports that reader priority?
 18. Which reconciled Operations form one reader-meaningful logical connection, and where do direction, boundary, interaction role, or configuration selection require separate connections for the same participant?
 19. Which shared rules and behavior-shaping components materially affect at least two Behaviors or independent entry paths, where do their effects differ, and what would change if their source changed?
+20. Which Behaviors combine into each developer-meaningful Capability path, and what supported trigger, principal decisions, and observable result define its normal story?
+21. Which Market, Country, Tenant, Channel, Profile, Environment, Feature Flag, or other selectors create behavior-changing Variants, and does the repository actually prove a baseline?
+22. Which existing Failure, Dependency, and Lifecycle conclusions deserve early reader attention without inventing a second risk score?
 
 ## Reconcile rather than concatenate
 
@@ -58,6 +61,9 @@ Treat migrated Observation rows and mechanical IDs only as navigation inputs. `U
 - Assign every Dependency and Failure Observation to a reconciled object or mark it `Unresolved`; do not discard observations that do not fit a clean reader model.
 - Preserve operation- or behavior-level Dependency criticality when one Dependency is Required for one capability but Degradable, Optional, or Unknown for another.
 - Use Failure risk attention to prioritize reading, not to manufacture a business risk score. Keep decisive missing state, retry, or recovery evidence as `Unknown`.
+- Build Capability paths semantically across Behaviors. Do not make one Capability row per Behavior or call one path primary merely because it was traced first.
+- Create a Variant only when a supported selector changes observable behavior. Do not turn every configuration value, environment name, or market label into a Reader Variant.
+- Build Risk Hotspots from existing High and material Unknown conclusions. Link their source models instead of copying their indexes.
 - Reconcile repository connections from executable boundaries and explicit trigger bindings after Endpoint, Dependency, Lifecycle, Config, and Failure reconciliation. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics match. Split one participant when it plays materially different roles or directions.
 - Do not create a connection from a host, resource, class, client, configuration, or participant name alone. Preserve missing role, exchanged-concept, target-selection, availability, or state-impact evidence as `Unknown` rather than filling the Overview with name associations.
 - Reconcile a Shared Rule or Shared Behavior-shaping Component only when one proven rule source, implementation, or configuration binding affects at least two Behaviors or independent entry paths and changes observable validation, decisions, authorization, transformation, state, boundaries, output, error handling, or recovery. Similar names are not shared identity evidence.
@@ -82,7 +88,7 @@ Use the final pack's `coverage_status`:
 
 ## Source of final documents
 
-- Repository Overview comes from the synthesized Repository Connection and Shared Behavior models. The independent Business Model uses repository synthesis and the completed Tech facts to reconstruct business-visible Capabilities, Journeys, Scenarios, actors, objects, rules, outcomes, and limitations before any BA document is published.
+- Repository Overview comes from the Capability Path, Variant, Risk Hotspot, Repository Connection, and Shared Behavior models. The independent Business Model uses repository synthesis and the completed Tech facts to reconstruct business-visible Capabilities, Journeys, Scenarios, actors, objects, rules, outcomes, and limitations before any BA document is published.
 - Behavior documents come from their dossiers, informed by synthesis.
 - Endpoint Matrix comes from the register's reconciled publication projection: application endpoints, meaningful external exposures, exceptions, and a compact protocol-support summary. The outbound part of Field Validation and Mapping comes from reconciled Remote Operations, Executable Usages, and Field Mappings rather than the raw observation shape. Other field rules, configuration, and dependency references come from their reconciled register sections.
 - External Dependency Contracts come from reconciled `DEP-nnn` participants/resources and their `DEP-nnn-OPnn` Operations, not the Dependency Observation rows.

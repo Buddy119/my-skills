@@ -1,5 +1,5 @@
 {
-  "api_contract_structure_schema_version": "1",
+  "api_contract_structure_schema_version": "2",
   "tables": {
     "quick-reference": {
       "section": "Quick reference",
@@ -35,6 +35,11 @@
       "section": "Responses",
       "required": false,
       "headers": ["Field path", "Type/format", "Present when", "Nullable", "Rules"]
+    },
+    "complete-field-reference": {
+      "section": "Complete field reference",
+      "required": false,
+      "headers": ["Location", "Field path", "Type/format", "Required or present when", "Nullable", "Default", "Rules", "Basis"]
     }
   }
 }

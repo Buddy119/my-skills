@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-READER_PROJECTION_VALIDATION_VERSION = "1"
+READER_PROJECTION_VALIDATION_VERSION = "2"
 PLAN_FILENAME = "reader-projection-plan.json"
 TERMINAL_REVIEW_STATUSES = {"refreshed", "reviewed-no-change"}
 ALLOWED_REVIEW_STATUSES = TERMINAL_REVIEW_STATUSES
@@ -107,7 +107,7 @@ def load_projection_schema(path: Path | None = None) -> dict[str, Any]:
         payload = json.loads(schema_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ReaderProjectionError(f"Reader Projection Schema cannot be loaded: {exc}") from exc
-    if payload.get("reader_projection_schema_version") != "1":
+    if payload.get("reader_projection_schema_version") != "2":
         raise ReaderProjectionError("unsupported Reader Projection Schema version")
     if payload.get("validation_version") != READER_PROJECTION_VALIDATION_VERSION:
         raise ReaderProjectionError("Reader Projection validation version is inconsistent")
@@ -194,31 +194,32 @@ def _replace_root_list(
     return "\n".join(lines[:start] + rendered + lines[end:])
 
 
-def _replace_h2_links(
+def _replace_related_links(
     body: str,
     heading: str,
     links: list[tuple[str, str]],
-    *,
-    insert_before: str,
 ) -> str:
     replacement = "".join(f"- [{label}]({target})\n" for label, target in links)
     pattern = re.compile(
-        rf"(?ms)^##\s+{re.escape(heading)}\s*$\n.*?(?=^##\s+|\Z)"
+        rf"(?ms)^#{{2,3}}\s+{re.escape(heading)}\s*$\n.*?(?=^#{{2,3}}\s+|\Z)"
     )
     match = pattern.search(body)
-    section = f"## {heading}\n\n{replacement}\n"
+    section = f"### {heading}\n\n{replacement}\n"
     if match:
         if not links:
             return body[: match.start()] + body[match.end() :]
         return body[: match.start()] + section + body[match.end() :]
     if not links:
         return body
-    marker = re.search(rf"(?m)^##\s+{re.escape(insert_before)}\s*$", body)
-    if not marker:
-        raise ReaderProjectionError(
-            f"cannot insert {heading}: expected section {insert_before} is missing"
-        )
-    return body[: marker.start()] + section + body[marker.start() :]
+    parent = re.search(r"(?m)^##\s+Related documents\s*$\n", body)
+    if parent:
+        return body[: parent.end()] + "\n" + section + body[parent.end() :]
+    marker = re.search(r"(?m)^##\s+Behavior flow\s*$", body)
+    if marker:
+        return body[: marker.start()] + section + body[marker.start() :]
+    raise ReaderProjectionError(
+        f"cannot insert {heading}: Related documents and Behavior flow are missing"
+    )
 
 
 def _catalog_behavior_blocks(text: str) -> dict[str, tuple[int, int, str]]:
@@ -321,10 +322,11 @@ def _table_cells(line: str) -> list[str]:
 
 
 def _section(text: str, heading: str) -> tuple[int, int, str] | None:
-    match = re.search(rf"(?m)^##\s+{re.escape(heading)}\s*$", text)
+    match = re.search(rf"(?m)^(?P<marks>##{{1,5}})\s+{re.escape(heading)}\s*$", text)
     if not match:
         return None
-    following = re.search(r"(?m)^##\s+", text[match.end() :])
+    level = len(match.group("marks"))
+    following = re.search(rf"(?m)^#{{1,{level}}}\s+", text[match.end() :])
     end = match.end() + following.start() if following else len(text)
     return match.start(), end, text[match.start() : end]
 
@@ -361,55 +363,12 @@ def _update_overview(
     domain: str,
 ) -> tuple[str, list[str]]:
     missing_semantic: list[str] = []
-    behavior_summary = _section(text, "Behavior summary")
-    if behavior_summary is None:
-        missing_semantic.append("Behavior summary is missing")
-    else:
-        start, end, content = behavior_summary
-        labels_api = {
-            identifier: f"{item.get('method') or ''} {item.get('route') or identifier}".strip()
-            for identifier, item in graph.contracts.items()
-        }
-        labels_ba = {
-            identifier: str(item.get("title") or identifier)
-            for identifier, item in graph.scenarios.items()
-        }
-
-        def update_behavior_row(headers: list[str], cells: list[str]) -> list[str] | None:
-            if "Behavior ID" not in headers:
-                raise ReaderProjectionError("Behavior summary has no Behavior ID column")
-            identifier = cells[headers.index("Behavior ID")].strip("` ")
-            behavior = graph.behaviors.get(identifier)
-            if behavior is None:
-                return cells
-            if domain == "api" and "API contracts" in headers:
-                entries = [
-                    {
-                        "endpoint_id": endpoint_id,
-                        "document": f"contracts/{endpoint_id}.api-contract.md",
-                    }
-                    for endpoint_id, contract in sorted(graph.contracts.items())
-                    if contract.get("behavior_id") == identifier
-                ]
-                cells[headers.index("API contracts")] = _link_list(entries, "endpoint_id", labels_api)
-            if domain == "ba" and "BA scenarios" in headers:
-                entries = [
-                    {
-                        "scenario_id": scenario_id,
-                        "document": f"../ba-pack/scenarios/{scenario_id}.md",
-                    }
-                    for scenario_id, scenario in sorted(graph.scenarios.items())
-                    if identifier
-                    in {
-                        item["behavior_id"]
-                        for item in scenario.get("tech_behaviors", [])
-                    }
-                ]
-                cells[headers.index("BA scenarios")] = _link_list(entries, "scenario_id", labels_ba)
-            return cells
-
-        updated = _replace_table_lines(content, update_behavior_row)
-        text = text[:start] + updated + text[end:]
+    if _section(text, "Capability paths") is None:
+        missing_semantic.append("Capability paths is missing")
+    if _section(text, "Behavior variants") is None:
+        missing_semantic.append("Behavior variants is missing")
+    if _section(text, "Risk hotspots") is None:
+        missing_semantic.append("Risk hotspots is missing")
 
     if domain == "api" and graph.contracts:
         exposure = _section(text, "Endpoint exposure summary")
@@ -701,7 +660,7 @@ def _mechanical_updates(
                 (labels.get(entry[id_key], entry[id_key]), entry["document"])
                 for entry in relationship[key]
             ]
-            body = _replace_h2_links(body, "API contracts", links, insert_before="Behavior flow")
+            body = _replace_related_links(body, "API contracts", links)
         else:
             labels = {
                 scenario_id: str(scenario.get("title") or scenario_id)
@@ -711,7 +670,7 @@ def _mechanical_updates(
                 (labels.get(entry[id_key], entry[id_key]), entry["document"])
                 for entry in relationship[key]
             ]
-            body = _replace_h2_links(body, "BA scenarios", links, insert_before="Behavior flow")
+            body = _replace_related_links(body, "BA scenarios", links)
         rendered = "---\n" + frontmatter + "\n---\n" + body
         updates[path] = rendered
         items.append(
@@ -838,23 +797,6 @@ def validate_mechanical_projection(
             observed_ids = {item[id_key] for item in entries}
             if expected_ids != observed_ids:
                 errors.append(f"Tech Catalog has stale {key} for {behavior_id}")
-
-    overview = root / "tech-pack" / "repository-overview.md"
-    if overview.is_file():
-        text = overview.read_text(encoding="utf-8")
-        targets: list[str] = []
-        if domain == "api":
-            targets = [
-                f"contracts/{endpoint_id}.api-contract.md"
-                for endpoint_id in sorted(graph.contracts)
-            ]
-        else:
-            targets = [
-                f"../ba-pack/scenarios/{scenario_id}.md"
-                for scenario_id in sorted(graph.scenarios)
-            ]
-        missing = _section_contains_all(text, "Behavior summary", targets)
-        errors.extend(f"Repository Overview Behavior summary omits {item}" for item in missing)
 
     if domain == "api" and graph.contracts:
         field = root / "tech-pack" / "field-validation-and-mapping.md"

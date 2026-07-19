@@ -67,6 +67,10 @@ An unresolved semantic finding blocks publication. Preserve `Unknown` or `Confli
 
 Read without source code first. Sample the applicable overview, behavior, contract, mapping, dependency, failure, typed lifecycle, BA, navigation, and diagram surfaces. For `status-and-evidence-density`, verify that repeated Confirmed labels and per-row Evidence do not dominate the Reader view, while exceptional qualifiers and grouped Tech Source Notes remain easy to find. Confirm that readers can separately answer “what condition is the Object in?”, “what did the repository do?”, and “where did the data move?”. Record whether the intended reader can reach deeper detail without encountering repetition, audit-ledger prose, stale lifecycle wording, or misleading diagrams.
 
+For `five-minute-repository-orientation`, `capability-main-path`, `variant-priority-and-differences`, and `high-risk-visibility`, review the Overview before opening Technical Reference. Confirm that a developer can state the repository responsibility, retell each principal Capability path, distinguish proven behavior-changing Variants without an invented default, and identify the highest-attention risks and their deep links.
+
+For `schema-progressive-disclosure`, sample a large API Schema when available and verify that caller-required, conditional, and behaviorally significant fields precede the remaining field reference, field identities are not repeated, Schema-only basis remains clear, and a simple Contract does not contain an unnecessary completeness appendix.
+
 An unresolved reader problem blocks publication even when every link and table is mechanically valid.
 
 ## Persistence and recovery

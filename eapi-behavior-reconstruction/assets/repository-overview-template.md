@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-overview"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic"
@@ -10,133 +10,129 @@ coverage_status: "complete|partial|blocked"
 
 # Repository knowledge overview
 
-## Observable responsibility
+## Repository in 5 minutes
 
-Summarize what the repository appears to do from executable evidence. Separate confirmed responsibilities from inferred business purpose.
+Explain the repository's observable responsibility, boundary, principal inputs, and principal outcomes in a short narrative. Name the major Capabilities a developer should understand first. Do not begin with framework, file, Endpoint, Dependency, or Schema inventories.
 
-## Technology and deployment
+Use one small orientation list only when it improves scanning:
 
-| Area | Observed value |
-|---|---|
-| Runtime/framework/IaC | Value [E1](#e1) |
+- **Responsibility:** Observable responsibility.
+- **Boundary:** Where this repository starts and stops.
+- **Start here:** Links to the most important Capability paths.
+- **Important limitation:** One material coverage boundary, or omit this line.
 
-## Entry-point inventory
+## Capability paths
 
-| Entry point | Trigger | Behavior ID | Classification |
-|---|---|---|---|
-| Handler or route | API/event/queue/schedule | repository.behavior | Business/integration/technical [E2](#e2) |
+Publish one subsection per Capability from the completed Capability Path Model. A Capability is not a Behavior inventory row. Explain its goal, supported entry or trigger, normal execution path, important decisions, observable result, and relevant Behaviors.
 
-## Endpoint exposure summary
+<a id="capability-example"></a>
+### Capability name
 
-Include this section whenever any endpoint-layer evidence exists. Separate reader-facing endpoints from aggregated protocol support without calling an application route public or deployed unless external reachability is Confirmed.
-
-| Category | Count | Interpretation | Details |
-|---|---|---|---|
-| Application endpoints | Count | Executable application routes | [Endpoint Matrix](endpoint-matrix.md) |
-| Meaningful external exposures | Count | Reader-relevant external-only entries | [Endpoint Matrix](endpoint-matrix.md) |
-| Aggregated protocol-support declarations | Count | Preflight, CORS, or other support operations represented as a summary | [Protocol-support summary](endpoint-matrix.md#protocol-support-summary) or Not observed |
-| Unresolved or conflicting exceptions | Count | Records kept visible because classification or wiring is incomplete | [Endpoint Matrix](endpoint-matrix.md) |
-
-Optionally list a small number of important endpoint or exception links. Do not reproduce the full Matrix or one row per ordinary protocol-support declaration.
-
-## Behavior summary
-
-| Behavior ID | Summary | Inputs | Outputs and side effects | Tech behavior | BA scenarios | API contracts |
-|---|---|---|---|---|---|---|
-| repository.behavior | Observable behavior | Boundary | Boundary | [Tech](behaviors/repository.behavior.md) | Scenario links or N/A | Endpoint contract links or N/A |
-
-## Knowledge pack index
-
-| Knowledge area | Document | Availability | What it explains |
-|---|---|---|---|
-| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Available/Not observed/Not applicable | Application routes, external entries, deployment evidence, reachability, and endpoint contracts |
-| Data and state | [Data lifecycle](data-lifecycle.md) | Available/Not observed | Object movement and state transitions |
-| Fields | [Field validation and mapping](field-validation-and-mapping.md) | Available/Not observed | Field rules and proven outbound HTTP mappings |
-| Runtime configuration | [Runtime configuration matrix](runtime-config-matrix.md) | Available/Not observed | Configuration that changes behavior |
-| External dependencies | [Dependency contracts](external-dependency-contracts.md) | Available/Not observed | External participants/resources, shared operations, criticality, and availability impact |
-| Failures | [Failure taxonomy](failure-taxonomy.md) | Available/Not observed | Repository-wide failure patterns, state/retry outcomes, recovery, and risk attention |
-
-Remove links for documents that are not generated; keep their availability so absence is explicit.
-
-## External connections
-
-Build this section only from the Repository Connection Model in `repository-synthesis.md`. Do not publish a paragraph that merely lists system, resource, class, Host, or configuration names.
-
-### System context
-
-Replace the example nodes and edges with one repository-specific context diagram. Keep the repository in the center, retain only applicable groups, use actual control/data direction, and label each edge with the primary exchanged concept and interaction role. Use solid edges for Confirmed connections and dashed edges for Inferred, Conflicting, or Unknown connections. Draw one edge per logical connection rather than per Operation or Behavior.
-
-<!-- TEMPLATE: Replace every sample node and edge below with repository-specific content, remove unused groups, and delete this comment. -->
+Describe the normal path in connected prose. Call a route the default or primary path only when repository evidence establishes that selection. Otherwise present the supported alternatives without choosing one.
 
 ```mermaid
 flowchart LR
-    subgraph Upstream
-        U["Upstream participant"]
-    end
-    R["This repository"]
-    subgraph Synchronous_Dependencies["Synchronous Dependencies"]
-        D["External dependency"]
-    end
-    subgraph State_Resources["State Resources"]
-        S["State resource"]
-    end
-    subgraph Async_Outputs["Async Outputs / Side Effects"]
-        A["Async participant or resource"]
-    end
-    U -->|"Business request or event"| R
-    R -->|"Synchronous business concept"| D
-    R -->|"State read/write"| S
-    R -->|"Async handoff or side effect"| A
+    A[Supported trigger] --> B[Principal decision or work]
+    B --> C[Observable result]
 ```
 
-### Connection matrix
+- **Supporting Behaviors:** [Tech Behavior](behaviors/repository.behavior.md)
+- **Contracts and endpoints:** Relevant API Contract or Endpoint Matrix links, when applicable.
+- **State and side effects:** Short result with a Data Lifecycle link, when applicable.
+- **Variants and risks:** Links to the relevant sections below.
 
-Use one row per logical connection. Group only when participant/resource, direction, boundary type, interaction role, and configuration-selection semantics are equivalent. Keep different roles or directions separate even when the participant name is the same.
+## Behavior variants
 
-| Connection | Direction / boundary | Interaction role | Capabilities / Behaviors | Exchanged concepts | Config / variants | Criticality and failure impact | Deep dive |
-|---|---|---|---|---|---|---|---|
-| External participant or resource | Inbound/Outbound/Bidirectional — boundary type | Business request/response, Synchronous business dependency, Asynchronous handoff, State read/write, Auxiliary side effect, Identity/security support, Operational support, or Unknown | Capability and Behavior links | Business/data concepts | Target/implementation/path selection or None observed | Required/Degradable/Optional/Unknown/N/A; blocking, degradation, partial state, or Unknown | Applicable Endpoint Matrix, API Contract, Tech Behavior, Dependency Operation, Field Mapping, Data Lifecycle, Runtime Config, and Failure links |
+Show only code-supported axes that change observable execution, validation, rules, Dependency selection, Mapping, state, output, or failure behavior. Use `Market`, `Country`, `Tenant`, `Channel`, `Profile`, `Environment`, `Feature Flag`, or `Other` as an explanatory axis—not as evidence by itself.
 
-Use `N/A` only for a pure inbound trigger. Keep unresolved candidates visible, but do not promote configuration-only or name-only observations into Confirmed connections. Link to deeper documents rather than copying Operation, Mapping, Lifecycle, Config, or Failure detail.
-
-## Failure and consistency highlights
-
-Summarize supported High-attention and material Unknown failure themes, including partial/committed state, swallowed or false-success outcomes, unsafe repetition, and recovery gaps. Link Failure Taxonomy instead of copying its Pattern index. Remove this section when no material failure document is generated.
-
-## Shared rules and components
-
-Publish only items from the Shared Behavior Model. An item must affect at least two Behaviors or independently exposed entry paths and materially shape observable behavior. If no item qualifies, write `Not observed` and omit the empty table.
-
-### Shared rules
-
-| Shared rule | Observable effect | Capabilities / Behaviors | Variations or overrides | Configuration / source of truth | Deep dive |
+| Variant | Selection source | Scope and baseline | Observable difference | Affected capabilities / Behaviors | Deep dive |
 |---|---|---|---|---|---|
-| Human-readable rule *(Unknown)* | Shared validation, decision, authorization, transformation, state, output, or failure effect | Capability and Behavior links | Behavior-specific difference or None observed | Executable rule/configuration source [E3](#e3) | Relevant Behavior, Contract, Field, Config, Lifecycle, or Failure links |
+| Variant name *(Unknown)* | Input/configuration/profile/wiring | Proven baseline, multiple supported paths, or no repository-proven default | Changed rule, path, dependency, mapping, state, output, or failure | Capability and Behavior links | Runtime Config, Behavior, Contract, Mapping, Lifecycle, Dependency, or Failure link [E1](#e1) |
 
-### Shared behavior-shaping components
+When no behavior-changing Variant is established, say `No behavior-changing variant was established from repository evidence.` and omit the table.
 
-Lead with the component's role; include implementation names only to help developers locate the shared mechanism.
+## Risk hotspots
 
-| Component and role | Capabilities / Behaviors | Observable behavior impact | Config / variants | Change blast radius and limitations | Deep dive |
-|---|---|---|---|---|---|
-| Behavior role — implementation identity *(Inferred)* | Capability and Behavior links | Path, result, state, boundary, or recovery effect | Binding/profile/target or None observed | Outcomes affected by a change and material Unknowns [E4](#e4) | Relevant Behavior, Field, Config, Lifecycle, Dependency, or Failure links |
+Lead with evidence-supported High-attention and materially Unknown risks from Failure, Dependency, and Lifecycle synthesis. Focus on caller visibility, partial or committed state, false success, unsafe repetition, and recovery gaps. Do not invent a new score.
 
-Do not list logging, ordinary monitoring, generated code, framework glue, trivial wrappers, generic serializers, or utilities that do not change observable behavior.
+| Hotspot | Affected capability | Caller or business impact | State / retry / recovery concern | Deep dive |
+|---|---|---|---|---|
+| Risk or material Unknown | Capability link | Visible error, degraded result, success with loss, or async-only outcome | Partial/committed state, unsafe/unknown retry, or recovery gap | Failure, Dependency, Lifecycle, or Behavior link [E2](#e2) |
 
-## Coverage and limitations
+When no High or materially Unknown hotspot is supported, say so briefly and omit the table.
 
-Account for excluded, duplicate, generated, dynamic, unreadable, and blocked entry points. Do not claim complete coverage unless every discovered executable entry point has a catalog disposition.
+## System context and shared behavior
 
-## Repository-level open questions
+### System context
 
-List unknown responsibilities, conflicting wiring, missing schemas, environment-defined dependencies, and behavior that may live outside the repository.
+Build this view only from the Repository Connection Model. Keep the repository in the center, use actual control/data direction, and draw one edge per logical connection rather than per Operation, Behavior, field, or resource access.
+
+<!-- TEMPLATE: Replace every sample node and edge, remove unused groups, and delete this comment. -->
+
+```mermaid
+flowchart LR
+    U[Upstream participant] -->|Business request or event| R[This repository]
+    R -->|Synchronous business concept| D[External dependency]
+    R -->|State read or write| S[State resource]
+    R -->|Async handoff or side effect| A[Async participant]
+```
+
+Use a compact connection matrix only when the diagram cannot carry role, configuration selection, or failure impact without becoming unreadable.
+
+| Connection | Direction / role | Capabilities | Exchanged concepts | Variant selection | Criticality and failure impact | Deep dive |
+|---|---|---|---|---|---|---|
+| Participant or resource | Direction, boundary, and interaction role | Capability links | Business/data concepts | Config/variant or None observed | Required/Degradable/Optional/Unknown/N/A and concise impact | Endpoint, Dependency, Mapping, Lifecycle, Config, or Failure links [E3](#e3) |
+
+### Shared rules and behavior-shaping components
+
+Include only proven rules or components that affect at least two Behaviors or independent entries and materially alter observable behavior. Explain common effect and meaningful overrides. Exclude ordinary logging, monitoring, framework glue, generated code, wrappers, and single-Behavior helpers.
+
+## Technical reference
+
+### Technology and deployment
+
+Summarize runtime, framework, packaging, and deployment model only to the degree needed to navigate or run the repository.
+
+### Endpoint exposure summary
+
+Include this subsection when endpoint-layer evidence exists. Keep application routes, meaningful external exposures, protocol-support aggregation, and unresolved exceptions separate.
+
+| Category | Count | Interpretation | Details |
+|---|---:|---|---|
+| Application endpoints | Count | Executable application routes | [Endpoint Matrix](endpoint-matrix.md) |
+| Meaningful external exposures | Count | Reader-relevant external-only entries | [Endpoint Matrix](endpoint-matrix.md) |
+| Aggregated protocol-support declarations | Count | Supporting operations represented as a summary | [Protocol-support summary](endpoint-matrix.md#protocol-support-summary) or Not observed |
+| Unresolved or conflicting exceptions | Count | Records visible because classification or wiring is incomplete | [Endpoint Matrix](endpoint-matrix.md) |
+
+### Repository navigation
+
+- [Complete Tech Behavior Catalog](behavior-catalog.yaml)
+- Endpoint Matrix and API Contracts, when applicable.
+- Data Lifecycle, Field Validation and Mapping, Runtime Configuration, External Dependency Contracts, and Failure Taxonomy, when applicable.
+
+Do not reproduce the complete Entry Point inventory, Behavior catalog, Endpoint Matrix, Mapping table, Dependency landscape, or Failure Pattern index in this Overview.
+
+### Knowledge pack index
+
+| Knowledge area | Document | Availability | What it explains |
+|---|---|---|---|
+| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Available/Not observed/Not applicable | Application routes, exposure evidence, reachability, and contracts |
+| Data and state | [Data lifecycle](data-lifecycle.md) | Available/Not observed | Object state, processing, and data movement |
+| Fields | [Field validation and mapping](field-validation-and-mapping.md) | Available/Not observed | Field rules and proven outbound HTTP mappings |
+| Runtime configuration | [Runtime configuration matrix](runtime-config-matrix.md) | Available/Not observed | Configuration and behavior-changing Variants |
+| External dependencies | [Dependency contracts](external-dependency-contracts.md) | Available/Not observed | External roles, operations, criticality, and availability impact |
+| Failures | [Failure taxonomy](failure-taxonomy.md) | Available/Not observed | Failure patterns, state/retry outcomes, recovery, and risk attention |
+
+Remove links for documents that are not generated while keeping their availability explicit.
+
+## Coverage and unknowns
+
+Account for excluded, generated, dynamic, unreadable, duplicate, and blocked entry points. List unresolved responsibilities, Variant selection, schemas, external behavior, and coverage limits without turning this section into an evidence inventory.
 
 ## Source notes
 
-<a id="e1"></a> **E1** — `path/to/runtime-or-build-file.ext:10-24` supports the technology and deployment summary.
+<a id="e1"></a> **E1** — `path/to/variant-source.ext:10-24` supports the Variant selection and observable difference.
 
-<a id="e2"></a> **E2** — `path/to/entry-point.ext:30-52` supports the entry-point inventory.
+<a id="e2"></a> **E2** — `path/to/failure-or-lifecycle.ext:30-52` supports the risk hotspot and its visible or state impact.
 
-<a id="e3"></a> **E3** — `path/to/shared-rule.ext:12-40` supports the shared-rule summary.
-
-<a id="e4"></a> **E4** — `path/to/shared-component.ext:18-61` supports the shared behavior-shaping component summary.
+<a id="e3"></a> **E3** — `path/to/boundary.ext:18-61` supports the system-context connection and behavior impact.

@@ -1,6 +1,6 @@
 ---
 artifact_type: "api-contract"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 behavior_id: "repository.behavior-name"
 endpoint_id: "repository.method-route"
 title: "Human-readable API contract title"
@@ -32,6 +32,8 @@ endpoint_matrix: "../endpoint-matrix.md#repository-method-route"
 | External reachability | [`Confirmed|Conflicting|Unknown|Not observed`](../endpoint-matrix.md#repository-method-route) — concise limitation if needed |
 
 ## Request
+
+Lead with fields a caller needs to form a valid or behaviorally meaningful request: required fields, conditionally required fields, and fields that materially select rules, paths, outputs, or risks. Keep remaining Schema-only fields in `Complete field reference` rather than making callers scan them before the request can be understood.
 
 <!-- TEMPLATE: Keep only observed input-location subsections. When there is no caller-supplied input, replace all tables with one short sentence. -->
 <!-- TEMPLATE: Keep rules caller-visible. Move outbound forwarding, renaming, encoding, and downstream header/body mapping to Field Validation and Mapping. -->
@@ -115,13 +117,23 @@ Content-Type: application/json
 }
 ```
 
-<!-- TEMPLATE: Replace with a short explanation of which Source note supports the examples. -->
+<!-- TEMPLATE: Replace with a short explanation such as: "The example wire shapes and fixed values are supported by [E9](#e9)." -->
 
 ## Contract completeness and limitations
 
 <!-- TEMPLATE: Remove this section when no material Unknown, Conflict, schema/runtime gap, opaque transformation, authentication gap, or omitted example affects callers. -->
 
 - TEMPLATE: Explain the caller impact of a material limitation and what evidence would resolve it. [E8](#e8)
+
+## Complete field reference
+
+<!-- TEMPLATE: Keep this section only when the request or response Schema contains additional fields that would make the caller-first sections difficult to scan. The core and remaining tables together form the observed field reference; never duplicate a field identity here. Delete this comment. -->
+
+List only fields not already presented in Request or Responses. Group with the `Location` column. `Schema only` means declared by a model or Schema but not directly exercised by the traced executable path; it does not imply runtime enforcement.
+
+| Location | Field path | Type/format | Required or present when | Nullable | Default | Rules | Basis |
+|---|---|---|---|---|---|---|---|
+| Body | `field.path` | Type/format | Yes/No/Conditional/outcome | Yes/No/Unknown | None/value | Caller-visible rule or limitation [E7](#e7) | Schema only |
 
 ## Related documents
 
@@ -143,6 +155,8 @@ Content-Type: application/json
 
 <a id="e6"></a> **E6** — `path/to/file.ext:line` establishes the displayed response outcome and fields.
 
-<a id="e7"></a> **E7** — `path/to/test-or-schema.ext:line` supports the displayed example; remove when no example is published.
+<a id="e7"></a> **E7** — `path/to/schema-or-transformer.ext:line` supports the remaining field definition and Basis; remove when no complete field reference is published.
 
 <a id="e8"></a> **E8** — `path/to/file.ext:line` establishes a material limitation or conflict; use the analysis boundary when the missing artifact itself is the limitation.
+
+<a id="e9"></a> **E9** — `path/to/test-or-schema.ext:line` supports the displayed example wire shape and fixed values; remove when no example is published.

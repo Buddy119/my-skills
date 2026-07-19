@@ -12,6 +12,8 @@ from markdown_structure import parse_markdown
 
 
 REQUIRED_KEYS = {
+    "artifact_type",
+    "artifact_schema_version",
     "behavior_id",
     "title",
     "repository",
@@ -29,21 +31,14 @@ REQUIRED_KEYS = {
     "external_dependencies",
     "external_http_calls",
     "field_mappings",
+    "failure_patterns",
     "analysis_limitations",
 }
 
 REQUIRED_HEADINGS = {
     "Summary",
-    "Trigger and entry point",
+    "Main path",
     "Behavior flow",
-    "Inputs",
-    "Preconditions and business rules",
-    "Happy path",
-    "Data access and processing",
-    "Object state transitions",
-    "Outputs and side effects",
-    "Failures, retries, and partial success",
-    "Open questions and conflicts",
     "Source notes",
 }
 
@@ -152,6 +147,11 @@ def main() -> int:
     if missing_keys:
         errors.append("missing YAML keys: " + ", ".join(missing_keys))
 
+    if scalar_value(frontmatter, "artifact_type") != "tech-behavior":
+        errors.append("artifact_type must be tech-behavior")
+    if scalar_value(frontmatter, "artifact_schema_version") != "4":
+        errors.append("tech-behavior artifact_schema_version must be 4")
+
     status = scalar_value(frontmatter, "overall_status")
     if status not in ALLOWED_STATUSES:
         errors.append("overall_status must be Confirmed, Inferred, Conflicting, or Unknown")
@@ -160,7 +160,7 @@ def main() -> int:
     if behavior_category not in ALLOWED_CATEGORIES:
         errors.append("behavior_category must be business, integration, or technical")
 
-    headings = set(re.findall(r"^##\s+(.+?)\s*$", body, re.M))
+    headings = set(re.findall(r"^#{2,6}\s+(.+?)\s*$", body, re.M))
     missing_headings = sorted(REQUIRED_HEADINGS - headings)
     if missing_headings:
         errors.append("missing sections: " + ", ".join(missing_headings))
@@ -371,6 +371,10 @@ def main() -> int:
             )
 
     if failure_pattern_ids:
+        if "Failures, retries, and partial success" not in headings:
+            errors.append(
+                "structured failure_patterns exist but the Failures, retries, and partial success section is missing"
+            )
         for pattern_id in failure_pattern_ids:
             expected_target = f"../failure-taxonomy.md#{pattern_id.lower()}"
             if not re.search(rf"\]\({re.escape(expected_target)}\)", body):

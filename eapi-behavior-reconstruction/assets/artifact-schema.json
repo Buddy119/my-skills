@@ -1,5 +1,5 @@
 {
-  "artifact_schema_registry_version": "5",
+  "artifact_schema_registry_version": "6",
   "manifest_schema_version": "2",
   "migration_plan_schema_version": "2",
   "transform_registry_ref": "migration-transform-registry.json",
@@ -48,8 +48,9 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["evidence-index", "working-behavior-catalog"],
       "migrations": {
-        "0": {"to": "2", "action": "archive-and-rebuild"},
-        "1": {"to": "2", "action": "archive-and-rebuild"}
+        "0": {"to": "3", "action": "archive-and-rebuild"},
+        "1": {"to": "3", "action": "archive-and-rebuild"},
+        "2": {"to": "3", "action": "archive-and-rebuild"}
       }
     },
     "repository-register": {
@@ -75,7 +76,7 @@
       }
     },
     "repository-synthesis": {
-      "current_version": "2",
+      "current_version": "3",
       "paths": [".work/repository-synthesis.md"],
       "template": "repository-synthesis-template.md",
       "producing_stage": "synthesis",
@@ -83,8 +84,9 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["behavior-dossier", "repository-register"],
       "migrations": {
-        "0": {"to": "2", "action": "archive-and-rebuild"},
-        "1": {"to": "2", "action": "archive-and-rebuild"}
+        "0": {"to": "3", "action": "archive-and-rebuild"},
+        "1": {"to": "3", "action": "archive-and-rebuild"},
+        "2": {"to": "3", "action": "archive-and-rebuild"}
       }
     },
     "business-model": {
@@ -94,11 +96,11 @@
       "producing_stage": "business-model",
       "rebuild_stage": "business-model",
       "unknown_action": "archive-and-rebuild",
-      "dependencies": ["repository-synthesis", "tech-behavior"],
+      "dependencies": ["behavior-dossier"],
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "repository-overview": {
-      "current_version": "2",
+      "current_version": "3",
       "paths": ["tech-pack/repository-overview.md"],
       "template": "repository-overview-template.md",
       "producing_stage": "tech-publication",
@@ -106,8 +108,9 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis"],
       "migrations": {
-        "0": {"to": "2", "action": "archive-and-rebuild"},
-        "1": {"to": "2", "action": "archive-and-rebuild"}
+        "0": {"to": "3", "action": "archive-and-rebuild"},
+        "1": {"to": "3", "action": "archive-and-rebuild"},
+        "2": {"to": "3", "action": "archive-and-rebuild"}
       }
     },
     "tech-behavior-catalog": {
@@ -121,7 +124,7 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "tech-behavior": {
-      "current_version": "3",
+      "current_version": "4",
       "paths": ["tech-pack/behaviors/*.md"],
       "template": "behavior-document-template.md",
       "producing_stage": "tech-publication",
@@ -129,9 +132,10 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis", "behavior-dossier"],
       "migrations": {
-        "0": {"to": "3", "action": "archive-and-rebuild"},
-        "1": {"to": "3", "action": "archive-and-rebuild"},
-        "2": {"to": "3", "action": "archive-and-rebuild"}
+        "0": {"to": "4", "action": "archive-and-rebuild"},
+        "1": {"to": "4", "action": "archive-and-rebuild"},
+        "2": {"to": "4", "action": "archive-and-rebuild"},
+        "3": {"to": "4", "action": "archive-and-rebuild"}
       }
     },
     "endpoint-matrix": {
@@ -145,7 +149,7 @@
       "migrations": {"0": {"to": "1", "action": "archive-and-rebuild"}}
     },
     "api-contract": {
-      "current_version": "2",
+      "current_version": "3",
       "paths": ["tech-pack/contracts/*.api-contract.md"],
       "template": "api-contract-document-template.md",
       "producing_stage": "api-contract-publication",
@@ -153,8 +157,9 @@
       "unknown_action": "archive-and-rebuild",
       "dependencies": ["repository-synthesis", "repository-register", "tech-behavior", "endpoint-matrix"],
       "migrations": {
-        "0": {"to": "2", "action": "archive-and-rebuild"},
-        "1": {"to": "2", "action": "archive-and-rebuild"}
+        "0": {"to": "3", "action": "archive-and-rebuild"},
+        "1": {"to": "3", "action": "archive-and-rebuild"},
+        "2": {"to": "3", "action": "archive-and-rebuild"}
       }
     },
     "data-lifecycle": {
@@ -266,7 +271,7 @@
       "producing_stage": "ba-publication",
       "rebuild_stage": "ba-publication",
       "unknown_action": "archive-and-rebuild",
-      "dependencies": ["business-model", "tech-behavior"],
+      "dependencies": ["business-model"],
       "migrations": {
         "0": {"to": "2", "action": "archive-and-rebuild"},
         "1": {"to": "2", "action": "archive-and-rebuild"}

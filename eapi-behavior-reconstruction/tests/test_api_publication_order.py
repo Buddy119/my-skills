@@ -52,7 +52,7 @@ def behavior_document(
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "3"\n'
+        'artifact_schema_version: "4"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -77,6 +77,7 @@ def behavior_document(
         "## Summary\n\nReturns the observed customer result. [E1](#e1)\n\n"
         "## Trigger and entry point\n\nThe application route invokes the handler.\n\n"
         + api_section
+        + "## Main path\n\n1. Accept the request.\n2. Return the result.\n\n"
         + "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
         "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
         "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"

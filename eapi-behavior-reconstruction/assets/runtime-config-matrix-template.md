@@ -10,6 +10,12 @@ coverage_status: "complete|partial|blocked"
 
 Include only configuration that changes triggering, branching, dependencies, timing, retry, recovery, data selection, or observable outcomes.
 
+## Behavior-changing variants
+
+Start with configuration choices that select a proven Market, Country, Tenant, Channel, Profile, Environment, Feature Flag, Dependency, or other behavior Variant. Explain the observable difference and link the affected Capability and Behavior before listing wiring detail. If no configuration-backed Variant is established, say so briefly.
+
+## Configuration reference
+
 | Configuration | Source/default | Read or wiring location | Affected behaviors | Behavioral effect | Scope/condition |
 |---|---|---|---|---|---|
 | Name *(Unknown)* | Environment/IaC/default/Unknown | Location | Behavior links | Effect | Condition [E1](#e1) |

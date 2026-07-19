@@ -1,6 +1,6 @@
 ---
 artifact_type: "tech-behavior"
-artifact_schema_version: "3"
+artifact_schema_version: "4"
 behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"
@@ -38,134 +38,133 @@ analysis_limitations:
 
 ## Summary
 
-Describe the observable behavior in two or three sentences. Do not claim that this is the original historical requirement.
+Explain what triggers this Behavior, what observable result it produces, and why it matters in two or three connected sentences. Do not lead with classes, methods, tables, or evidence status.
 
-## Trigger and entry point
+## Trigger, result, and scope
 
-- Trigger:
-- Application entry point:
-- External entry declaration:
-- Environment/runtime evidence:
-- External reachability:
+- **Trigger:** Supported invocation or event.
+- **Observable result:** Response, handoff, state change, or side effect.
+- **Repository boundary:** What is controlled here and what remains external.
+- **Important limitation:** Material Unknown or Conflict, when applicable.
 
-Use `*(Inferred)*`, `*(Unknown)*`, or `*(Conflicting)*` beside an affected label when the observation is not Confirmed. Support this section with a grouped Source Note such as [E1](#e1).
+Support the summary with one grouped Source Note such as [E1](#e1).
 
-## API contracts
+## Main path
 
-Include this section only for `entry_type: api`. Keep it short and link to every endpoint contract implemented by this behavior.
+Describe the normal successful path as a short ordered narrative. Put the principal decisions and observable result before implementation detail. Do not call one Variant the default unless code, configuration, or tests establish that selection.
 
-<!-- TEMPLATE: Use the stable `../contracts/<endpoint-id>.api-contract.md` destination and durable reader wording such as "API Contract". Do not describe generation order, a forward reference, or whether the target currently exists. Remove this comment. Non-API Behaviors must omit this section and use `api_contracts: []`. -->
-
-- [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
-
-[View endpoint exposure and reachability](../endpoint-matrix.md#repository-method-route)
-
-## BA scenarios
-
-Include this optional section only when the independent Business Model maps this Tech Behavior to one or more Scenarios. Add the same relationships to `ba_scenarios`. Omit the section and use `ba_scenarios: []` when no Scenario maps directly to this Behavior.
-
-- [Business Scenario](../../ba-pack/scenarios/repository.scenario.context-outcome.md)
+1. Receive or observe the trigger.
+2. Apply the key decision or rule.
+3. Perform the necessary state or boundary work.
+4. Produce the observable result.
 
 ## Behavior flow
 
+Keep the diagram small enough to retell. Show only decisions that change the result, state, or important side effect.
+
 ```mermaid
 flowchart TD
-    A[Trigger] --> B[Parse input]
-    B --> C{Valid?}
-    C -- No --> D[Return or route failure]
-    C -- Yes --> E[Execute behavior]
-    E --> F[Observable result]
+    A[Trigger] --> B[Principal validation or decision]
+    B -->|Accepted| C[Required work]
+    C --> D[Observable result]
+    B -->|Rejected or alternative| E[Visible alternative or failure]
 ```
 
-Explain the important nodes and branches with source evidence.
+## Material variants and risks
 
-## Inputs
+Include this section only when configuration, market, country, tenant, channel, profile, feature flag, Dependency outcome, or another proven condition materially changes this Behavior. Summarize the difference and link the repository Variant or Failure detail; do not copy configuration or failure tables.
 
-Describe non-API input messages, events, records, schedules, or invocation context. API behaviors use the dedicated API contract sections.
+| Variant or hotspot | Selection / trigger | Difference from the normal path | Observable impact | Deep dive |
+|---|---|---|---|---|
+| Variant or material risk *(Unknown)* | Supported condition | Rule, Dependency, Mapping, state, output, or recovery difference | Caller/business/state impact | Runtime Config, Failure, Dependency, Lifecycle, or Contract link [E2](#e2) |
 
-## External HTTP calls and mappings
+## Implementation reference
 
-Include this section only when executable code makes an outbound HTTP call to an external system. Otherwise remove it and keep both `external_http_calls: []` and `field_mappings: []`.
+Keep only applicable subsections. API caller fields belong in API Contracts. Repository-wide Dependency, Mapping, Lifecycle, and Failure detail belongs in the linked specialist documents.
 
-Use one row per remote operation used by this behavior, regardless of mapping count. Summarize why the operation matters and any material transformation or limitation. Keep call identity, executable-usage detail, and exact field-by-field mappings in the repository field document.
+### Inputs
 
-| Call | Why this behavior uses it | Usage IDs | Key transformation or limitation |
-|---|---|---|---|
-| [HTTP-001](../field-validation-and-mapping.md#http-001) | Behavior-relevant purpose | HTTP-001-U01 | Key rename/default/conversion, mapping count, or unresolved field [E2](#e2) |
+Describe non-API messages, records, schedules, or invocation context. For API Behaviors, link the Contract instead of copying its field tables.
 
-## Preconditions and business rules
+### Preconditions and business rules
 
-### BR-001 — Rule title
+Record rules that materially change the path or result. Use connected prose or a compact list; do not create one table row per code check.
 
-- Behavior:
-- Rule and effect: [E3](#e3)
-- Notes:
+### Data access and processing
 
-## Happy path
-
-1. Describe the ordered executable steps.
-2. Cite important transitions inline or directly below the step.
-
-## Data access and processing
-
-Keep actions and movement separate from object state. Link stable `ACT-*` identities when the repository lifecycle model applies.
+Keep Actions and data movement separate from Object State.
 
 | Action | Role | Object/resource | Input or source | Output or destination | State effect |
 |---|---|---|---|---|---|
-| `ACT-001` | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Object/resource | Input or boundary | Output, store, or boundary | `TRANS-001`, None observed, or Unknown [E4](#e4) |
+| `ACT-001` | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Object/resource | Input or boundary | Output, store, or boundary | `TRANS-001`, None observed, or Unknown [E3](#e3) |
 
-## Object state transitions
+### Object state transitions
 
-Include only evidence-backed object-condition changes. If none applies, state that no object state transition was established and link the processing/data-movement model when useful.
+Include only evidence-backed object-condition changes. Omit this subsection when no Transition applies.
 
 | Transition | Object | From state | To state | Causing action and condition | Observable or persisted result |
 |---|---|---|---|---|---|
-| [`TRANS-001`](../data-lifecycle.md#trans-001) *(Inferred)* | `OBJ-001` | `STATE-001` | `STATE-002` | `ACT-001`; condition | Result [E4](#e4) |
+| [`TRANS-001`](../data-lifecycle.md#trans-001) *(Inferred)* | `OBJ-001` | `STATE-001` | `STATE-002` | `ACT-001`; condition | Result [E3](#e3) |
 
-## Outputs and side effects
+### External HTTP calls and mappings
 
-| Output | Destination | Contract/resource | Condition |
+Include only when `external_http_calls` is non-empty. Use one row per Remote Operation, regardless of Mapping count.
+
+| Call | Why this Behavior uses it | Usage IDs | Key transformation or limitation |
 |---|---|---|---|
-| Event/response/call | Destination | Name | Condition [E5](#e5) |
+| [HTTP-001](../field-validation-and-mapping.md#http-001) | Behavior-relevant purpose | HTTP-001-U01 | Key transformation, mapping count, or unresolved field [E4](#e4) |
 
-## Failures, retries, and partial success
+### External dependencies
 
-Keep this Behavior's executable failure story here and link its repository-wide Pattern when reconciled. Add those stable IDs to `failure_patterns`; leave `failure_patterns: []` when no Pattern applies. Do not copy the complete taxonomy.
+Include only when `external_dependencies` is non-empty. Keep shared role and availability detail in External Dependency Contracts.
 
-| Failure or Pattern | Handling and visible result in this Behavior | State/retry/recovery |
+| Dependency | Usage-specific purpose | Criticality | Unavailability effect |
+|---|---|---|---|
+| [DEP-001](../external-dependency-contracts.md#dep-001) *(Unknown)* | Purpose | Required/Degradable/Optional/Unknown | Failure, fallback, partial result, or Unknown [E5](#e5) |
+
+### Failures, retries, and partial success
+
+Include material executable failure paths. Link reconciled `FAIL-*` identities without copying the repository taxonomy.
+
+| Failure or Pattern | Handling and visible result | State, retry, and recovery |
 |---|---|---|
-| [FAIL-001](../failure-taxonomy.md#fail-001) or behavior-specific failure *(Conflicting)* | Observed handling/result | State outcome and mechanism or Unknown [E6](#e6) |
+| [FAIL-001](../failure-taxonomy.md#fail-001) *(Conflicting)* | Observed handling/result | State outcome and mechanism or Unknown [E6](#e6) |
 
-## External dependencies
+### Outputs and side effects
 
-Include one concise row per synthesized Dependency used by this Behavior and use the same `dependency_id` in `external_dependencies`. Explain only the usage-specific purpose and impact; keep the shared role, Operations, remote Unknowns, and full availability model in External Dependency Contracts. Remove this section and use `external_dependencies: []` when none applies.
+Include only outputs or side effects that are not already clear from Main Path and related Contracts.
 
-| Dependency | Why this Behavior uses it | Criticality | Unavailability effect in this Behavior |
-|---|---|---|---|
-| [DEP-001](../external-dependency-contracts.md#dep-001) *(Unknown)* | Usage-specific purpose | Required/Degradable/Optional/Unknown | Failure, fallback, partial result, or Unknown [E7](#e7) |
+## Related documents
 
-## Related repository knowledge
+### API contracts
 
-Include only relevant links, such as the data lifecycle, field rules and external HTTP mappings, runtime configuration, dependency contracts, or failure taxonomy. Remove this optional section when no repository-level reference applies.
+<!-- TEMPLATE: Keep only for API Behaviors. Use durable reader wording and stable `../contracts/<endpoint-id>.api-contract.md` paths. Delete this comment. -->
+
+- [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
+- [Endpoint exposure and reachability](../endpoint-matrix.md#repository-method-route)
+
+### BA scenarios
+
+<!-- TEMPLATE: Keep only when the independent Business Model maps this Behavior to Scenarios. Delete this comment. -->
+
+- [Business Scenario](../../ba-pack/scenarios/repository.scenario.context-outcome.md)
+
+Add only relevant Lifecycle, Mapping, Runtime Config, Dependency, Failure, Contract, or Scenario links. Remove unused subsections.
 
 ## Open questions and conflicts
 
-| Question or conflict | Why it matters | Evidence needed |
-|---|---|---|
-| Item *(Unknown)* | Risk or impact | Artifact or owner |
+Include only material questions that affect interpretation, implementation, or impact analysis. Omit the section when none remains.
 
 ## Source notes
 
-<a id="e1"></a> **E1** — `path/to/entry-point.ext:10-35` supports the trigger and boundary summary.
+<a id="e1"></a> **E1** — `path/to/entry-point.ext:10-35` supports the trigger, main path, and observable result.
 
-<a id="e2"></a> **E2** — `path/to/http-client.ext:20-44` supports the outbound operation and mapping summary.
+<a id="e2"></a> **E2** — `path/to/variant-or-failure.ext:20-44` supports the material Variant or risk difference.
 
-<a id="e3"></a> **E3** — `path/to/rule.ext:15-31` and `path/to/test.ext:40-55` support the rule and rejection behavior.
+<a id="e3"></a> **E3** — `path/to/processing.ext:60-96` supports the processing and state-transition assessment.
 
-<a id="e4"></a> **E4** — `path/to/processing.ext:60-96` supports the processing actions and state-transition assessment.
+<a id="e4"></a> **E4** — `path/to/http-client.ext:20-54` supports the outbound operation and Mapping summary.
 
-<a id="e5"></a> **E5** — `path/to/output.ext:12-28` supports the observable outputs and side effects.
+<a id="e5"></a> **E5** — `path/to/dependency.ext:18-49` supports Dependency usage and unavailability impact.
 
 <a id="e6"></a> **E6** — `path/to/failure.ext:30-52` supports the failure handling and visible result.
-
-<a id="e7"></a> **E7** — `path/to/dependency.ext:18-49` supports the dependency usage and unavailability impact.

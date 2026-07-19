@@ -397,7 +397,7 @@ def parse_markdown(text: str, *, max_issues: int = 10) -> MarkdownStructure:
 
 def load_api_contract_structure(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("api_contract_structure_schema_version") != "1":
+    if payload.get("api_contract_structure_schema_version") != "2":
         raise ValueError("unsupported API Contract structure schema version")
     return payload
 
@@ -440,7 +440,12 @@ def validate_api_contract_tables(
                 )
             )
 
-    for section in ("Request", "Responses"):
+    declared_sections = {
+        str(definition.get("section"))
+        for definition in definitions.values()
+        if isinstance(definition, dict) and definition.get("section")
+    }
+    for section in declared_sections:
         section_range = ranges.get(section)
         if not section_range:
             continue

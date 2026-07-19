@@ -12,6 +12,7 @@ from pathlib import Path
 from markdown_structure import (
     load_api_contract_structure,
     parse_markdown,
+    section_ranges,
     validate_api_contract_tables,
 )
 
@@ -57,6 +58,18 @@ JSON_BLOCK_RE = re.compile(
     r"^```json[ \t]*\n(?P<content>.*?)^```[ \t]*$",
     re.M | re.S,
 )
+COMPLETE_FIELD_HEADERS = (
+    "Location",
+    "Field path",
+    "Type/format",
+    "Required or present when",
+    "Nullable",
+    "Default",
+    "Rules",
+    "Basis",
+)
+ALLOWED_COMPLETE_LOCATIONS = {"Header", "Path", "Query", "Body", "Response"}
+ALLOWED_FIELD_BASES = {"Executable", "Schema only", "Shared or opaque", "Conflict"}
 
 
 def split_frontmatter(text: str) -> tuple[str, str]:
@@ -115,6 +128,86 @@ def endpoint_status(cell: str) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
+def _plain_field(value: str) -> str:
+    return value.strip().strip("`").strip().lower()
+
+
+def _heading_context(structure: object, line: int) -> str | None:
+    headings = getattr(structure, "headings", ())
+    candidates = [
+        title
+        for level, title, heading_line in headings
+        if level == 3 and heading_line < line
+    ]
+    return candidates[-1] if candidates else None
+
+
+def validate_progressive_field_reference(structure: object) -> list[str]:
+    """Keep caller-first and remaining Schema fields mutually exclusive.
+
+    This is intentionally a referential check.  It does not decide whether a
+    field is important enough for the caller-first section or whether all Schema
+    fields were semantically reconstructed.
+    """
+
+    errors: list[str] = []
+    ranges = section_ranges(structure)  # type: ignore[arg-type]
+    core: set[tuple[str, str]] = set()
+    complete: set[tuple[str, str]] = set()
+    complete_tables = []
+    request_range = ranges.get("Request")
+    response_range = ranges.get("Responses")
+    detail_range = ranges.get("Complete field reference")
+    for table in getattr(structure, "tables", ()):
+        if request_range and request_range[0] < table.start_line <= request_range[1]:
+            context = _heading_context(structure, table.start_line)
+            if table.headers and table.headers[0] == "Header":
+                location = "Header"
+            elif table.headers and table.headers[0] == "Field path":
+                location = "Body"
+            elif table.headers and table.headers[0] == "Field":
+                location = "Path" if context == "Path parameters" else "Query" if context == "Query parameters" else "Unknown"
+            else:
+                continue
+            for row in table.rows:
+                if row and _plain_field(row[0]):
+                    core.add((location.lower(), _plain_field(row[0])))
+        elif response_range and response_range[0] < table.start_line <= response_range[1]:
+            if table.headers and table.headers[0] == "Field path":
+                for row in table.rows:
+                    if row and _plain_field(row[0]):
+                        core.add(("response", _plain_field(row[0])))
+        elif detail_range and detail_range[0] < table.start_line <= detail_range[1]:
+            if table.headers != COMPLETE_FIELD_HEADERS:
+                continue
+            complete_tables.append(table)
+            for row in table.rows:
+                location = row[0].strip()
+                field = _plain_field(row[1])
+                basis = row[7].strip()
+                if location not in ALLOWED_COMPLETE_LOCATIONS:
+                    errors.append(
+                        f"Complete field reference has invalid Location {location!r}; use Header, Path, Query, Body, or Response"
+                    )
+                if basis not in ALLOWED_FIELD_BASES:
+                    errors.append(
+                        f"Complete field reference has invalid Basis {basis!r}; use Executable, Schema only, Shared or opaque, or Conflict"
+                    )
+                identity = (location.lower(), field)
+                if identity in complete:
+                    errors.append(
+                        f"Complete field reference repeats field identity: {location} {row[1]}"
+                    )
+                complete.add(identity)
+    if detail_range and not complete_tables:
+        errors.append("Complete field reference must use the registered field-reference table")
+    for location, field in sorted(core & complete):
+        errors.append(
+            f"caller-first and Complete field reference sections duplicate field identity: {location} {field}"
+        )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("document", type=Path)
@@ -148,8 +241,8 @@ def main() -> int:
 
     if scalar_value(frontmatter, "artifact_type") != "api-contract":
         errors.append("artifact_type must be api-contract")
-    if scalar_value(frontmatter, "artifact_schema_version") != "2":
-        errors.append("api-contract artifact_schema_version must be 2")
+    if scalar_value(frontmatter, "artifact_schema_version") != "3":
+        errors.append("api-contract artifact_schema_version must be 3")
 
     try:
         structure_schema = load_api_contract_structure(
@@ -162,6 +255,7 @@ def main() -> int:
             f"[{issue.code}] line {issue.line}: {issue.message}"
             for issue in validate_api_contract_tables(structure, structure_schema)
         )
+        errors.extend(validate_progressive_field_reference(structure))
 
     status = scalar_value(frontmatter, "contract_status")
     if status not in ALLOWED_STATUSES:

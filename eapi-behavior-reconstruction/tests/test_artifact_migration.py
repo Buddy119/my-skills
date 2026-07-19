@@ -128,10 +128,10 @@ class ArtifactMigrationTests(unittest.TestCase):
     def test_init_rejects_artifact_registry_template_drift(self) -> None:
         copied = self.root / "skill-copy"
         shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        template = copied / "assets" / "api-contract-document-template.md"
+        template = copied / "assets" / "business-model-template.md"
         template.write_text(
             template.read_text().replace(
-                'artifact_schema_version: "2"', 'artifact_schema_version: "99"', 1
+                'artifact_schema_version: "1"', 'artifact_schema_version: "99"', 1
             )
         )
         output = self.root / "drift-output"
@@ -283,7 +283,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         step = next(step for step in self.plan()["steps"] if step["artifact_type"] == "api-contract")
         self.assertEqual(step["action"], "archive-and-rebuild")
 
-    def test_reader_presentation_versions_republish_from_tech_without_rebuilding_models(self) -> None:
+    def test_reader_priority_versions_rebuild_synthesis_before_reader_publication(self) -> None:
         self.add_evidence()
         synthesis = self.output / ".work" / "repository-synthesis.md"
         synthesis.write_text(
@@ -315,11 +315,11 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
 
         payload = self.resume()
-        self.assertEqual(payload["resume_stage_after_migration"], "tech-publication")
+        self.assertEqual(payload["resume_stage_after_migration"], "synthesis")
         steps = {step["artifact_type"]: step for step in self.plan()["steps"]}
         self.assertEqual(steps["repository-overview"]["action"], "archive-and-rebuild")
         self.assertEqual(steps["ba-overview"]["action"], "archive-and-rebuild")
-        self.assertEqual(steps["repository-synthesis"]["action"], "preserve")
+        self.assertEqual(steps["repository-synthesis"]["action"], "archive-and-rebuild")
         self.assertEqual(steps["business-model"]["action"], "preserve")
 
     def test_unversioned_new_looking_contract_remains_unknown(self) -> None:
