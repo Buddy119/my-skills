@@ -340,6 +340,21 @@ class ArtifactMigrationTests(unittest.TestCase):
             "---\nartifact_type: \"repository-synthesis\"\n"
             "artifact_schema_version: \"1\"\n---\n# Invented during migration\n"
         )
+        validation = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+            expected=1,
+        )
+        self.assertEqual(validation["result"], "blocked")
+        self.assertTrue(
+            any(
+                item["code"] in {"CANDIDATE-MANIFEST", "MIGRATION-VALIDATION"}
+                for item in validation["blocking_errors"]["items"]
+            )
+        )
         failed = self.run_cmd(
             "commit",
             "--output",
@@ -398,6 +413,27 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(step["expected"]["source_record_counts"]["flat_http_mappings"], 2)
 
         begun = self.begin_migration()
+        scaffold = self.run_cmd(
+            "scaffold",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+            "--artifact-type",
+            "repository-synthesis",
+            expected=2,
+        )
+        self.assertIn("not allowed during migration", scaffold["error"])
+        validation = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        self.assertEqual(validation["result"], "ready")
+        self.assertEqual(validation["semantic_or_document_errors"]["count"], 0)
+        self.assertEqual(validation["blocking_errors"]["count"], 0)
         mechanical_manifest = json.loads(
             Path(begun["mechanical_output_manifest"]).read_text(encoding="utf-8")
         )

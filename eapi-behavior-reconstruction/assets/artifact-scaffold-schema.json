@@ -1,0 +1,89 @@
+{
+  "artifact_scaffold_schema_version": "1",
+  "artifact_types": {
+    "behavior-dossier": {
+      "path_identity_field": "behavior_id",
+      "identity_fields": {
+        "behavior_id": "repository.behavior-name"
+      }
+    },
+    "repository-synthesis": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "business-model": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "repository-overview": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "tech-behavior-catalog": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "tech-behavior": {
+      "path_identity_field": "behavior_id",
+      "identity_fields": {
+        "behavior_id": "repository.behavior-name"
+      }
+    },
+    "endpoint-matrix": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "api-contract": {
+      "path_identity_field": "endpoint_id",
+      "identity_fields": {
+        "endpoint_id": [
+          "repository.method-route",
+          "repository-method-route"
+        ],
+        "behavior_id": [
+          "repository.behavior-name"
+        ]
+      }
+    },
+    "data-lifecycle": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "field-validation-and-mapping": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "runtime-config-matrix": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "external-dependency-contracts": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "failure-taxonomy": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "ba-overview": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "ba-catalog": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "ba-journey": {
+      "path_identity_field": "journey_id",
+      "identity_fields": {
+        "journey_id": "repository.journey.business-goal"
+      }
+    },
+    "ba-scenario": {
+      "path_identity_field": "scenario_id",
+      "identity_fields": {
+        "scenario_id": "repository.scenario.context-outcome"
+      }
+    }
+  }
+}

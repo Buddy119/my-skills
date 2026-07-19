@@ -108,6 +108,16 @@ class ArtifactRegistry:
         return matches[0] if matches else None
 
 
+@dataclass(frozen=True)
+class ArtifactManifestAssessment:
+    """Separate refreshable Manifest drift from structural integrity failures."""
+
+    status: str
+    stale_reasons: tuple[str, ...] = ()
+    stale_paths: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+
+
 def now_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -477,15 +487,26 @@ def write_artifact_manifest(
     return path
 
 
-def validate_artifact_manifest(root: Path, registry: ArtifactRegistry) -> list[str]:
+def assess_artifact_manifest(
+    root: Path, registry: ArtifactRegistry
+) -> ArtifactManifestAssessment:
     path = root / ".work" / "artifact-manifest.json"
     if not path.is_file():
-        return ["artifact manifest is missing"]
+        return ArtifactManifestAssessment(
+            status="invalid", errors=("artifact manifest is missing",)
+        )
     try:
         manifest = _load_json_object(path)
     except ArtifactSchemaError as exc:
-        return [str(exc)]
+        return ArtifactManifestAssessment(status="invalid", errors=(str(exc),))
     errors: list[str] = []
+    stale_reasons: list[str] = []
+    stale_paths: list[str] = []
+
+    def stale(relative: str, message: str) -> None:
+        stale_reasons.append(message)
+        stale_paths.append(relative)
+
     if manifest.get("artifact_type") != "artifact-manifest":
         errors.append("artifact manifest has the wrong artifact_type")
     if manifest.get("artifact_schema_version") != registry.definitions["artifact-manifest"].current_version:
@@ -497,22 +518,38 @@ def validate_artifact_manifest(root: Path, registry: ArtifactRegistry) -> list[s
     raw_entries = manifest.get("artifacts")
     if not isinstance(raw_entries, list):
         errors.append("artifact manifest artifacts must be a list")
-        return errors
+        return ArtifactManifestAssessment(status="invalid", errors=tuple(errors))
     declared: dict[str, dict[str, Any]] = {}
     for entry in raw_entries:
         if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
             errors.append("artifact manifest contains an invalid artifact entry")
             continue
         relative = entry["path"]
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            errors.append(f"artifact manifest contains an unsafe path: {relative}")
+            continue
         if relative in declared:
             errors.append(f"artifact manifest contains a duplicate path: {relative}")
+            continue
+        try:
+            definition = registry.match(relative)
+        except ArtifactSchemaError as exc:
+            errors.append(str(exc))
+            continue
+        if definition is None:
+            errors.append(f"artifact manifest entry is not registered: {relative}")
             continue
         declared[relative] = entry
 
     actual_paths: set[str] = set()
     for artifact in formal_files(root):
         relative = artifact.relative_to(root).as_posix()
-        definition = registry.match(relative)
+        try:
+            definition = registry.match(relative)
+        except ArtifactSchemaError as exc:
+            errors.append(str(exc))
+            continue
         if definition is None:
             errors.append(f"formal artifact is not registered: {relative}")
             continue
@@ -526,15 +563,36 @@ def validate_artifact_manifest(root: Path, registry: ArtifactRegistry) -> list[s
             )
         entry = declared.get(relative)
         if entry is None:
-            errors.append(f"artifact is missing from manifest: {relative}")
+            stale(relative, f"artifact is missing from manifest: {relative}")
             continue
         if entry.get("artifact_type") != observed_type or entry.get("artifact_schema_version") != observed_version:
-            errors.append(f"artifact manifest metadata differs from file: {relative}")
+            stale(relative, f"artifact manifest metadata differs from file: {relative}")
         if entry.get("sha256") != sha256_file(artifact):
-            errors.append(f"artifact manifest checksum differs from file: {relative}")
+            stale(relative, f"artifact manifest checksum differs from file: {relative}")
     for relative in sorted(set(declared) - actual_paths):
-        errors.append(f"artifact manifest references a missing file: {relative}")
-    return errors
+        stale(relative, f"artifact manifest references a missing file: {relative}")
+
+    if errors:
+        return ArtifactManifestAssessment(
+            status="invalid",
+            stale_reasons=tuple(stale_reasons),
+            stale_paths=tuple(stale_paths),
+            errors=tuple(errors),
+        )
+    if stale_reasons:
+        return ArtifactManifestAssessment(
+            status="stale",
+            stale_reasons=tuple(stale_reasons),
+            stale_paths=tuple(stale_paths),
+        )
+    return ArtifactManifestAssessment(status="valid")
+
+
+def validate_artifact_manifest(root: Path, registry: ArtifactRegistry) -> list[str]:
+    """Strict validation used by commit, finalization, migration, and pack validators."""
+
+    assessment = assess_artifact_manifest(root, registry)
+    return [*assessment.errors, *assessment.stale_reasons]
 
 
 def current_pack_is_versioned(root: Path, registry: ArtifactRegistry) -> bool:

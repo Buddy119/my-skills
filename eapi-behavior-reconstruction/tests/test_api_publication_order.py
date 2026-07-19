@@ -209,14 +209,45 @@ class ApiPublicationOrderTests(unittest.TestCase):
         api_commands = executor.validator_commands(
             "api-contract-publication", candidate, self.repo
         )
+        diagnostic_commands = executor.validator_commands(
+            "tech-publication",
+            candidate,
+            self.repo,
+            diagnostic_manifest=True,
+        )
         tech_behavior = next(
             command for command in tech_commands if "validate_behavior_doc.py" in command[1]
         )
         api_behavior = next(
             command for command in api_commands if "validate_behavior_doc.py" in command[1]
         )
+        tech_pack = next(
+            command for command in tech_commands if "validate_pack_links.py" in command[1]
+        )
+        api_pack = next(
+            command for command in api_commands if "validate_pack_links.py" in command[1]
+        )
+        diagnostic_pack = next(
+            command
+            for command in diagnostic_commands
+            if "validate_pack_links.py" in command[1]
+        )
         self.assertIn("--allow-missing-api-contracts", tech_behavior)
         self.assertNotIn("--allow-missing-api-contracts", api_behavior)
+        self.assertEqual(
+            tech_pack[tech_pack.index("--validation-profile") + 1],
+            "tech-publication",
+        )
+        self.assertEqual(
+            api_pack[api_pack.index("--validation-profile") + 1],
+            "complete",
+        )
+        self.assertEqual(
+            diagnostic_pack[diagnostic_pack.index("--validation-profile") + 1],
+            "tech-publication",
+        )
+        self.assertIn("--skip-artifact-manifest", diagnostic_pack)
+        self.assertNotIn("--require-artifact-manifest", diagnostic_pack)
 
     def test_api_stage_skip_rejects_behavior_or_catalog_intent(self) -> None:
         executor = load_executor_module()

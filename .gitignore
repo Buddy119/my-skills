@@ -5,3 +5,5 @@ insomnia-migration/
 *.migration-report.md
 *.script-report.md
 *.insomnia.json
+__pycache__/
+*.py[cod]

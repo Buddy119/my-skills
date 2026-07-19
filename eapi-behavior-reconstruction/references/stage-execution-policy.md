@@ -69,6 +69,30 @@ python3 <skill-root>/scripts/stage_executor.py begin \
 
 The response includes a transaction ID, Candidate root, Generation information when applicable, and the stage Checkpoint Ledger. Perform every write for that stage under the returned Candidate. Do not write the corresponding files directly under the formal output root.
 
+## Artifact Scaffold protocol
+
+Create every new template-backed working or Reader Artifact through the active normal-stage Transaction:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py scaffold \
+  --output <output-dir> \
+  --transaction <transaction-id> \
+  --artifact-type <artifact-type> \
+  [--identity <key>=<value>]... \
+  --json
+```
+
+Use one command per Artifact. Singleton types such as `repository-synthesis`, `repository-overview`, and `business-model` need no Identity. Dynamic types require the identities declared by the Scaffold Schema:
+
+- `behavior-dossier` and `tech-behavior`: `behavior_id`.
+- `api-contract`: `endpoint_id` and its already-established `behavior_id`.
+- `ba-journey`: `journey_id`.
+- `ba-scenario`: `scenario_id`.
+
+The executor reads the template, schema version, producing stage, and path pattern from the Artifact Registry and Scaffold Schema. It writes only type/version, repository/commit, explicitly supplied identities, exact identity tokens, and the deterministic Candidate path. It does not choose identities, update catalogs or relationships, infer Method/Route, or write semantic content.
+
+Scaffolding is forbidden for Migration, Finalization, executor-owned Artifacts, and a type owned by another stage. It never refreshes the Candidate Manifest or changes State, Checkpoints, Transaction, Receipt, Generation, or the formal Pack. A successful creation normally makes the Candidate Manifest `stale` until commit; this is expected. If the path already contains the same identity, version, repository, and commit, `already-exists` returns without changing a byte. Any conflict fails; there is no overwrite option. Fill the returned file without editing its executor-owned identity fields.
+
 ## Checkpoint protocol
 
 Every stage has a fixed ordered Checkpoint contract. For normal semantic stages, after completing and reviewing one item, record it through:
@@ -102,7 +126,18 @@ Fixed Checkpoints:
 | `ba-publication` | `journeys`, `scenarios`, `ba-overview-catalog`, `ba-backlinks`, `ba-validation` |
 | `finalization` | `mechanical-review`, `fact-sampling`, `readability-review`, `release-readiness` |
 
-For a normal stage, commit only after semantic work, checkpoints, and review are complete:
+For every stage, run the compact read-only gate after its work and checkpoints are complete:
+
+```bash
+python3 <skill-root>/scripts/stage_executor.py validate \
+  --output <output-dir> \
+  --transaction <transaction-id> \
+  --json
+```
+
+The report separates content errors, trusted Candidate Manifest drift, cross-stage forward references, lifecycle/integrity blockers, and warnings. `ready` requires zero `semantic_or_document_errors` and zero `blocking_errors`. Expected Manifest refresh and Tech-stage API/BA forward references do not block. The command uses an ephemeral Synthesis or Business Model lifecycle projection, never edits the Candidate, and supports a sealed Migration Candidate without relaxing its immutability. Detailed output is capped while total and suppressed counts remain accurate.
+
+Commit only after semantic work, checkpoints, review, and compact validation are complete:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -178,10 +213,19 @@ Read at least:
 
 - Stage, stage status, current Checkpoint, and Checkpoint summary.
 - Working Generation ID/status and published Generation ID/commit.
+- Formal and Candidate Artifact Manifest status, stale reasons, invalid errors, and refresh scope.
 - Formal drift status.
 - Release readiness.
 - Active transaction, failed Validators, and recovery requirement.
 - For Migration, the sealed Mechanical Output Manifest path/hash and Transform count; do not treat an editable Candidate as valid.
+
+Interpret Artifact Manifest status as follows:
+
+- `valid` means the recorded Artifact set, identity, version, and hashes match the inspected root.
+- `stale` means a trusted active transaction has changed executor-owned lifecycle State, or the editable Candidate contains registered current-version Artifact changes that commit can deterministically re-index. It does not mean the content has passed its Validators.
+- `invalid` means structural or version corruption, an unregistered or wrongly identified Artifact, an untrusted formal-file change, or lifecycle evidence that cannot prove the drift belongs to the active transaction.
+
+`artifact_manifest_status` describes the formal output. `candidate_artifact_manifest_status` describes the active Candidate and is `not-applicable` without a transaction. Treat `manifest_refresh_pending: formal|candidate|both` as an expected pre-commit refresh, not a knowledge-Pack failure. Do not edit or regenerate the Manifest manually: commit refreshes it and then applies the strict Manifest gate. Finalization and `release_readiness: ready` require a `valid` formal Manifest; `stale` is never publishable.
 
 `failed` means the Candidate is retained and neither the current Generation nor formal Pack was advanced. Correct the Candidate and retry the same transaction, or abort it:
 
@@ -220,8 +264,8 @@ Use this sequence without reordering:
 1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
-4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract forward references, but this stage creates neither Contract stubs nor Endpoint Matrix. Its Behavior validation relaxes only target-file existence; identity, exact path, uniqueness, and visible links remain mandatory.
-5. `api-contract-publication`: Materialize every planned application Contract and the Endpoint Matrix in the Generation, then strictly validate Behavior, Contract, Catalog, and Matrix relationships; use an evidence-based skip only when no API publication intent exists.
+4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract forward references, but this stage creates neither Contract stubs nor Endpoint Matrix. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, ordinary links, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`. Behavior validation still requires identity, exact path, uniqueness, and visible links.
+5. `api-contract-publication`: Materialize every planned application Contract and the Endpoint Matrix in the Generation, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
 6. `business-model`: independent Business Model in the Generation.
 7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip.
 8. `finalization`: Markdown-first mechanical validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.

@@ -25,6 +25,7 @@ from typing import Any, Iterable
 from artifact_schema import (
     ArtifactSchemaError,
     add_artifact_metadata,
+    assess_artifact_manifest,
     artifact_metadata,
     build_migration_plan,
     current_pack_is_versioned,
@@ -37,6 +38,13 @@ from artifact_schema import (
     validate_template_contract,
     write_artifact_manifest,
     write_migration_plan,
+)
+from artifact_scaffold import (
+    ArtifactScaffoldError,
+    existing_artifact_matches,
+    load_scaffold_schema,
+    parse_identity_arguments,
+    render_artifact,
 )
 from register_schema import (
     RegisterSchemaError,
@@ -187,6 +195,18 @@ FORMAL_DRIFT_EXCLUDES = {
     ".work/analysis-state.yaml",
     ".work/artifact-manifest.json",
     ".work/migration-plan.yaml",
+}
+STAGE_VALIDATION_REPORT_SCHEMA_VERSION = "1"
+VALIDATION_DETAIL_LIMIT = 50
+VALIDATION_PER_CODE_LIMIT = 10
+VALIDATABLE_TRANSACTION_STATUSES = {"in-progress", "failed"}
+VALIDATABLE_JOURNAL_PHASES = {
+    "not-started",
+    "rolled-back",
+    "rolled-back-after-commit-error",
+    "rolled-back-after-post-validation",
+    "rolled-back-by-recover",
+    "rolled-back-generation",
 }
 
 
@@ -881,10 +901,13 @@ def command_init(args: argparse.Namespace) -> int:
     try:
         bundled_check = validate_bundled_contract(template)
         registry = load_registry()
+        load_scaffold_schema(registry, assets_root=template_root())
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
         raise ExecutorError(f"bundled Artifact Schema is invalid: {exc}") from exc
+    except ArtifactScaffoldError as exc:
+        raise ExecutorError(f"bundled Artifact Scaffold Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1006,10 +1029,17 @@ def run_validator(command: list[str], cwd: Path) -> dict[str, Any]:
     }
 
 
-def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str]]:
+def validator_commands(
+    stage: str,
+    candidate: Path,
+    repo: Path,
+    *,
+    diagnostic_manifest: bool = False,
+    analysis_state_override: Path | None = None,
+) -> list[list[str]]:
     scripts = Path(__file__).resolve().parent
     python = sys.executable
-    state = candidate / ".work" / "analysis-state.yaml"
+    state = analysis_state_override or candidate / ".work" / "analysis-state.yaml"
     catalog = candidate / ".work" / "behavior-catalog.yaml"
     dossiers = candidate / ".work" / "behavior-dossiers"
     commands: list[list[str]] = []
@@ -1084,29 +1114,52 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
                 continue
             commands.append([python, str(scripts / "validate_ba_scenario.py"), str(document)])
 
-    if stage in {"api-contract-publication", "ba-publication", "finalization"}:
-        commands.append(
-            [
-                python,
-                str(scripts / "validate_pack_links.py"),
-                str(candidate),
-                "--repo",
-                str(repo),
-                "--json",
-                "--require-artifact-manifest",
-            ]
+    if stage in {
+        "tech-publication",
+        "api-contract-publication",
+        "ba-publication",
+        "finalization",
+    }:
+        command = [
+            python,
+            str(scripts / "validate_pack_links.py"),
+            str(candidate),
+            "--repo",
+            str(repo),
+            "--json",
+            "--validation-profile",
+            "tech-publication" if stage == "tech-publication" else "complete",
+        ]
+        command.append(
+            "--skip-artifact-manifest"
+            if diagnostic_manifest
+            else "--require-artifact-manifest"
         )
+        commands.append(command)
     return commands
 
 
-def stage_gates(stage: str, candidate: Path, repo: Path) -> tuple[list[str], list[dict[str, Any]]]:
+def stage_gates(
+    stage: str,
+    candidate: Path,
+    repo: Path,
+    *,
+    diagnostic_manifest: bool = False,
+    analysis_state_override: Path | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
     errors: list[str] = []
     try:
         registry = load_registry()
-        errors.extend(
-            f"Artifact Schema: {message}"
-            for message in validate_artifact_manifest(candidate, registry)
-        )
+        if diagnostic_manifest:
+            assessment = assess_artifact_manifest(candidate, registry)
+            errors.extend(
+                f"Artifact Schema: {message}" for message in assessment.errors
+            )
+        else:
+            errors.extend(
+                f"Artifact Schema: {message}"
+                for message in validate_artifact_manifest(candidate, registry)
+            )
     except ArtifactSchemaError as exc:
         errors.append(f"bundled Artifact Schema is invalid: {exc}")
     require_paths(
@@ -1214,11 +1267,293 @@ def stage_gates(stage: str, candidate: Path, repo: Path) -> tuple[list[str], lis
                     )
                 )
 
-    results = [run_validator(command, candidate) for command in validator_commands(stage, candidate, repo)]
+    results = [
+        run_validator(command, candidate)
+        for command in validator_commands(
+            stage,
+            candidate,
+            repo,
+            diagnostic_manifest=diagnostic_manifest,
+            analysis_state_override=analysis_state_override,
+        )
+    ]
     for result in results:
         if result["exit_code"] != 0:
             errors.append("validator failed: " + " ".join(result["command"]))
     return errors, results
+
+
+def validation_item(
+    code: str,
+    message: str,
+    *,
+    source: str,
+    path: str | None = None,
+    line: int | None = None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "code": code,
+        "source": source,
+        "message": message,
+    }
+    if path:
+        item["path"] = path
+    if line is not None:
+        item["line"] = line
+    return item
+
+
+def compact_validation_section(
+    items: list[dict[str, Any]],
+    *,
+    total_count: int | None = None,
+) -> dict[str, Any]:
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        key = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    visible: list[dict[str, Any]] = []
+    per_code: dict[str, int] = {}
+    for item in unique:
+        code = str(item.get("code", "UNKNOWN"))
+        if len(visible) >= VALIDATION_DETAIL_LIMIT:
+            continue
+        if per_code.get(code, 0) >= VALIDATION_PER_CODE_LIMIT:
+            continue
+        visible.append(item)
+        per_code[code] = per_code.get(code, 0) + 1
+    observed_count = len(unique) if total_count is None else max(total_count, len(unique))
+    return {
+        "count": observed_count,
+        "items": visible,
+        "suppressed_count": max(0, observed_count - len(visible)),
+    }
+
+
+def validator_name(result: dict[str, Any]) -> str:
+    command = result.get("command", [])
+    if isinstance(command, list) and len(command) > 1:
+        return Path(str(command[1])).name
+    return "validator"
+
+
+def parse_validator_diagnostics(
+    result: dict[str, Any],
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    int,
+    int,
+    int,
+]:
+    """Classify one Validator result without copying its raw output into the report."""
+    name = validator_name(result)
+    semantic: list[dict[str, Any]] = []
+    blocking: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    forward: list[dict[str, Any]] = []
+    forward_total = 0
+    semantic_total = 0
+    warning_total = 0
+    stdout = str(result.get("stdout", ""))
+    payload: dict[str, Any] | None = None
+    try:
+        candidate_payload = json.loads(stdout)
+        if isinstance(candidate_payload, dict):
+            payload = candidate_payload
+    except json.JSONDecodeError:
+        payload = None
+
+    if payload is not None and isinstance(payload.get("documents"), list):
+        for document in payload["documents"]:
+            if not isinstance(document, dict):
+                continue
+            path = str(document.get("path", "")) or None
+            for issue in document.get("issues", []):
+                if not isinstance(issue, dict):
+                    continue
+                line_value = issue.get("line")
+                semantic.append(
+                    validation_item(
+                        str(issue.get("code", "MARKDOWN-STRUCTURE")),
+                        str(issue.get("message", "invalid Markdown structure")),
+                        source=name,
+                        path=path,
+                        line=line_value if isinstance(line_value, int) else None,
+                    )
+                )
+        semantic_total = len(semantic)
+    elif payload is not None and isinstance(payload.get("errors"), dict):
+        for code, messages in payload["errors"].items():
+            if not isinstance(messages, list):
+                continue
+            semantic.extend(
+                validation_item(str(code), str(message), source=name)
+                for message in messages
+            )
+        skipped = payload.get("skipped", {})
+        if isinstance(skipped, dict):
+            semantic.extend(
+                validation_item(
+                    f"SKIPPED:{code}",
+                    str(reason),
+                    source=name,
+                )
+                for code, reason in skipped.items()
+            )
+        primary_errors = payload.get("primary_errors")
+        semantic_total = (
+            primary_errors if isinstance(primary_errors, int) else len(semantic)
+        ) + (len(skipped) if isinstance(skipped, dict) else 0)
+        warning_messages = payload.get("warning_messages", [])
+        if isinstance(warning_messages, list):
+            warnings.extend(
+                validation_item("VALIDATOR-WARNING", str(message), source=name)
+                for message in warning_messages
+            )
+        declared_warnings = payload.get("warnings")
+        warning_total = (
+            declared_warnings
+            if isinstance(declared_warnings, int)
+            else len(warnings)
+        )
+        forward_total = (
+            payload.get("deferred_link_count", 0)
+            if isinstance(payload.get("deferred_link_count", 0), int)
+            else 0
+        )
+        deferred_links = payload.get("deferred_links", [])
+        if isinstance(deferred_links, list):
+            for item in deferred_links:
+                if not isinstance(item, dict):
+                    continue
+                forward.append(
+                    {
+                        "code": str(item.get("check", "cross-stage-reference")),
+                        "source": str(item.get("source", "")),
+                        "target": str(item.get("target", "")),
+                    }
+                )
+    else:
+        error_pattern = re.compile(
+            r"^ERROR(?:\s+\[(?P<code>[^]]+)\])?(?::\s*|\s+)(?P<message>.*)$"
+        )
+        warning_pattern = re.compile(
+            r"^WARNING(?:\s+\[(?P<code>[^]]+)\])?(?::\s*|\s+)(?P<message>.*)$"
+        )
+        for line in stdout.splitlines():
+            if match := error_pattern.match(line.strip()):
+                semantic.append(
+                    validation_item(
+                        match.group("code") or "DOCUMENT-VALIDATION",
+                        match.group("message"),
+                        source=name,
+                    )
+                )
+            elif match := warning_pattern.match(line.strip()):
+                warnings.append(
+                    validation_item(
+                        match.group("code") or "VALIDATOR-WARNING",
+                        match.group("message"),
+                        source=name,
+                    )
+                )
+        semantic_total = len(semantic)
+        warning_total = len(warnings)
+
+    if result.get("exit_code") != 0 and not semantic:
+        stderr = str(result.get("stderr", "")).strip()
+        detail = stderr.splitlines()[0] if stderr else "Validator exited without structured errors"
+        blocking.append(
+            validation_item("VALIDATOR-EXECUTION", detail, source=name)
+        )
+    return (
+        semantic,
+        blocking,
+        warnings,
+        forward,
+        forward_total,
+        max(semantic_total, len(semantic)),
+        max(warning_total, len(warnings)),
+    )
+
+
+def projected_validation_state(
+    stage: str,
+    candidate: Path,
+) -> tuple[str, list[dict[str, Any]]]:
+    state = (candidate / STATE_FILE).read_text(encoding="utf-8")
+    semantic: list[dict[str, Any]] = []
+    if stage == "synthesis":
+        state = candidate_state_for_commit(state, stage, "complete", False)
+    elif stage == "business-model":
+        model = candidate / ".work" / "business-model.md"
+        model_status = None
+        if model.is_file():
+            model_status = scalar_value(model.read_text(encoding="utf-8"), "business_model_status")
+        if model_status in {"complete", "partial", "blocked"}:
+            state = candidate_state_for_commit(state, stage, model_status, False)
+        else:
+            semantic.append(
+                validation_item(
+                    "BUSINESS-MODEL-SEMANTIC-RESULT",
+                    "business-model.md must declare business_model_status complete, partial, or blocked before validation",
+                    source="stage-executor",
+                    path=".work/business-model.md",
+                )
+            )
+    return state, semantic
+
+
+def empty_stage_validation_report(
+    stage: str | None,
+    transaction_id: str,
+) -> dict[str, Any]:
+    return {
+        "stage_validation_report_schema_version": STAGE_VALIDATION_REPORT_SCHEMA_VERSION,
+        "result": "ready",
+        "stage": stage,
+        "transaction_id": transaction_id,
+        "semantic_or_document_errors": compact_validation_section([]),
+        "expected_candidate_manifest_drift": {
+            "status": "none",
+            "refresh_on_commit": False,
+            "reasons": [],
+        },
+        "cross_stage_forward_references": {
+            "count": 0,
+            "groups": [],
+            "items": [],
+            "suppressed_count": 0,
+        },
+        "blocking_errors": compact_validation_section([]),
+        "warnings": compact_validation_section([]),
+        "validator_summary": [],
+    }
+
+
+def forward_reference_section(
+    items: list[dict[str, Any]], total_count: int
+) -> dict[str, Any]:
+    compact = compact_validation_section(items, total_count=total_count)
+    groups: dict[str, int] = {}
+    for item in items:
+        code = str(item.get("code", "cross-stage-reference"))
+        groups[code] = groups.get(code, 0) + 1
+    return {
+        "count": compact["count"],
+        "groups": [
+            {"kind": kind, "count": count}
+            for kind, count in sorted(groups.items())
+        ],
+        "items": compact["items"],
+        "suppressed_count": compact["suppressed_count"],
+    }
 
 
 def candidate_state_for_commit(
@@ -1667,6 +2002,31 @@ def command_begin(args: argparse.Namespace) -> int:
         if current_stage in GENERATION_STAGES:
             candidate_state = set_scalar(candidate_state, "publication_status", "staging")
         atomic_write_text(candidate / STATE_FILE, candidate_state)
+        candidate_invalidated: list[dict[str, Any]] = []
+        candidate_manifest_path = candidate / ".work" / "artifact-manifest.json"
+        if candidate_manifest_path.is_file():
+            observed_invalidated = read_json(candidate_manifest_path).get(
+                "invalidated_artifacts", []
+            )
+            if isinstance(observed_invalidated, list):
+                candidate_invalidated = [
+                    item for item in observed_invalidated if isinstance(item, dict)
+                ]
+        write_artifact_manifest(
+            candidate,
+            registry,
+            str(repo),
+            commit,
+            current_stage,
+            transaction_id,
+            candidate_invalidated,
+        )
+        candidate_manifest_errors = validate_artifact_manifest(candidate, registry)
+        if candidate_manifest_errors:
+            raise ExecutorError(
+                "cannot initialize Candidate Artifact Manifest: "
+                + " | ".join(candidate_manifest_errors)
+            )
         initialize_checkpoints(tx_dir, transaction_id, current_stage)
         transaction = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
@@ -1814,6 +2174,146 @@ def load_transaction(output: Path, transaction_id: str) -> tuple[Path, dict[str,
     ):
         raise ExecutorError("transaction candidate is missing or outside its transaction")
     return tx_dir, transaction, candidate
+
+
+def command_scaffold(args: argparse.Namespace) -> int:
+    """Create one identity-correct template Artifact inside an owned Candidate."""
+    output = args.output.expanduser().resolve()
+    tx_dir, transaction, candidate = load_transaction(output, args.transaction)
+    stage = str(transaction.get("stage"))
+    if stage in {MIGRATION_STAGE, "finalization"}:
+        raise ExecutorError(f"Artifact scaffolding is not allowed during {stage}")
+    if transaction.get("status") not in VALIDATABLE_TRANSACTION_STATUSES:
+        raise ExecutorError(
+            f"transaction status {transaction.get('status')} does not allow Artifact scaffolding"
+        )
+
+    formal = state_text(output)
+    if scalar_value(formal, "active_transaction") != args.transaction:
+        raise ExecutorError("analysis state does not own this transaction")
+    lock = read_json(lock_path(output))
+    if lock.get("transaction_id") != args.transaction or lock.get("stage") != stage:
+        raise ExecutorError("execution lock does not own the requested transaction and stage")
+    journal = read_json(tx_dir / "promotion-journal.json")
+    if journal.get("phase") not in VALIDATABLE_JOURNAL_PHASES:
+        raise ExecutorError(
+            f"promotion journal phase {journal.get('phase')} requires recover before scaffolding"
+        )
+
+    repo, actual_commit = verify_repo_and_commit(formal)
+    if transaction.get("repository") != str(repo):
+        raise ExecutorError("transaction repository does not match analysis state")
+    if transaction.get("source_commit") != actual_commit:
+        raise ExecutorError("transaction source commit does not match the current repository")
+    repository = scalar_value(formal, "repository")
+    source_commit_value = scalar_value(formal, "source_commit") or "unknown"
+    if not repository:
+        raise ExecutorError("analysis state is missing repository identity")
+
+    try:
+        registry = load_registry()
+        scaffold_schema = load_scaffold_schema(
+            registry, assets_root=template_root()
+        )
+        identity = parse_identity_arguments(list(args.identity or []))
+        scaffold_definition = scaffold_schema.definitions.get(args.artifact_type)
+        if scaffold_definition is None:
+            raise ArtifactScaffoldError(
+                f"Artifact type is not scaffoldable: {args.artifact_type}"
+            )
+        artifact_definition = registry.definitions[args.artifact_type]
+        if artifact_definition.producing_stage != stage:
+            raise ArtifactScaffoldError(
+                f"Artifact {args.artifact_type} belongs to stage "
+                f"{artifact_definition.producing_stage}, not {stage}"
+            )
+        rendered = render_artifact(
+            registry,
+            scaffold_schema,
+            template_root(),
+            args.artifact_type,
+            repository,
+            source_commit_value,
+            identity,
+        )
+    except (ArtifactSchemaError, ArtifactScaffoldError) as exc:
+        raise ExecutorError(str(exc)) from exc
+
+    relative = Path(rendered.relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ExecutorError("Scaffold destination must remain inside the Candidate")
+    destination = candidate / relative
+    candidate_root = candidate.resolve()
+    try:
+        destination.resolve(strict=False).relative_to(candidate_root)
+    except ValueError as exc:
+        raise ExecutorError("Scaffold destination escapes the Candidate") from exc
+    cursor = candidate_root
+    for part in relative.parts[:-1]:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise ExecutorError(f"Scaffold destination traverses a symbolic link: {cursor}")
+
+    result = "created"
+    if destination.exists():
+        if not destination.is_file() or destination.is_symlink():
+            raise ExecutorError(f"Scaffold destination is not a regular file: {destination}")
+        try:
+            matches, mismatches = existing_artifact_matches(
+                destination,
+                rendered,
+                repository,
+                source_commit_value,
+            )
+        except ArtifactScaffoldError as exc:
+            raise ExecutorError(str(exc)) from exc
+        if not matches:
+            raise ExecutorError(
+                "existing Artifact identity conflicts with Scaffold request: "
+                + " | ".join(mismatches)
+            )
+        result = "already-exists"
+    else:
+        try:
+            pre_assessment = assess_artifact_manifest(candidate, registry)
+        except ArtifactSchemaError as exc:
+            raise ExecutorError(f"cannot assess Candidate Artifact Manifest: {exc}") from exc
+        if pre_assessment.status == "invalid":
+            raise ExecutorError(
+                "Candidate Artifact Manifest is invalid before scaffolding: "
+                + " | ".join(pre_assessment.errors)
+            )
+        atomic_write_text(destination, rendered.content)
+
+    try:
+        assessment = assess_artifact_manifest(candidate, registry)
+    except ArtifactSchemaError as exc:
+        if result == "created" and destination.is_file():
+            destination.unlink()
+        raise ExecutorError(f"cannot assess scaffolded Artifact: {exc}") from exc
+    if assessment.status == "invalid":
+        if result == "created" and destination.is_file():
+            destination.unlink()
+        raise ExecutorError(
+            "scaffolded Artifact has invalid identity or schema: "
+            + " | ".join(assessment.errors)
+        )
+
+    emit(
+        {
+            "result": result,
+            "stage": stage,
+            "transaction_id": args.transaction,
+            "artifact_type": rendered.artifact_type,
+            "artifact_schema_version": rendered.artifact_schema_version,
+            "relative_path": rendered.relative_path,
+            "path": str(destination),
+            "identity": rendered.identity,
+            "candidate_manifest_status": assessment.status,
+        },
+        args.json,
+    )
+    return 0
 
 
 def command_mark_behavior(args: argparse.Namespace) -> int:
@@ -2056,6 +2556,8 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
                 "--repo",
                 str(repo),
                 "--json",
+                "--validation-profile",
+                "complete",
                 "--skip-artifact-manifest",
             ]
         )
@@ -3082,6 +3584,419 @@ def command_abort(args: argparse.Namespace) -> int:
     return 0
 
 
+def trusted_lifecycle_manifest_staleness(
+    output: Path,
+    state: str,
+    stale_paths: Iterable[str],
+) -> bool:
+    """Allow only executor-owned State drift backed by one coherent transaction."""
+
+    if set(stale_paths) != {STATE_FILE.as_posix()}:
+        return False
+    transaction_id = scalar_value(state, "active_transaction")
+    if not transaction_id:
+        return False
+    try:
+        lock = read_json(lock_path(output))
+        transaction = read_json(
+            transaction_dir(output, transaction_id) / "transaction.json"
+        )
+    except ExecutorError:
+        return False
+    stage = scalar_value(state, "current_stage")
+    if lock.get("transaction_id") != transaction_id or lock.get("stage") != stage:
+        return False
+    if transaction.get("transaction_id") != transaction_id or transaction.get("stage") != stage:
+        return False
+    if transaction.get("repository") != scalar_value(state, "repository_path"):
+        return False
+    if transaction.get("source_commit") != scalar_value(state, "source_commit"):
+        return False
+    if transaction.get("status") not in {
+        "in-progress",
+        "failed",
+        "generation-promoting",
+    }:
+        return False
+    return True
+
+
+def formal_manifest_diagnostics(
+    output: Path,
+    state: str,
+    registry: Any,
+) -> tuple[str, list[str], list[str]]:
+    assessment = assess_artifact_manifest(output, registry)
+    if assessment.status == "valid":
+        return "valid", [], []
+    if assessment.status == "invalid":
+        return "invalid", [], list(assessment.errors)
+    if trusted_lifecycle_manifest_staleness(
+        output, state, assessment.stale_paths
+    ):
+        return "stale", list(assessment.stale_reasons), []
+    return (
+        "invalid",
+        [],
+        [
+            "unexpected formal Artifact Manifest drift: " + reason
+            for reason in assessment.stale_reasons
+        ],
+    )
+
+
+def collect_stage_validation_report(
+    output: Path,
+    transaction_id: str,
+) -> dict[str, Any]:
+    tx_dir, transaction, candidate = load_transaction(output, transaction_id)
+    stage = str(transaction.get("stage"))
+    report = empty_stage_validation_report(stage, transaction_id)
+    semantic: list[dict[str, Any]] = []
+    blocking: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    forward: list[dict[str, Any]] = []
+    forward_total = 0
+    semantic_suppressed_by_validators = 0
+    warnings_suppressed_by_validators = 0
+    validator_summaries: list[dict[str, Any]] = []
+
+    formal = state_text(output)
+    transaction_status = str(transaction.get("status"))
+    if transaction_status not in VALIDATABLE_TRANSACTION_STATUSES:
+        blocking.append(
+            validation_item(
+                "TRANSACTION-STATUS",
+                f"transaction status {transaction_status} requires commit recovery or cleanup before validation",
+                source="stage-executor",
+            )
+        )
+
+    lock: dict[str, Any] = {}
+    try:
+        lock = read_json(lock_path(output))
+    except ExecutorError as exc:
+        blocking.append(
+            validation_item("EXECUTION-LOCK", str(exc), source="stage-executor")
+        )
+    if lock.get("transaction_id") != transaction_id or lock.get("stage") != stage:
+        blocking.append(
+            validation_item(
+                "EXECUTION-LOCK",
+                "execution lock does not own the requested transaction and stage",
+                source="stage-executor",
+            )
+        )
+    if stage != MIGRATION_STAGE and scalar_value(formal, "active_transaction") != transaction_id:
+        blocking.append(
+            validation_item(
+                "TRANSACTION-OWNERSHIP",
+                "analysis state does not own the requested transaction",
+                source="stage-executor",
+            )
+        )
+
+    journal_path = tx_dir / "promotion-journal.json"
+    try:
+        journal = read_json(journal_path)
+    except ExecutorError as exc:
+        blocking.append(
+            validation_item("PROMOTION-JOURNAL", str(exc), source="stage-executor")
+        )
+    else:
+        phase = str(journal.get("phase"))
+        if phase not in VALIDATABLE_JOURNAL_PHASES:
+            blocking.append(
+                validation_item(
+                    "RECOVERY-REQUIRED",
+                    f"promotion journal phase {phase} must be recovered before validation",
+                    source="stage-executor",
+                )
+            )
+
+    repo: Path | None = None
+    commit = "unknown"
+    try:
+        repo, commit = verify_repo_and_commit(formal)
+    except ExecutorError as exc:
+        blocking.append(
+            validation_item("REPOSITORY-COMMIT", str(exc), source="stage-executor")
+        )
+    else:
+        if transaction.get("repository") != str(repo):
+            blocking.append(
+                validation_item(
+                    "REPOSITORY-COMMIT",
+                    "transaction repository does not match analysis state",
+                    source="stage-executor",
+                )
+            )
+        if transaction.get("source_commit") != commit:
+            blocking.append(
+                validation_item(
+                    "REPOSITORY-COMMIT",
+                    "transaction source commit does not match the current repository",
+                    source="stage-executor",
+                )
+            )
+
+    try:
+        registry = load_registry()
+    except ArtifactSchemaError as exc:
+        registry = None
+        blocking.append(
+            validation_item(
+                "ARTIFACT-REGISTRY", str(exc), source="stage-executor"
+            )
+        )
+    else:
+        # A migration transaction intentionally starts from artifacts whose
+        # versions may be incompatible with the current registry. Its trusted
+        # source boundary is the sealed Migration Plan snapshot, not a current-
+        # schema formal Manifest. The migration-specific validation below
+        # verifies that snapshot and the sealed mechanical output instead.
+        if stage != MIGRATION_STAGE:
+            try:
+                formal_status, _formal_stale, formal_errors = formal_manifest_diagnostics(
+                    output, formal, registry
+                )
+            except (ArtifactSchemaError, ExecutorError) as exc:
+                blocking.append(
+                    validation_item(
+                        "FORMAL-MANIFEST", str(exc), source="stage-executor"
+                    )
+                )
+            else:
+                if formal_status == "invalid":
+                    blocking.extend(
+                        validation_item(
+                            "FORMAL-MANIFEST", message, source="stage-executor"
+                        )
+                        for message in formal_errors
+                    )
+
+        if candidate.is_dir():
+            try:
+                assessment = assess_artifact_manifest(candidate, registry)
+            except ArtifactSchemaError as exc:
+                blocking.append(
+                    validation_item(
+                        "CANDIDATE-MANIFEST", str(exc), source="stage-executor"
+                    )
+                )
+            else:
+                if assessment.status == "invalid":
+                    blocking.extend(
+                        validation_item(
+                            "CANDIDATE-MANIFEST", message, source="stage-executor"
+                        )
+                        for message in assessment.errors
+                    )
+                elif assessment.status == "stale":
+                    if stage == MIGRATION_STAGE:
+                        blocking.extend(
+                            validation_item(
+                                "SEALED-MIGRATION-DRIFT",
+                                message,
+                                source="stage-executor",
+                            )
+                            for message in assessment.stale_reasons
+                        )
+                    else:
+                        report["expected_candidate_manifest_drift"] = {
+                            "status": "pending-refresh",
+                            "refresh_on_commit": True,
+                            "reasons": list(assessment.stale_reasons)[:VALIDATION_DETAIL_LIMIT],
+                        }
+        else:
+            blocking.append(
+                validation_item(
+                    "CANDIDATE-MISSING",
+                    "transaction Candidate is unavailable; run recover before validation",
+                    source="stage-executor",
+                )
+            )
+
+    if stage != MIGRATION_STAGE:
+        baseline_manifest_path = tx_dir / "baseline-manifest.json"
+        try:
+            expected_formal = read_json(baseline_manifest_path)
+        except ExecutorError as exc:
+            blocking.append(
+                validation_item("FORMAL-BASELINE", str(exc), source="stage-executor")
+            )
+        else:
+            current_formal = knowledge_manifest(output)
+            if current_formal != expected_formal:
+                drift = manifest_diff(expected_formal, current_formal)
+                changed = sorted(
+                    set(drift["added"] + drift["changed"] + drift["deleted"])
+                )
+                blocking.append(
+                    validation_item(
+                        "FORMAL-DRIFT",
+                        "formal knowledge artifacts changed outside the transaction: "
+                        + ", ".join(changed[:VALIDATION_PER_CODE_LIMIT]),
+                        source="stage-executor",
+                    )
+                )
+
+    try:
+        checkpoints = load_checkpoints(tx_dir, transaction_id, stage)
+    except ExecutorError as exc:
+        blocking.append(
+            validation_item("CHECKPOINT-LEDGER", str(exc), source="stage-executor")
+        )
+    else:
+        incomplete = checkpoint_commit_gate(checkpoints)
+        if incomplete:
+            blocking.append(
+                validation_item(
+                    "CHECKPOINT-INCOMPLETE",
+                    "stage has incomplete checkpoints: " + ", ".join(incomplete),
+                    source="stage-executor",
+                )
+            )
+
+    infrastructure_blocked = any(
+        item["code"]
+        in {
+            "CANDIDATE-MISSING",
+            "EXECUTION-LOCK",
+            "RECOVERY-REQUIRED",
+            "REPOSITORY-COMMIT",
+            "TRANSACTION-OWNERSHIP",
+        }
+        for item in blocking
+    )
+    if stage == MIGRATION_STAGE:
+        if not infrastructure_blocked and registry is not None and repo is not None:
+            try:
+                formal_plan_path = output / ".work" / "migration-plan.yaml"
+                plan = load_migration_plan(formal_plan_path, registry)
+                if transaction.get("plan_id") != plan.get("plan_id"):
+                    raise ExecutorError("transaction and Migration Plan IDs do not match")
+                _load_sealed_mechanical_output(tx_dir, transaction, candidate)
+                migration_errors, _diff = _validate_migration_candidate(
+                    output,
+                    candidate,
+                    plan,
+                    registry,
+                    repo,
+                    commit,
+                    transaction_id,
+                )
+                blocking.extend(
+                    validation_item(
+                        "MIGRATION-VALIDATION", message, source="stage-executor"
+                    )
+                    for message in migration_errors
+                )
+            except (ArtifactSchemaError, ExecutorError) as exc:
+                blocking.append(
+                    validation_item(
+                        "MIGRATION-VALIDATION", str(exc), source="stage-executor"
+                    )
+                )
+    elif not infrastructure_blocked and repo is not None:
+        projected_state, projection_errors = projected_validation_state(stage, candidate)
+        semantic.extend(projection_errors)
+        with tempfile.TemporaryDirectory(prefix="eapi-stage-validation-") as temporary:
+            temporary_state = Path(temporary) / ".work" / "analysis-state.yaml"
+            temporary_state.parent.mkdir(parents=True)
+            temporary_state.write_text(projected_state, encoding="utf-8")
+            gate_errors, validator_results = stage_gates(
+                stage,
+                candidate,
+                repo,
+                diagnostic_manifest=True,
+                analysis_state_override=temporary_state,
+            )
+        for error in gate_errors:
+            if error.startswith("validator failed:"):
+                continue
+            if error.startswith("Artifact Schema:"):
+                blocking.append(
+                    validation_item(
+                        "CANDIDATE-MANIFEST",
+                        error.removeprefix("Artifact Schema:").strip(),
+                        source="stage-executor",
+                    )
+                )
+            else:
+                semantic.append(
+                    validation_item("STAGE-GATE", error, source="stage-executor")
+                )
+        for result in validator_results:
+            (
+                validator_semantic,
+                validator_blocking,
+                validator_warnings,
+                validator_forward,
+                validator_forward_total,
+                validator_semantic_total,
+                validator_warning_total,
+            ) = parse_validator_diagnostics(result)
+            semantic.extend(validator_semantic)
+            blocking.extend(validator_blocking)
+            warnings.extend(validator_warnings)
+            forward.extend(validator_forward)
+            forward_total += validator_forward_total
+            semantic_suppressed_by_validators += max(
+                0, validator_semantic_total - len(validator_semantic)
+            )
+            warnings_suppressed_by_validators += max(
+                0, validator_warning_total - len(validator_warnings)
+            )
+            validator_summaries.append(
+                {
+                    "validator": validator_name(result),
+                    "result": "ok" if result.get("exit_code") == 0 else "failed",
+                    "error_count": validator_semantic_total + len(validator_blocking),
+                    "warning_count": validator_warning_total,
+                    "forward_reference_count": validator_forward_total,
+                }
+            )
+
+        if stage in {"api-contract-publication", "ba-publication"}:
+            try:
+                stage_skip_allowed(stage, candidate, "stage validation")
+            except ExecutorError:
+                pass
+            else:
+                warnings.append(
+                    validation_item(
+                        "STAGE-SKIP-AVAILABLE",
+                        "this stage has no publication intent and should be committed with --skip and an explicit reason",
+                        source="stage-executor",
+                    )
+                )
+
+    report["semantic_or_document_errors"] = compact_validation_section(
+        semantic,
+        total_count=len(semantic) + semantic_suppressed_by_validators,
+    )
+    report["blocking_errors"] = compact_validation_section(blocking)
+    report["warnings"] = compact_validation_section(
+        warnings,
+        total_count=len(warnings) + warnings_suppressed_by_validators,
+    )
+    report["cross_stage_forward_references"] = forward_reference_section(
+        forward, forward_total
+    )
+    report["validator_summary"] = validator_summaries
+    if report["semantic_or_document_errors"]["count"] or report["blocking_errors"]["count"]:
+        report["result"] = "blocked"
+    return report
+
+
+def command_validate(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    report = collect_stage_validation_report(output, args.transaction)
+    emit(report, args.json)
+    return 0 if report["result"] == "ready" else 1
+
+
 def status_payload(output: Path) -> dict[str, Any]:
     text = state_text(output)
     payload: dict[str, Any] = {
@@ -3107,7 +4022,12 @@ def status_payload(output: Path) -> dict[str, Any]:
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
+        "artifact_manifest_stale_reasons": [],
         "artifact_manifest_errors": [],
+        "candidate_artifact_manifest_status": "not-applicable",
+        "candidate_artifact_manifest_stale_reasons": [],
+        "candidate_artifact_manifest_errors": [],
+        "manifest_refresh_pending": "none",
         "behavior_counts": {},
         "formal_manifest": manifest_summary(file_manifest(output)),
         "receipt_count": receipt_count(output),
@@ -3152,9 +4072,12 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["integrity_errors"].append(f"Migration Plan invalid: {exc}")
     try:
         registry = load_registry()
-        artifact_errors = validate_artifact_manifest(output, registry)
+        manifest_status, stale_reasons, artifact_errors = formal_manifest_diagnostics(
+            output, text, registry
+        )
+        payload["artifact_manifest_status"] = manifest_status
+        payload["artifact_manifest_stale_reasons"] = stale_reasons
         payload["artifact_manifest_errors"] = artifact_errors
-        payload["artifact_manifest_status"] = "valid" if not artifact_errors else "invalid"
     except ArtifactSchemaError as exc:
         payload["artifact_manifest_status"] = "invalid"
         payload["artifact_manifest_errors"] = [str(exc)]
@@ -3183,7 +4106,7 @@ def status_payload(output: Path) -> dict[str, Any]:
                     payload["integrity_errors"].append(
                         "Published Generation source commit does not match analysis state"
                     )
-                else:
+                elif payload["artifact_manifest_status"] == "valid":
                     payload["release_readiness"] = "ready"
         except ExecutorError as exc:
             payload["working_generation_status"] = "invalid"
@@ -3197,6 +4120,25 @@ def status_payload(output: Path) -> dict[str, Any]:
             tx_dir, transaction, candidate = load_transaction(output, str(active))
             payload["transaction"] = transaction
             payload["candidate_manifest"] = manifest_summary(file_manifest(candidate))
+            try:
+                candidate_assessment = assess_artifact_manifest(
+                    candidate, load_registry()
+                )
+            except ArtifactSchemaError as exc:
+                payload["candidate_artifact_manifest_status"] = "invalid"
+                payload["candidate_artifact_manifest_errors"] = [str(exc)]
+            else:
+                payload["candidate_artifact_manifest_status"] = (
+                    candidate_assessment.status
+                )
+                if candidate_assessment.status == "stale":
+                    payload["candidate_artifact_manifest_stale_reasons"] = list(
+                        candidate_assessment.stale_reasons
+                    )
+                elif candidate_assessment.status == "invalid":
+                    payload["candidate_artifact_manifest_errors"] = list(
+                        candidate_assessment.errors
+                    )
             comparison_root = output
             transaction_generation = transaction.get("generation_id")
             if transaction_generation:
@@ -3239,7 +4181,12 @@ def status_payload(output: Path) -> dict[str, Any]:
             else:
                 try:
                     repo, _commit = verify_repo_and_commit(text)
-                    requirements, status_validators = stage_gates(stage, candidate, repo)
+                    requirements, status_validators = stage_gates(
+                        stage,
+                        candidate,
+                        repo,
+                        diagnostic_manifest=True,
+                    )
                     payload["requirements"] = requirements
                     payload["validator_summary"] = [
                         {
@@ -3297,6 +4244,16 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["integrity_errors"].append(
                 f"archive integrity failed: {audit['path']}"
             )
+    pending_scopes: list[str] = []
+    if payload["artifact_manifest_status"] == "stale":
+        pending_scopes.append("formal")
+    if payload["candidate_artifact_manifest_status"] == "stale":
+        pending_scopes.append("candidate")
+    payload["manifest_refresh_pending"] = (
+        "both" if len(pending_scopes) == 2 else pending_scopes[0] if pending_scopes else "none"
+    )
+    if payload["artifact_manifest_status"] != "valid" or payload["integrity_errors"]:
+        payload["release_readiness"] = "not-ready"
     return payload
 
 
@@ -3338,6 +4295,12 @@ def command_resume(args: argparse.Namespace) -> int:
             "failure and cannot be converted into a migration recovery point"
         )
 
+    if scalar_value(text, "active_transaction") or lock_path(output).exists():
+        raise ExecutorError(
+            "resume cannot run while an execution transaction is active; use "
+            "status, commit, abort, or recover instead"
+        )
+
     if current_pack_is_versioned(output, registry):
         verify_repo_and_commit(text, repo)
         status = status_payload(output)
@@ -3349,8 +4312,6 @@ def command_resume(args: argparse.Namespace) -> int:
         emit({"result": "resume-ready", **status}, args.json)
         return 0
 
-    if lock_path(output).exists():
-        raise ExecutorError("resume audit cannot run while an execution transaction is active")
     try:
         plan = build_migration_plan(output, registry, repo, actual_commit)
         plan_path = output / ".work" / "migration-plan.yaml"
@@ -3684,6 +4645,20 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true")
     status.set_defaults(handler=command_status)
 
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--output", type=Path, required=True)
+    validate.add_argument("--transaction", required=True)
+    validate.add_argument("--json", action="store_true")
+    validate.set_defaults(handler=command_validate)
+
+    scaffold = subparsers.add_parser("scaffold")
+    scaffold.add_argument("--output", type=Path, required=True)
+    scaffold.add_argument("--transaction", required=True)
+    scaffold.add_argument("--artifact-type", required=True)
+    scaffold.add_argument("--identity", action="append", default=[])
+    scaffold.add_argument("--json", action="store_true")
+    scaffold.set_defaults(handler=command_scaffold)
+
     begin = subparsers.add_parser("begin")
     begin.add_argument("--output", type=Path, required=True)
     begin.add_argument("--stage", choices=(MIGRATION_STAGE,) + STAGES[:-1], required=True)
@@ -3742,9 +4717,63 @@ def main() -> int:
     try:
         return int(args.handler(args))
     except ExecutorError as exc:
+        if args.command == "validate" and getattr(args, "json", False):
+            report = empty_stage_validation_report(
+                None, str(getattr(args, "transaction", ""))
+            )
+            report["result"] = "error"
+            report["blocking_errors"] = compact_validation_section(
+                [
+                    validation_item(
+                        "VALIDATION-COMMAND",
+                        str(exc),
+                        source="stage-executor",
+                    )
+                ]
+            )
+            emit(report, True)
+            return 2
+        if args.command == "scaffold" and getattr(args, "json", False):
+            emit(
+                {
+                    "result": "error",
+                    "transaction_id": str(getattr(args, "transaction", "")),
+                    "artifact_type": str(getattr(args, "artifact_type", "")),
+                    "error": str(exc),
+                },
+                True,
+            )
+            return 2
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
+        if args.command == "validate" and getattr(args, "json", False):
+            report = empty_stage_validation_report(
+                None, str(getattr(args, "transaction", ""))
+            )
+            report["result"] = "error"
+            report["blocking_errors"] = compact_validation_section(
+                [
+                    validation_item(
+                        "VALIDATION-FILESYSTEM",
+                        str(exc),
+                        source="stage-executor",
+                    )
+                ]
+            )
+            emit(report, True)
+            return 2
+        if args.command == "scaffold" and getattr(args, "json", False):
+            emit(
+                {
+                    "result": "error",
+                    "transaction_id": str(getattr(args, "transaction", "")),
+                    "artifact_type": str(getattr(args, "artifact_type", "")),
+                    "error": f"filesystem operation failed: {exc}",
+                },
+                True,
+            )
+            return 2
         print(f"ERROR: filesystem operation failed: {exc}", file=sys.stderr)
         return 2
 

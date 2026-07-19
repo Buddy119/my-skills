@@ -16,6 +16,14 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 EXECUTOR = SKILL_ROOT / "scripts" / "stage_executor.py"
 
 
+def raw_tree_hashes(root: Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
 def load_executor_module():
     sys.path.insert(0, str(EXECUTOR.parent))
     specification = importlib.util.spec_from_file_location("stage_executor", EXECUTOR)
@@ -142,6 +150,473 @@ def api_contract_fixture() -> str:
     )
 
 
+COMPLETE_BEHAVIOR_ID = "sample-repo.manage-customer"
+COMPLETE_JOURNEY_ID = "sample-repo.journey.manage-customer-profile"
+COMPLETE_SCENARIO_ID = "sample-repo.scenario.customer-profile-request-completed"
+COMPLETE_ENDPOINTS = (
+    ("sample-repo.get-customer", "GET", "/customers/{id}", 2),
+    ("sample-repo.put-customer", "PUT", "/customers/{id}", 3),
+)
+
+
+def complete_api_behavior_fixture(*, include_ba: bool) -> str:
+    api_contracts = "api_contracts:\n" + "".join(
+        f'  - endpoint_id: "{endpoint_id}"\n'
+        f'    document: "../contracts/{endpoint_id}.api-contract.md"\n'
+        for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS
+    )
+    ba_scenarios = "ba_scenarios: []\n"
+    ba_section = ""
+    if include_ba:
+        ba_scenarios = (
+            "ba_scenarios:\n"
+            f'  - scenario_id: "{COMPLETE_SCENARIO_ID}"\n'
+            f'    document: "../../ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md"\n'
+        )
+        ba_section = (
+            "## BA scenarios\n\n"
+            f"- [Customer profile request completed]"
+            f"(../../ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md)\n\n"
+        )
+    contract_links = "".join(
+        f"- [{method} {route}](../contracts/{endpoint_id}.api-contract.md)\n"
+        for endpoint_id, method, route, _line in COMPLETE_ENDPOINTS
+    )
+    return (
+        "---\n"
+        'artifact_type: "tech-behavior"\n'
+        'artifact_schema_version: "1"\n'
+        f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        'title: "Manage customer profile"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'entry_type: "api"\n'
+        'entry_point: "GET or PUT /customers/{id}"\n'
+        'behavior_category: "business"\n'
+        'overall_status: "Confirmed"\n'
+        + api_contracts
+        + ba_scenarios
+        + "consumes: []\n"
+        "produces: []\n"
+        "reads: []\n"
+        "writes: []\n"
+        "external_dependencies: []\n"
+        "external_http_calls: []\n"
+        "field_mappings: []\n"
+        "failure_patterns: []\n"
+        "analysis_limitations: []\n"
+        "---\n\n"
+        "# Manage customer profile\n\n"
+        "## Summary\n\nGets or updates the observed customer profile. `src/Handler.java:2-3`\n\n"
+        "## Trigger and entry point\n\nThe application routes invoke the same profile behavior.\n\n"
+        "## API contracts\n\n"
+        + contract_links
+        + "\n"
+        + ba_section
+        + "## Behavior flow\n\n"
+        "```mermaid\nflowchart TD\n    A[Profile request] --> B{Read or update}\n"
+        "    B --> C[Return profile result]\n```\n\n"
+        "## Inputs\n\nCaller inputs are defined by the endpoint Contracts.\n\n"
+        "## Preconditions and business rules\n\nThe route selects the requested profile operation.\n\n"
+        "## Happy path\n\n1. Accept the profile request.\n2. Return the observed result.\n\n"
+        "## Data access and state changes\n\nNo durable state is modeled by this fixture.\n\n"
+        "## Outputs and side effects\n\nReturns the caller-visible profile result.\n\n"
+        "## Failures, retries, and partial success\n\nNo retry or partial success is modeled.\n\n"
+        "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
+        "## Evidence index\n\n- `src/Handler.java:2-3`\n"
+    )
+
+
+def complete_tech_catalog_fixture(*, include_ba: bool) -> str:
+    ba_scenarios = "    ba_scenarios: []\n"
+    if include_ba:
+        ba_scenarios = (
+            "    ba_scenarios:\n"
+            f'      - scenario_id: "{COMPLETE_SCENARIO_ID}"\n'
+            f'        document: "../ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md"\n'
+        )
+    api_contracts = "".join(
+        f'      - endpoint_id: "{endpoint_id}"\n'
+        f'        document: "contracts/{endpoint_id}.api-contract.md"\n'
+        for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS
+    )
+    return (
+        'artifact_type: "tech-behavior-catalog"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'analysis_mode: "automatic"\n'
+        "behaviors:\n"
+        f'  - behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        '    title: "Manage customer profile"\n'
+        '    category: "business"\n'
+        "    triggers:\n"
+        '      - type: "api"\n'
+        '        name: "GET or PUT /customers/{id}"\n'
+        "    entry_points:\n"
+        '      - "src/Handler.java:2"\n'
+        '      - "src/Handler.java:3"\n'
+        '    status: "documented"\n'
+        "    duplicate_of: null\n"
+        f'    document: "behaviors/{COMPLETE_BEHAVIOR_ID}.md"\n'
+        + ba_scenarios
+        + "    api_contracts:\n"
+        + api_contracts
+    )
+
+
+def complete_endpoint_matrix_fixture() -> str:
+    rows = "".join(
+        f"| `{endpoint_id}` | application-endpoint | Confirmed — `{method} {route}` | "
+        "Not observed | Not observed | Not observed | Not observed | "
+        f"[Behavior](behaviors/{COMPLETE_BEHAVIOR_ID}.md) | "
+        f"[Contract](contracts/{endpoint_id}.api-contract.md) |\n"
+        for endpoint_id, method, route, _line in COMPLETE_ENDPOINTS
+    )
+    details = "".join(
+        f'<a id="{endpoint_id.replace(".", "-")}"></a>\n\n'
+        f"### `{endpoint_id}`\n\n"
+        "| Layer | Observed value | Status | Evidence |\n"
+        "|---|---|---|---|\n"
+        f"| Application Route | `{method} {route}` | Confirmed | `src/Handler.java:{line}` |\n"
+        "| External Entry Declaration | None observed | Not observed | Repository scope reviewed |\n"
+        "| Environment Deployment Intent | None observed | Not observed | Repository scope reviewed |\n"
+        "| Observed Runtime Deployment | None supplied | Not observed | Analysis boundary |\n"
+        "| External Reachability Assessment | No exposure evidence | Not observed | Derived from the preceding rows |\n\n"
+        for endpoint_id, method, route, line in COMPLETE_ENDPOINTS
+    )
+    return (
+        "---\n"
+        'artifact_type: "endpoint-matrix"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'coverage_status: "complete"\n'
+        "---\n\n"
+        "# Endpoint matrix\n\n"
+        "## Endpoint summary\n\n"
+        "| Endpoint or Exposure ID | Operation Role | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract |\n"
+        "|---|---|---|---|---|---|---|---|---|\n"
+        + rows
+        + "\n## Evidence and reconciliation notes\n\n"
+        + details
+        + "## Unknowns and conflicts\n\nExternal deployment remains Unknown.\n"
+    )
+
+
+def complete_api_contract_fixture(
+    endpoint_id: str, method: str, route: str, source_line: int
+) -> str:
+    anchor = endpoint_id.replace(".", "-")
+    return (
+        "---\n"
+        'artifact_type: "api-contract"\n'
+        'artifact_schema_version: "2"\n'
+        f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        f'endpoint_id: "{endpoint_id}"\n'
+        f'title: "{method} customer profile API"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        f'entry_point: "{method} {route}"\n'
+        f'method: "{method}"\n'
+        f'route: "{route}"\n'
+        'contract_status: "Confirmed"\n'
+        'application_route_status: "Confirmed"\n'
+        'external_reachability_status: "Not observed"\n'
+        f'behavior_document: "../behaviors/{COMPLETE_BEHAVIOR_ID}.md"\n'
+        f'endpoint_matrix: "../endpoint-matrix.md#{anchor}"\n'
+        "---\n\n"
+        f"# {method} customer profile API\n\n"
+        "Provides the observed profile result to the caller. [E1](#e1)\n\n"
+        "## Quick reference\n\n"
+        "| Property | Value |\n"
+        "|---|---|\n"
+        f"| Method and application route | `{method} {route}` [E1](#e1) |\n"
+        "| Authentication | Unknown |\n"
+        "| Content type | Unknown |\n"
+        "| Contract confidence | Confirmed |\n"
+        f"| External reachability | [Not observed](../endpoint-matrix.md#{anchor}) |\n\n"
+        "## Request\n\nThe route contains a customer identifier; further wire rules are Unknown.\n\n"
+        "## Responses\n\n"
+        "| HTTP status | When | Body/schema | Relevant headers |\n"
+        "|---|---|---|---|\n"
+        "| 200 | The handler completes | Customer profile result [E1](#e1) | None observed |\n\n"
+        "## Related documents\n\n"
+        f"- [Tech Behavior](../behaviors/{COMPLETE_BEHAVIOR_ID}.md)\n"
+        f"- [Endpoint Matrix](../endpoint-matrix.md#{anchor})\n\n"
+        "## Source notes\n\n"
+        f'<a id="e1"></a> **E1** — `src/Handler.java:{source_line}` establishes the route and response.\n'
+    )
+
+
+def complete_ba_scenario_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "ba-scenario"\n'
+        'artifact_schema_version: "1"\n'
+        f'scenario_id: "{COMPLETE_SCENARIO_ID}"\n'
+        'title: "Customer profile request completed"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        "business_capabilities:\n"
+        '  - "Manage customer profile"\n'
+        'overall_status: "Confirmed"\n'
+        "actors:\n"
+        '  - "Customer channel"\n'
+        "journeys:\n"
+        f'  - journey_id: "{COMPLETE_JOURNEY_ID}"\n'
+        f'    document: "../journeys/{COMPLETE_JOURNEY_ID}.md"\n'
+        "tech_behaviors:\n"
+        f'  - behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        f'    document: "../../tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md"\n'
+        "---\n\n"
+        "# Customer profile request completed\n\n"
+        "## Business purpose and context\n\nA customer channel requests a profile result.\n\n"
+        "## Business flow\n\n"
+        "```mermaid\nflowchart TD\n    A[Profile need] --> B[Request profile result]\n"
+        "    B --> C[Receive visible outcome]\n```\n\n"
+        "## Business outcomes\n\nThe channel receives the observable profile outcome.\n\n"
+        "## Traceability\n\n"
+        f"- [Business Journey](../journeys/{COMPLETE_JOURNEY_ID}.md)\n"
+        f"- [Technical Behavior](../../tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md)\n"
+    )
+
+
+def complete_ba_journey_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "ba-journey"\n'
+        'artifact_schema_version: "1"\n'
+        f'journey_id: "{COMPLETE_JOURNEY_ID}"\n'
+        'title: "Manage customer profile"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        "business_capabilities:\n"
+        '  - "Manage customer profile"\n'
+        'overall_status: "Confirmed"\n'
+        "actors:\n"
+        '  - "Customer channel"\n'
+        "scenarios:\n"
+        f'  - scenario_id: "{COMPLETE_SCENARIO_ID}"\n'
+        f'    document: "../scenarios/{COMPLETE_SCENARIO_ID}.md"\n'
+        "supporting_tech_behaviors:\n"
+        f'  - behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        f'    document: "../../tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md"\n'
+        "---\n\n"
+        "# Manage customer profile\n\n"
+        "## Business goal and scope\n\nObtain or update the observable customer profile result.\n\n"
+        "## Journey map\n\n"
+        "```mermaid\nflowchart LR\n    A[Profile goal] --> B[Profile scenario]\n"
+        "    B --> C[Observable result]\n```\n\n"
+        "## Stages and scenarios\n\n"
+        f"- [Customer profile request completed](../scenarios/{COMPLETE_SCENARIO_ID}.md)\n\n"
+        "## Traceability\n\n"
+        f"- [Business Scenario](../scenarios/{COMPLETE_SCENARIO_ID}.md)\n"
+        f"- [Technical Behavior](../../tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md)\n"
+    )
+
+
+def complete_ba_overview_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "ba-overview"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'business_model_status: "complete"\n'
+        'coverage_status: "complete"\n'
+        'business_catalog: "business-catalog.md"\n'
+        "---\n\n"
+        "# Business overview\n\n"
+        "The repository supports the observable customer profile journey.\n\n"
+        "## Journey landscape\n\n"
+        f"- [Manage customer profile](journeys/{COMPLETE_JOURNEY_ID}.md)\n\n"
+        "## Business scenarios\n\n"
+        f"- [Customer profile request completed](scenarios/{COMPLETE_SCENARIO_ID}.md)\n\n"
+        "## Related technical view\n\n"
+        "- [Repository overview](../tech-pack/repository-overview.md)\n"
+        "- [Business catalog](business-catalog.md)\n"
+    )
+
+
+def complete_ba_catalog_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "ba-catalog"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'business_model_status: "complete"\n'
+        'coverage_status: "complete"\n'
+        "---\n\n"
+        "# Business catalog\n\n"
+        "## Journey index\n\n"
+        f"- [Manage customer profile](journeys/{COMPLETE_JOURNEY_ID}.md)\n\n"
+        "## Scenario index\n\n"
+        f"- [Customer profile request completed](scenarios/{COMPLETE_SCENARIO_ID}.md)\n\n"
+        "## Tech coverage map\n\n"
+        f"- [Manage customer profile](../tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md)"
+        f" supports [the business scenario](scenarios/{COMPLETE_SCENARIO_ID}.md).\n\n"
+        "- [Business overview](business-overview.md)\n"
+        "- [Technical catalog](../tech-pack/behavior-catalog.yaml)\n"
+    )
+
+
+def complete_dossier_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "behavior-dossier"\n'
+        'artifact_schema_version: "1"\n'
+        f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+        'working_title: "Manage customer profile"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'understanding_status: "understood"\n'
+        'entry_type: "api"\n'
+        'entry_points:\n'
+        '  - "src/Handler.java:2"\n'
+        '  - "src/Handler.java:3"\n'
+        "---\n\n"
+        "# Manage customer profile working dossier\n\n"
+        "## Working purpose and boundary\n\n"
+        "The two application routes expose the repository-observable profile behavior.\n\n"
+        "## End-to-end executable narrative\n\n"
+        "The handler accepts either read or update intent and returns the profile result.\n\n"
+        "## Semantic symbol and call trace\n\n"
+        "Java source was inspected in degraded mode; the two exact methods are the framework boundary.\n\n"
+        "## Endpoint exposure evidence\n\n"
+        "Both application routes are confirmed; external deployment evidence was not supplied.\n\n"
+        "## Input handling and validation\n\nThe path identifies the customer.\n\n"
+        "## Decisions and rules\n\nThe HTTP method selects read or update intent.\n\n"
+        "## Main successful path\n\nThe handler accepts the request and returns a profile result.\n\n"
+        "## Data, business objects, and state\n\nNo durable state is modeled in this fixture.\n\n"
+        "## Boundaries, outputs, and side effects\n\nTwo caller-visible application routes were observed.\n\n"
+        "## Failures, retry, and partial success\n\nNo retry or partial success was observed.\n\n"
+        "## Runtime configuration and IaC\n\nNo deployment configuration was supplied.\n\n"
+        "## Test observations\n\nThis lifecycle fixture tests publication mechanics.\n\n"
+        "## Evidence anchors\n\n- `src/Handler.java:2-3` — the application methods.\n\n"
+        "## Unknowns, conflicts, and limitations\n\nExternal reachability remains unknown.\n\n"
+        "## Repository register contributions\n\nEndpoint evidence and reconciliation rows were added.\n\n"
+        "## Understanding gate\n\nThe observable fixture behavior is understood.\n"
+    )
+
+
+def complete_register_fixture(executor) -> str:
+    schema = json.loads(
+        (SKILL_ROOT / "assets" / "register-schema.json").read_text(encoding="utf-8")
+    )
+    tables = {table["section"]: table["headers"] for table in schema["tables"].values()}
+    endpoint_evidence = {
+        "Endpoint evidence records": [
+            [
+                "EP-EV-001",
+                "Application Route",
+                "GET /customers/{id} handled by Handler.getCustomer",
+                "Application source",
+                "sample-repo.get-customer",
+                "Confirmed",
+                "`src/Handler.java:2`",
+            ],
+            [
+                "EP-EV-002",
+                "Application Route",
+                "PUT /customers/{id} handled by Handler.putCustomer",
+                "Application source",
+                "sample-repo.put-customer",
+                "Confirmed",
+                "`src/Handler.java:3`",
+            ],
+        ],
+        "Endpoint reconciliation": [
+            [
+                endpoint_id,
+                "application-endpoint",
+                "publish",
+                "customers-id",
+                f"Confirmed — {method} {route}",
+                "Not observed",
+                "Not observed",
+                "Not observed",
+                "Not observed",
+                COMPLETE_BEHAVIOR_ID,
+                f"contracts/{endpoint_id}.api-contract.md",
+                "Executable application method",
+                "No external exposure evidence was supplied",
+            ]
+            for endpoint_id, method, route, _line in COMPLETE_ENDPOINTS
+        ],
+    }
+    parts = [
+        "---",
+        'artifact_type: "repository-register"',
+        'artifact_schema_version: "1"',
+        'repository: "sample-repo"',
+        'source_commit: "unknown"',
+        'register_status: "reconciled"',
+        "---",
+        "",
+        "# Repository register",
+    ]
+    for heading in sorted(executor.REGISTER_HEADINGS):
+        headers = tables[heading]
+        parts.extend(["", f"## {heading}", ""])
+        parts.append("| " + " | ".join(headers) + " |")
+        parts.append("|" + "|".join("---" for _ in headers) + "|")
+        for row in endpoint_evidence.get(heading, []):
+            assert len(row) == len(headers)
+            parts.append("| " + " | ".join(row) + " |")
+    return "\n".join(parts) + "\n"
+
+
+def complete_repository_synthesis_fixture(executor) -> str:
+    return (
+        "---\n"
+        'artifact_type: "repository-synthesis"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        "---\n\n"
+        "# Repository synthesis\n\n"
+        + "\n\n".join(
+            f"## {heading}\n\nThe lifecycle fixture records the reconciled repository view."
+            for heading in sorted(executor.SYNTHESIS_HEADINGS)
+        )
+        + "\n"
+    )
+
+
+def complete_business_model_fixture(executor) -> str:
+    sections = {
+        "Journey records": (
+            f"`{COMPLETE_JOURNEY_ID}` organizes the observable profile goal and "
+            f"contains `{COMPLETE_SCENARIO_ID}`."
+        ),
+        "Scenario records": (
+            f"`{COMPLETE_SCENARIO_ID}` is supported by `{COMPLETE_BEHAVIOR_ID}`."
+        ),
+        "Tech coverage and BA disposition": (
+            f"`{COMPLETE_BEHAVIOR_ID}` has disposition `scenario-support` for "
+            f"`{COMPLETE_SCENARIO_ID}`."
+        ),
+    }
+    return (
+        "---\n"
+        'artifact_type: "business-model"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'business_model_status: "complete"\n'
+        'coverage_status: "complete"\n'
+        "---\n\n"
+        "# Business model\n\n"
+        + "\n\n".join(
+            f"## {heading}\n\n{sections.get(heading, 'The fixture has no additional business-model observation for this section.')}"
+            for heading in sorted(executor.BUSINESS_MODEL_HEADINGS)
+        )
+        + "\n"
+    )
+
+
 class StageExecutorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -159,32 +634,7 @@ class StageExecutorTests(unittest.TestCase):
             values = list(arguments)
             output = Path(values[values.index("--output") + 1])
             transaction = values[values.index("--transaction") + 1]
-            tx_dir = output / ".work" / "execution" / "transactions" / transaction
-            ledger_path = tx_dir / "checkpoints.json"
-            if ledger_path.is_file():
-                ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-                for item in ledger["checkpoints"]:
-                    if item["status"] in {"complete", "skipped", "blocked"}:
-                        continue
-                    completed = subprocess.run(
-                        [
-                            sys.executable,
-                            str(EXECUTOR),
-                            "checkpoint",
-                            "--output",
-                            str(output),
-                            "--transaction",
-                            transaction,
-                            "--checkpoint",
-                            item["checkpoint_id"],
-                            "--status",
-                            "complete",
-                            "--json",
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-                    self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.complete_checkpoints(transaction, output=output)
         result = subprocess.run(
             [sys.executable, str(EXECUTOR), *arguments, "--json"],
             capture_output=True,
@@ -201,6 +651,38 @@ class StageExecutorTests(unittest.TestCase):
         result = self.run_cmd("begin", "--output", str(self.output), "--stage", stage)
         payload = json.loads(result.stdout)
         return payload["transaction_id"], Path(payload["candidate"])
+
+    def complete_checkpoints(
+        self, transaction: str, *, output: Path | None = None
+    ) -> None:
+        output = output or self.output
+        tx_dir = output / ".work" / "execution" / "transactions" / transaction
+        ledger_path = tx_dir / "checkpoints.json"
+        if not ledger_path.is_file():
+            return
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        for item in ledger["checkpoints"]:
+            if item["status"] in {"complete", "skipped", "blocked"}:
+                continue
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(EXECUTOR),
+                    "checkpoint",
+                    "--output",
+                    str(output),
+                    "--transaction",
+                    transaction,
+                    "--checkpoint",
+                    item["checkpoint_id"],
+                    "--status",
+                    "complete",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
     def test_partial_candidate_does_not_advance_formal_state(self) -> None:
         transaction, candidate = self.begin("inventory")
@@ -252,6 +734,641 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(len(status["checkpoints"]), 3)
         self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
 
+    def test_status_distinguishes_formal_and_candidate_manifest_staleness(self) -> None:
+        initialized = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(initialized["artifact_manifest_status"], "valid")
+        self.assertEqual(
+            initialized["candidate_artifact_manifest_status"], "not-applicable"
+        )
+        self.assertEqual(initialized["manifest_refresh_pending"], "none")
+
+        transaction, candidate = self.begin("inventory")
+        begun = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(begun["artifact_manifest_status"], "stale")
+        self.assertEqual(begun["artifact_manifest_errors"], [])
+        self.assertEqual(
+            begun["artifact_manifest_stale_reasons"],
+            [
+                "artifact manifest checksum differs from file: "
+                ".work/analysis-state.yaml"
+            ],
+        )
+        self.assertEqual(begun["candidate_artifact_manifest_status"], "valid")
+        self.assertEqual(begun["manifest_refresh_pending"], "formal")
+        self.assertFalse(
+            any("Artifact Schema:" in requirement for requirement in begun["requirements"])
+        )
+
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        formal_manifest_before_status = (
+            self.output / ".work" / "artifact-manifest.json"
+        ).read_bytes()
+        candidate_manifest_before_status = (
+            candidate / ".work" / "artifact-manifest.json"
+        ).read_bytes()
+        edited = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(edited["artifact_manifest_status"], "stale")
+        self.assertEqual(edited["candidate_artifact_manifest_status"], "stale")
+        self.assertEqual(edited["candidate_artifact_manifest_errors"], [])
+        self.assertIn(
+            "artifact is missing from manifest: .work/evidence-index.json",
+            edited["candidate_artifact_manifest_stale_reasons"],
+        )
+        self.assertEqual(edited["manifest_refresh_pending"], "both")
+        self.assertFalse(
+            any("Artifact Schema:" in requirement for requirement in edited["requirements"])
+        )
+        self.assertEqual(
+            (self.output / ".work" / "artifact-manifest.json").read_bytes(),
+            formal_manifest_before_status,
+        )
+        self.assertEqual(
+            (candidate / ".work" / "artifact-manifest.json").read_bytes(),
+            candidate_manifest_before_status,
+        )
+        executor = load_executor_module()
+        self.assertTrue(
+            executor.validate_artifact_manifest(candidate, executor.load_registry())
+        )
+
+        self.run_cmd(
+            "commit", "--output", str(self.output), "--transaction", transaction
+        )
+        committed = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(committed["artifact_manifest_status"], "valid")
+        self.assertEqual(committed["artifact_manifest_stale_reasons"], [])
+        self.assertEqual(committed["artifact_manifest_errors"], [])
+        self.assertEqual(
+            committed["candidate_artifact_manifest_status"], "not-applicable"
+        )
+        self.assertEqual(committed["manifest_refresh_pending"], "none")
+
+    def test_stage_validate_is_read_only_and_separates_expected_manifest_drift(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        self.complete_checkpoints(transaction)
+        before = raw_tree_hashes(self.output)
+
+        result = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["stage_validation_report_schema_version"], "1")
+        self.assertEqual(payload["result"], "ready")
+        self.assertEqual(payload["semantic_or_document_errors"]["count"], 0)
+        self.assertEqual(payload["blocking_errors"]["count"], 0)
+        self.assertEqual(
+            payload["expected_candidate_manifest_drift"]["status"],
+            "pending-refresh",
+        )
+        self.assertTrue(
+            payload["expected_candidate_manifest_drift"]["refresh_on_commit"]
+        )
+        self.assertTrue(
+            any(
+                "evidence-index.json" in reason
+                for reason in payload["expected_candidate_manifest_drift"]["reasons"]
+            )
+        )
+        self.assertLess(len(result.stdout.encode("utf-8")), 10_000)
+        self.assertEqual(raw_tree_hashes(self.output), before)
+
+    def test_scaffold_creates_identity_correct_artifact_and_never_overwrites(self) -> None:
+        inventory, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", inventory)
+
+        tracing, candidate = self.begin("tracing")
+        for identity_arguments, expected_message in (
+            ([], "missing identity"),
+            (["behavior_id=sample-repo.one", "behavior_id=sample-repo.two"], "duplicate"),
+            (["unknown_id=sample-repo.one"], "missing identity"),
+            (["behavior_id=../escape"], "portable characters"),
+        ):
+            with self.subTest(identity_arguments=identity_arguments):
+                command = [
+                    "scaffold",
+                    "--output",
+                    str(self.output),
+                    "--transaction",
+                    tracing,
+                    "--artifact-type",
+                    "behavior-dossier",
+                ]
+                for identity_argument in identity_arguments:
+                    command.extend(["--identity", identity_argument])
+                failure = json.loads(self.run_cmd(*command, expected=2).stdout)
+                self.assertIn(expected_message, failure["error"])
+        protected = [
+            self.output / ".work" / "analysis-state.yaml",
+            self.output / ".work" / "artifact-manifest.json",
+            self.output / ".work" / "execution" / "active.lock",
+            self.output
+            / ".work"
+            / "execution"
+            / "transactions"
+            / tracing
+            / "transaction.json",
+            self.output
+            / ".work"
+            / "execution"
+            / "transactions"
+            / tracing
+            / "checkpoints.json",
+            candidate / ".work" / "analysis-state.yaml",
+            candidate / ".work" / "artifact-manifest.json",
+        ]
+        before = {path: path.read_bytes() for path in protected}
+        result = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tracing,
+                "--artifact-type",
+                "behavior-dossier",
+                "--identity",
+                "behavior_id=sample-repo.update-customer",
+            ).stdout
+        )
+        self.assertEqual(result["result"], "created")
+        self.assertEqual(result["candidate_manifest_status"], "stale")
+        self.assertEqual(
+            result["relative_path"],
+            ".work/behavior-dossiers/sample-repo.update-customer.md",
+        )
+        dossier = Path(result["path"])
+        dossier_text = dossier.read_text(encoding="utf-8")
+        self.assertIn('artifact_type: "behavior-dossier"', dossier_text)
+        self.assertIn('artifact_schema_version: "1"', dossier_text)
+        self.assertIn('behavior_id: "sample-repo.update-customer"', dossier_text)
+        self.assertIn('repository: "sample-repo"', dossier_text)
+        self.assertIn('source_commit: "unknown"', dossier_text)
+        self.assertIn('entry_type: "api|sqs|sns|eventbridge', dossier_text)
+        self.assertEqual({path: path.read_bytes() for path in protected}, before)
+
+        dossier.write_text(
+            dossier_text.replace(
+                "# Behavior working dossier", "# Analyst-written behavior dossier"
+            ),
+            encoding="utf-8",
+        )
+        edited_hash = hashlib.sha256(dossier.read_bytes()).hexdigest()
+        existing = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tracing,
+                "--artifact-type",
+                "behavior-dossier",
+                "--identity",
+                "behavior_id=sample-repo.update-customer",
+            ).stdout
+        )
+        self.assertEqual(existing["result"], "already-exists")
+        self.assertEqual(hashlib.sha256(dossier.read_bytes()).hexdigest(), edited_hash)
+
+        dossier.write_text(
+            dossier.read_text(encoding="utf-8").replace(
+                'behavior_id: "sample-repo.update-customer"',
+                'behavior_id: "sample-repo.conflict"',
+            ),
+            encoding="utf-8",
+        )
+        conflicting = dossier.read_bytes()
+        conflict = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tracing,
+                "--artifact-type",
+                "behavior-dossier",
+                "--identity",
+                "behavior_id=sample-repo.update-customer",
+                expected=2,
+            ).stdout
+        )
+        self.assertEqual(conflict["result"], "error")
+        self.assertIn("identity conflicts", conflict["error"])
+        self.assertEqual(dossier.read_bytes(), conflicting)
+
+    def test_scaffold_rejects_wrong_stage_identity_and_lock_ownership(self) -> None:
+        inventory, _candidate = self.begin("inventory")
+        wrong_stage = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                inventory,
+                "--artifact-type",
+                "behavior-dossier",
+                "--identity",
+                "behavior_id=sample-repo.behavior",
+                expected=2,
+            ).stdout
+        )
+        self.assertIn("belongs to stage tracing", wrong_stage["error"])
+        unsupported = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                inventory,
+                "--artifact-type",
+                "evidence-index",
+                expected=2,
+            ).stdout
+        )
+        self.assertIn("not scaffoldable", unsupported["error"])
+
+        lock_path = self.output / ".work" / "execution" / "active.lock"
+        lock = lock_path.read_text(encoding="utf-8")
+        lock_path.write_text(lock.replace(inventory, "different-transaction"), encoding="utf-8")
+        lock_error = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                inventory,
+                "--artifact-type",
+                "repository-synthesis",
+                expected=2,
+            ).stdout
+        )
+        self.assertIn("execution lock", lock_error["error"])
+        lock_path.write_text(lock, encoding="utf-8")
+
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", inventory)
+        absent = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                inventory,
+                "--artifact-type",
+                "repository-synthesis",
+                expected=2,
+            ).stdout
+        )
+        self.assertEqual(absent["result"], "error")
+
+    def test_stage_validate_reports_checkpoint_and_invalid_manifest_blockers(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"999"}\n',
+            encoding="utf-8",
+        )
+        result = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            expected=1,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["result"], "blocked")
+        codes = {item["code"] for item in payload["blocking_errors"]["items"]}
+        self.assertIn("CHECKPOINT-INCOMPLETE", codes)
+        self.assertIn("CANDIDATE-MANIFEST", codes)
+        self.assertEqual(
+            payload["expected_candidate_manifest_drift"]["status"], "none"
+        )
+
+    def test_stage_validate_detects_formal_drift_without_restoring_it(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        self.complete_checkpoints(transaction)
+        register = self.output / ".work" / "repository-register.md"
+        register.write_text(
+            register.read_text(encoding="utf-8") + "\nUnexpected formal edit.\n",
+            encoding="utf-8",
+        )
+        before = raw_tree_hashes(self.output)
+        result = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            expected=1,
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(
+            any(
+                item["code"] == "FORMAL-DRIFT"
+                for item in payload["blocking_errors"]["items"]
+            )
+        )
+        self.assertEqual(raw_tree_hashes(self.output), before)
+
+    def test_stage_validate_can_rerun_after_failed_commit(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            expected=1,
+        )
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        result = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+        )
+        self.assertEqual(json.loads(result.stdout)["result"], "ready")
+
+    def test_stage_validate_json_error_uses_compact_report(self) -> None:
+        result = self.run_cmd(
+            "validate",
+            "--output",
+            str(self.output),
+            "--transaction",
+            "missing-transaction",
+            expected=2,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["result"], "error")
+        self.assertEqual(payload["blocking_errors"]["count"], 1)
+        self.assertEqual(
+            payload["blocking_errors"]["items"][0]["code"],
+            "VALIDATION-COMMAND",
+        )
+
+    def test_stage_validator_parser_preserves_counts_and_classifies_diagnostics(self) -> None:
+        executor = load_executor_module()
+        pack_result = {
+            "command": ["python3", "/skill/scripts/validate_pack_links.py"],
+            "exit_code": 1,
+            "stdout": json.dumps(
+                {
+                    "errors": {
+                        "DEP-DOCUMENT": ["invalid Criticality value"],
+                        "FAIL-DOCUMENT": ["invalid Retry Safety value"],
+                    },
+                    "primary_errors": 14,
+                    "skipped": {
+                        "FAIL-DEP-XREF": "Dependency Register is invalid"
+                    },
+                    "warnings": 3,
+                    "warning_messages": ["one visible warning"],
+                    "deferred_link_count": 2,
+                    "deferred_links": [
+                        {
+                            "check": "api-materialization",
+                            "source": "tech-pack/behaviors/get.md",
+                            "target": "tech-pack/contracts/get.api-contract.md",
+                        },
+                        {
+                            "check": "ba-traceability",
+                            "source": "tech-pack/behaviors/get.md",
+                            "target": "ba-pack/scenarios/get.md",
+                        },
+                    ],
+                }
+            ),
+            "stderr": "",
+        }
+        (
+            semantic,
+            blocking,
+            warnings,
+            forward,
+            forward_total,
+            semantic_total,
+            warning_total,
+        ) = executor.parse_validator_diagnostics(pack_result)
+        self.assertEqual(
+            {item["code"] for item in semantic},
+            {"DEP-DOCUMENT", "FAIL-DOCUMENT", "SKIPPED:FAIL-DEP-XREF"},
+        )
+        self.assertEqual(blocking, [])
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(len(forward), 2)
+        self.assertEqual(forward_total, 2)
+        self.assertEqual(semantic_total, 15)
+        self.assertEqual(warning_total, 3)
+
+        text_result = {
+            "command": ["python3", "/skill/scripts/validate_behavior_doc.py"],
+            "exit_code": 1,
+            "stdout": (
+                "ERROR: missing document link\n"
+                "ERROR [API-TABLE] line 12: invalid table\n"
+                "WARNING: limited evidence\n"
+            ),
+            "stderr": "",
+        }
+        semantic, blocking, warnings, forward, forward_total, _, _ = (
+            executor.parse_validator_diagnostics(text_result)
+        )
+        self.assertEqual(
+            {item["code"] for item in semantic},
+            {"DOCUMENT-VALIDATION", "API-TABLE"},
+        )
+        self.assertEqual(blocking, [])
+        self.assertEqual(warnings[0]["code"], "VALIDATOR-WARNING")
+        self.assertEqual(forward, [])
+        self.assertEqual(forward_total, 0)
+
+    def test_stage_validation_semantic_projection_is_precommit_only(self) -> None:
+        executor = load_executor_module()
+        state = self.output / ".work" / "analysis-state.yaml"
+        original = state.read_text(encoding="utf-8")
+        projected, errors = executor.projected_validation_state(
+            "synthesis", self.output
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(executor.scalar_value(projected, "synthesis_status"), "complete")
+        self.assertEqual(state.read_text(encoding="utf-8"), original)
+
+        model = self.output / ".work" / "business-model.md"
+        for status in ("complete", "partial", "blocked"):
+            with self.subTest(status=status):
+                model.write_text(
+                    "---\n"
+                    'artifact_type: "business-model"\n'
+                    'artifact_schema_version: "1"\n'
+                    f'business_model_status: "{status}"\n'
+                    "---\n",
+                    encoding="utf-8",
+                )
+                projected, errors = executor.projected_validation_state(
+                    "business-model", self.output
+                )
+                self.assertEqual(errors, [])
+                self.assertEqual(
+                    executor.scalar_value(projected, "business_model_status"), status
+                )
+
+    def test_status_marks_invalid_candidate_artifact_identity(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"999"}\n',
+            encoding="utf-8",
+        )
+        status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(status["artifact_manifest_status"], "stale")
+        self.assertEqual(status["candidate_artifact_manifest_status"], "invalid")
+        self.assertEqual(status["candidate_artifact_manifest_stale_reasons"], [])
+        self.assertTrue(
+            any(
+                "artifact metadata mismatch: .work/evidence-index.json" in error
+                for error in status["candidate_artifact_manifest_errors"]
+            )
+        )
+        self.assertEqual(status["manifest_refresh_pending"], "formal")
+        self.assertTrue(
+            any("Artifact Schema:" in requirement for requirement in status["requirements"])
+        )
+        self.run_cmd(
+            "abort", "--output", str(self.output), "--transaction", transaction
+        )
+        aborted = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(aborted["artifact_manifest_status"], "valid")
+        self.assertEqual(aborted["manifest_refresh_pending"], "none")
+
+    def test_candidate_registered_modification_and_deletion_are_stale(self) -> None:
+        transaction, candidate = self.begin("inventory")
+        register = candidate / ".work" / "repository-register.md"
+        register.write_text(
+            register.read_text(encoding="utf-8") + "\nInventory observation.\n",
+            encoding="utf-8",
+        )
+        modified = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(modified["candidate_artifact_manifest_status"], "stale")
+        self.assertIn(
+            "artifact manifest checksum differs from file: "
+            ".work/repository-register.md",
+            modified["candidate_artifact_manifest_stale_reasons"],
+        )
+        self.assertEqual(modified["candidate_artifact_manifest_errors"], [])
+
+        catalog = candidate / ".work" / "behavior-catalog.yaml"
+        catalog.unlink()
+        deleted = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(deleted["candidate_artifact_manifest_status"], "stale")
+        self.assertIn(
+            "artifact manifest references a missing file: "
+            ".work/behavior-catalog.yaml",
+            deleted["candidate_artifact_manifest_stale_reasons"],
+        )
+        self.assertEqual(deleted["candidate_artifact_manifest_errors"], [])
+        self.run_cmd(
+            "abort", "--output", str(self.output), "--transaction", transaction
+        )
+
+    def test_checkpoint_and_failed_commit_keep_manifest_diagnostics_separate(self) -> None:
+        transaction, _candidate = self.begin("inventory")
+        self.run_cmd(
+            "checkpoint",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            "--checkpoint",
+            "project-detection",
+            "--status",
+            "complete",
+        )
+        checkpoint_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(checkpoint_status["artifact_manifest_status"], "stale")
+        self.assertEqual(
+            checkpoint_status["candidate_artifact_manifest_status"], "stale"
+        )
+        self.assertEqual(checkpoint_status["manifest_refresh_pending"], "both")
+        self.assertEqual(checkpoint_status["artifact_manifest_errors"], [])
+        self.assertEqual(checkpoint_status["candidate_artifact_manifest_errors"], [])
+
+        self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            transaction,
+            expected=1,
+        )
+        failed = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(failed["artifact_manifest_status"], "stale")
+        self.assertEqual(failed["candidate_artifact_manifest_status"], "valid")
+        self.assertEqual(failed["manifest_refresh_pending"], "formal")
+        self.assertEqual(failed["artifact_manifest_errors"], [])
+        self.assertEqual(failed["candidate_artifact_manifest_errors"], [])
+        self.assertTrue(
+            any("evidence-index.json" in requirement for requirement in failed["requirements"])
+        )
+        self.run_cmd(
+            "abort", "--output", str(self.output), "--transaction", transaction
+        )
+
+    def test_resume_rejects_active_stale_transaction_without_migration_plan(self) -> None:
+        transaction, _candidate = self.begin("inventory")
+        result = self.run_cmd(
+            "resume",
+            "--repo",
+            str(self.repo),
+            "--state",
+            str(self.output / ".work" / "analysis-state.yaml"),
+            expected=2,
+        )
+        self.assertIn("status, commit, abort, or recover", result.stderr)
+        self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+        self.run_cmd(
+            "abort", "--output", str(self.output), "--transaction", transaction
+        )
+
     def test_commit_rejects_incomplete_checkpoints(self) -> None:
         transaction, candidate = self.begin("inventory")
         (candidate / ".work" / "evidence-index.json").write_text(
@@ -284,7 +1401,20 @@ class StageExecutorTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.output / ".work" / "repository-register.md").write_text(
-            "unauthorized formal write\n", encoding="utf-8"
+            original.decode("utf-8") + "\nUnauthorized formal write.\n",
+            encoding="utf-8",
+        )
+        drift_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(drift_status["artifact_manifest_status"], "invalid")
+        self.assertEqual(drift_status["artifact_manifest_stale_reasons"], [])
+        self.assertTrue(
+            any(
+                "unexpected formal Artifact Manifest drift" in error
+                and ".work/repository-register.md" in error
+                for error in drift_status["artifact_manifest_errors"]
+            )
         )
         result = self.run_cmd(
             "commit",
@@ -383,19 +1513,38 @@ class StageExecutorTests(unittest.TestCase):
         protected = [
             EXECUTOR,
             SKILL_ROOT / "scripts" / "artifact_schema.py",
+            SKILL_ROOT / "scripts" / "artifact_scaffold.py",
             SKILL_ROOT / "scripts" / "validate_analysis_state.py",
             SKILL_ROOT / "scripts" / "build_evidence_index.py",
             SKILL_ROOT / "scripts" / "register_schema.py",
             SKILL_ROOT / "scripts" / "validate_pack_links.py",
             SKILL_ROOT / "assets" / "register-schema.json",
             SKILL_ROOT / "assets" / "artifact-schema.json",
+            SKILL_ROOT / "assets" / "artifact-scaffold-schema.json",
             SKILL_ROOT / "assets" / "repository-register-template.md",
         ]
         before = {
             path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected
         }
-        transaction, _candidate = self.begin("inventory")
-        self.run_cmd("abort", "--output", str(self.output), "--transaction", transaction)
+        transaction, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", transaction)
+        tracing, _candidate = self.begin("tracing")
+        self.run_cmd(
+            "scaffold",
+            "--output",
+            str(self.output),
+            "--transaction",
+            tracing,
+            "--artifact-type",
+            "behavior-dossier",
+            "--identity",
+            "behavior_id=sample-repo.read-only-proof",
+        )
+        self.run_cmd("abort", "--output", str(self.output), "--transaction", tracing)
         after = {
             path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected
         }
@@ -802,6 +1951,642 @@ class StageExecutorTests(unittest.TestCase):
                 self.assertEqual(committed.returncode, 0, committed.stdout + committed.stderr)
                 state = (output / ".work" / "analysis-state.yaml").read_text(encoding="utf-8")
                 self.assertIn('current_stage: "tracing"', state)
+
+    def test_complete_api_ba_lifecycle_publishes_consistent_generation(self) -> None:
+        source = self.repo / "src" / "Handler.java"
+        source.parent.mkdir(parents=True)
+        source.write_text(
+            "class Handler {\n"
+            "  String getCustomer(String id) { return id; }\n"
+            "  String putCustomer(String id) { return id; }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        executor = load_executor_module()
+
+        inventory, candidate = self.begin("inventory")
+        (candidate / ".work" / "evidence-index.json").write_text(
+            '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
+            encoding="utf-8",
+        )
+        state = candidate / ".work" / "analysis-state.yaml"
+        state.write_text(
+            state.read_text(encoding="utf-8").replace(
+                "behaviors: []",
+                "behaviors:\n"
+                f'  - behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+                '    status: "discovered"\n'
+                "    dossier: null\n"
+                '    notes: "Two application routes share one observable behavior."',
+            ),
+            encoding="utf-8",
+        )
+        working_catalog = candidate / ".work" / "behavior-catalog.yaml"
+        working_catalog.write_text(
+            'artifact_type: "working-behavior-catalog"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            'analysis_mode: "automatic"\n'
+            "behaviors:\n"
+            f'  - behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
+            '    title: "Manage customer profile"\n'
+            '    category: "business"\n'
+            "    triggers:\n"
+            '      - type: "api"\n'
+            '        name: "GET or PUT /customers/{id}"\n'
+            "    entry_points:\n"
+            '      - "src/Handler.java:2"\n'
+            '      - "src/Handler.java:3"\n'
+            '    status: "discovered"\n'
+            "    duplicate_of: null\n"
+            f'    document: "behaviors/{COMPLETE_BEHAVIOR_ID}.md"\n'
+            "    ba_scenarios: []\n"
+            "    api_contracts:\n"
+            + "".join(
+                f'      - endpoint_id: "{endpoint_id}"\n'
+                f'        document: "contracts/{endpoint_id}.api-contract.md"\n'
+                for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS
+            )
+            + "summary:\n"
+            "  discovered: 1\n"
+            "  documented: 0\n"
+            "  technical: 0\n"
+            "  duplicate: 0\n"
+            "  excluded: 0\n"
+            "  blocked: 0\n",
+            encoding="utf-8",
+        )
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", inventory)
+
+        tracing, candidate = self.begin("tracing")
+        scaffolded_dossier = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tracing,
+                "--artifact-type",
+                "behavior-dossier",
+                "--identity",
+                f"behavior_id={COMPLETE_BEHAVIOR_ID}",
+            ).stdout
+        )
+        self.assertEqual(scaffolded_dossier["result"], "created")
+        dossier = (
+            candidate
+            / ".work"
+            / "behavior-dossiers"
+            / f"{COMPLETE_BEHAVIOR_ID}.md"
+        )
+        dossier.write_text(complete_dossier_fixture(), encoding="utf-8")
+        self.run_cmd(
+            "mark-behavior",
+            "--output",
+            str(self.output),
+            "--transaction",
+            tracing,
+            "--behavior-id",
+            COMPLETE_BEHAVIOR_ID,
+            "--status",
+            "understood",
+            "--dossier",
+            f"behavior-dossiers/{COMPLETE_BEHAVIOR_ID}.md",
+        )
+        self.run_cmd("commit", "--output", str(self.output), "--transaction", tracing)
+
+        synthesis, candidate = self.begin("synthesis")
+        (candidate / ".work" / "repository-register.md").write_text(
+            complete_register_fixture(executor), encoding="utf-8"
+        )
+        scaffolded_synthesis = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                synthesis,
+                "--artifact-type",
+                "repository-synthesis",
+            ).stdout
+        )
+        self.assertEqual(scaffolded_synthesis["result"], "created")
+        (candidate / ".work" / "repository-synthesis.md").write_text(
+            complete_repository_synthesis_fixture(executor), encoding="utf-8"
+        )
+        self.complete_checkpoints(synthesis)
+        synthesis_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                synthesis,
+            ).stdout
+        )
+        self.assertEqual(synthesis_validation["result"], "ready")
+        self.assertFalse(
+            any(
+                "synthesis_status" in item["message"]
+                for item in synthesis_validation["semantic_or_document_errors"]["items"]
+            )
+        )
+        synthesis_result = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            synthesis,
+            "--semantic-result",
+            "complete",
+        )
+        synthesis_receipt = json.loads(
+            Path(json.loads(synthesis_result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        generation_id = synthesis_receipt["generation_id"]
+        generation_root = (
+            self.output
+            / ".work"
+            / "execution"
+            / "generations"
+            / generation_id
+            / "candidate-root"
+        )
+
+        tech, candidate = self.begin("tech-publication")
+        for artifact_type, identities in (
+            ("tech-behavior", [f"behavior_id={COMPLETE_BEHAVIOR_ID}"]),
+            ("repository-overview", []),
+            ("tech-behavior-catalog", []),
+        ):
+            command = [
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tech,
+                "--artifact-type",
+                artifact_type,
+            ]
+            for identity in identities:
+                command.extend(["--identity", identity])
+            scaffolded = json.loads(self.run_cmd(*command).stdout)
+            self.assertEqual(scaffolded["result"], "created")
+        (candidate / "tech-pack" / "behaviors" / f"{COMPLETE_BEHAVIOR_ID}.md").write_text(
+            complete_api_behavior_fixture(include_ba=False), encoding="utf-8"
+        )
+        (candidate / "tech-pack" / "repository-overview.md").write_text(
+            "---\n"
+            'artifact_type: "repository-overview"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            "---\n\n"
+            "# Repository overview\n\n"
+            "The fixture provides the observed customer profile capability.\n",
+            encoding="utf-8",
+        )
+        (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
+            complete_tech_catalog_fixture(include_ba=False), encoding="utf-8"
+        )
+        self.assertFalse((candidate / "tech-pack" / "endpoint-matrix.md").exists())
+        self.assertFalse((candidate / "tech-pack" / "contracts").exists())
+        self.complete_checkpoints(tech)
+        tech_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                tech,
+            ).stdout
+        )
+        self.assertEqual(tech_validation["result"], "ready")
+        self.assertGreaterEqual(
+            tech_validation["cross_stage_forward_references"]["count"],
+            len(COMPLETE_ENDPOINTS),
+        )
+        self.assertEqual(tech_validation["semantic_or_document_errors"]["count"], 0)
+        self.assertEqual(tech_validation["blocking_errors"]["count"], 0)
+        tech_result = self.run_cmd(
+            "commit", "--output", str(self.output), "--transaction", tech
+        )
+        tech_receipt = json.loads(
+            Path(json.loads(tech_result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        behavior_validator = next(
+            result
+            for result in tech_receipt["validators"]
+            if any("validate_behavior_doc.py" in part for part in result["command"])
+        )
+        pack_validator = next(
+            result
+            for result in tech_receipt["validators"]
+            if any("validate_pack_links.py" in part for part in result["command"])
+        )
+        self.assertIn("--allow-missing-api-contracts", behavior_validator["command"])
+        self.assertEqual(behavior_validator["exit_code"], 0)
+        self.assertEqual(
+            pack_validator["command"][
+                pack_validator["command"].index("--validation-profile") + 1
+            ],
+            "tech-publication",
+        )
+        pack_payload = json.loads(pack_validator["stdout"])
+        self.assertEqual(pack_validator["exit_code"], 0)
+        self.assertEqual(pack_payload["validation_profile"], "tech-publication")
+        self.assertEqual(
+            pack_payload["deferred_checks"],
+            ["api-materialization", "ba-traceability"],
+        )
+        self.assertGreaterEqual(
+            pack_payload["deferred_link_count"], len(COMPLETE_ENDPOINTS)
+        )
+        self.assertEqual(pack_payload["primary_errors"], 0)
+        self.assertEqual(pack_payload["skipped_validation_groups"], 0)
+        self.assertFalse((generation_root / "tech-pack" / "endpoint-matrix.md").exists())
+        for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS:
+            self.assertFalse(
+                (
+                    generation_root
+                    / "tech-pack"
+                    / "contracts"
+                    / f"{endpoint_id}.api-contract.md"
+                ).exists()
+            )
+
+        api, candidate = self.begin("api-contract-publication")
+        scaffolded_matrix = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                api,
+                "--artifact-type",
+                "endpoint-matrix",
+            ).stdout
+        )
+        self.assertEqual(scaffolded_matrix["result"], "created")
+        (candidate / "tech-pack" / "endpoint-matrix.md").write_text(
+            complete_endpoint_matrix_fixture(), encoding="utf-8"
+        )
+        contracts = candidate / "tech-pack" / "contracts"
+        first_endpoint = COMPLETE_ENDPOINTS[0]
+        scaffolded_contract = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                api,
+                "--artifact-type",
+                "api-contract",
+                "--identity",
+                f"endpoint_id={first_endpoint[0]}",
+                "--identity",
+                f"behavior_id={COMPLETE_BEHAVIOR_ID}",
+            ).stdout
+        )
+        self.assertEqual(scaffolded_contract["result"], "created")
+        (contracts / f"{first_endpoint[0]}.api-contract.md").write_text(
+            complete_api_contract_fixture(*first_endpoint), encoding="utf-8"
+        )
+        self.complete_checkpoints(api)
+        incomplete_api_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                api,
+                expected=1,
+            ).stdout
+        )
+        self.assertEqual(incomplete_api_validation["result"], "blocked")
+        self.assertGreater(
+            incomplete_api_validation["semantic_or_document_errors"]["count"], 0
+        )
+        self.assertEqual(
+            incomplete_api_validation["cross_stage_forward_references"]["count"], 0
+        )
+        failed_api = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            api,
+            expected=1,
+        )
+        failed_payload = json.loads(failed_api.stdout)
+        self.assertEqual(failed_payload["result"], "failed")
+        self.assertTrue(candidate.is_dir())
+        self.assertEqual(
+            json.loads(
+                (
+                    self.output
+                    / ".work"
+                    / "execution"
+                    / "generations"
+                    / generation_id
+                    / "generation-manifest.json"
+                ).read_text(encoding="utf-8")
+            )["last_committed_stage"],
+            "tech-publication",
+        )
+        self.assertEqual(
+            list(
+                (self.output / ".work" / "execution" / "receipts").glob(
+                    "*-api-contract-publication.json"
+                )
+            ),
+            [],
+        )
+        transaction_record = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / api
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        validator_output = "\n".join(
+            result.get("stdout", "") + result.get("stderr", "")
+            for result in transaction_record.get("validators", [])
+        )
+        missing_contract = f"{COMPLETE_ENDPOINTS[1][0]}.api-contract.md"
+        self.assertIn(missing_contract, validator_output)
+
+        second_endpoint = COMPLETE_ENDPOINTS[1]
+        retry_scaffold = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                api,
+                "--artifact-type",
+                "api-contract",
+                "--identity",
+                f"endpoint_id={second_endpoint[0]}",
+                "--identity",
+                f"behavior_id={COMPLETE_BEHAVIOR_ID}",
+            ).stdout
+        )
+        self.assertEqual(retry_scaffold["result"], "created")
+        (contracts / f"{second_endpoint[0]}.api-contract.md").write_text(
+            complete_api_contract_fixture(*second_endpoint), encoding="utf-8"
+        )
+        complete_api_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                api,
+            ).stdout
+        )
+        self.assertEqual(complete_api_validation["result"], "ready")
+        api_result = self.run_cmd(
+            "commit", "--output", str(self.output), "--transaction", api
+        )
+        api_receipt = json.loads(
+            Path(json.loads(api_result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(api_receipt["generation_id"], generation_id)
+        for endpoint_id, _method, _route, _line in COMPLETE_ENDPOINTS:
+            self.assertTrue(
+                (
+                    generation_root
+                    / "tech-pack"
+                    / "contracts"
+                    / f"{endpoint_id}.api-contract.md"
+                ).is_file()
+            )
+
+        business_model, candidate = self.begin("business-model")
+        scaffolded_model = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                business_model,
+                "--artifact-type",
+                "business-model",
+            ).stdout
+        )
+        self.assertEqual(scaffolded_model["result"], "created")
+        (candidate / ".work" / "business-model.md").write_text(
+            complete_business_model_fixture(executor), encoding="utf-8"
+        )
+        self.complete_checkpoints(business_model)
+        model_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                business_model,
+            ).stdout
+        )
+        self.assertEqual(model_validation["result"], "ready")
+        self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            business_model,
+            "--semantic-result",
+            "complete",
+        )
+
+        ba, candidate = self.begin("ba-publication")
+        (candidate / "tech-pack" / "behaviors" / f"{COMPLETE_BEHAVIOR_ID}.md").write_text(
+            complete_api_behavior_fixture(include_ba=True), encoding="utf-8"
+        )
+        (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
+            complete_tech_catalog_fixture(include_ba=True), encoding="utf-8"
+        )
+        for artifact_type, identities in (
+            ("ba-overview", []),
+            ("ba-catalog", []),
+            ("ba-journey", [f"journey_id={COMPLETE_JOURNEY_ID}"]),
+            ("ba-scenario", [f"scenario_id={COMPLETE_SCENARIO_ID}"]),
+        ):
+            command = [
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                ba,
+                "--artifact-type",
+                artifact_type,
+            ]
+            for identity in identities:
+                command.extend(["--identity", identity])
+            scaffolded = json.loads(self.run_cmd(*command).stdout)
+            self.assertEqual(scaffolded["result"], "created")
+        (candidate / "ba-pack" / "business-overview.md").write_text(
+            complete_ba_overview_fixture(), encoding="utf-8"
+        )
+        (candidate / "ba-pack" / "business-catalog.md").write_text(
+            complete_ba_catalog_fixture(), encoding="utf-8"
+        )
+        (candidate / "ba-pack" / "journeys" / f"{COMPLETE_JOURNEY_ID}.md").write_text(
+            complete_ba_journey_fixture(), encoding="utf-8"
+        )
+        (candidate / "ba-pack" / "scenarios" / f"{COMPLETE_SCENARIO_ID}.md").write_text(
+            complete_ba_scenario_fixture(), encoding="utf-8"
+        )
+        self.complete_checkpoints(ba)
+        ba_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                ba,
+            ).stdout
+        )
+        self.assertEqual(ba_validation["result"], "ready")
+        ba_result = self.run_cmd(
+            "commit", "--output", str(self.output), "--transaction", ba
+        )
+        ba_receipt = json.loads(
+            Path(json.loads(ba_result.stdout)["receipt"]).read_text(encoding="utf-8")
+        )
+        for validator_name in (
+            "validate_behavior_doc.py",
+            "validate_ba_journey.py",
+            "validate_ba_scenario.py",
+            "validate_pack_links.py",
+        ):
+            matching = [
+                result
+                for result in ba_receipt["validators"]
+                if any(validator_name in part for part in result["command"])
+            ]
+            self.assertTrue(matching, validator_name)
+            self.assertTrue(all(result["exit_code"] == 0 for result in matching))
+
+        finalization, _candidate = self.begin("finalization")
+        finalization_scaffold = json.loads(
+            self.run_cmd(
+                "scaffold",
+                "--output",
+                str(self.output),
+                "--transaction",
+                finalization,
+                "--artifact-type",
+                "repository-overview",
+                expected=2,
+            ).stdout
+        )
+        self.assertIn("not allowed during finalization", finalization_scaffold["error"])
+        self.complete_checkpoints(finalization)
+        final_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                finalization,
+            ).stdout
+        )
+        self.assertEqual(final_validation["result"], "ready")
+        finalized = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            finalization,
+        )
+        final_payload = json.loads(finalized.stdout)
+        final_receipt = json.loads(
+            Path(final_payload["receipt"]).read_text(encoding="utf-8")
+        )
+        status = json.loads(self.run_cmd("status", "--output", str(self.output)).stdout)
+        self.assertEqual(status["working_generation_id"], generation_id)
+        self.assertEqual(status["published_generation_id"], generation_id)
+        self.assertEqual(status["working_generation_status"], "published")
+        self.assertEqual(status["release_readiness"], "ready")
+        self.assertEqual(status["integrity_errors"], [])
+        self.assertEqual(status["artifact_manifest_status"], "valid")
+        self.assertEqual(status["artifact_manifest_stale_reasons"], [])
+        self.assertEqual(status["artifact_manifest_errors"], [])
+        self.assertEqual(
+            status["candidate_artifact_manifest_status"], "not-applicable"
+        )
+        self.assertEqual(status["manifest_refresh_pending"], "none")
+
+        self.assertEqual(final_receipt["result"], "committed")
+        self.assertEqual(final_receipt["promotion_scope"], "formal-pack")
+        self.assertTrue(final_receipt["formal_pack_published"])
+        self.assertEqual(final_receipt["generation_id"], generation_id)
+        self.assertEqual(final_receipt["primary_error_count"], 0)
+        self.assertEqual(final_receipt["skipped_group_count"], 0)
+
+        artifact_manifest_path = self.output / ".work" / "artifact-manifest.json"
+        artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(artifact_manifest["last_transaction"], finalization)
+        self.assertEqual(executor.validate_artifact_manifest(self.output, executor.load_registry()), [])
+        expected_artifacts = {
+            ".work/business-model.md",
+            "tech-pack/repository-overview.md",
+            "tech-pack/behavior-catalog.yaml",
+            f"tech-pack/behaviors/{COMPLETE_BEHAVIOR_ID}.md",
+            "tech-pack/endpoint-matrix.md",
+            *(f"tech-pack/contracts/{endpoint_id}.api-contract.md" for endpoint_id, *_rest in COMPLETE_ENDPOINTS),
+            "ba-pack/business-overview.md",
+            "ba-pack/business-catalog.md",
+            f"ba-pack/journeys/{COMPLETE_JOURNEY_ID}.md",
+            f"ba-pack/scenarios/{COMPLETE_SCENARIO_ID}.md",
+        }
+        manifest_entries = {
+            entry["path"]: entry for entry in artifact_manifest["artifacts"]
+        }
+        self.assertTrue(expected_artifacts.issubset(manifest_entries))
+        for relative in expected_artifacts:
+            document = self.output / relative
+            self.assertTrue(document.is_file(), relative)
+            self.assertEqual(manifest_entries[relative]["sha256"], executor.sha256_file(document))
+
+        generation_manifest = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "generations"
+                / generation_id
+                / "generation-manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            generation_manifest["published_knowledge_manifest"],
+            executor.knowledge_manifest(self.output),
+        )
+
+        independent = subprocess.run(
+            [
+                sys.executable,
+                str(SKILL_ROOT / "scripts" / "validate_pack_links.py"),
+                str(self.output),
+                "--repo",
+                str(self.repo),
+                "--require-artifact-manifest",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(independent.returncode, 0, independent.stdout + independent.stderr)
+        independent_payload = json.loads(independent.stdout)
+        self.assertEqual(independent_payload["primary_errors"], 0)
+        self.assertEqual(independent_payload["skipped_validation_groups"], 0)
 
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         source = self.repo / "src" / "Handler.java"

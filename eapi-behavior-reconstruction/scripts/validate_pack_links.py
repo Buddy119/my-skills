@@ -157,7 +157,10 @@ FAILURE_PATTERN_INDEX_HEADERS = [
 
 
 MAX_ERRORS_PER_GROUP = 10
+MAX_DEFERRED_LINK_DETAILS = 50
 DOMAIN_STATUSES = {"valid", "partial", "invalid", "skipped"}
+VALIDATION_PROFILES = {"tech-publication", "complete"}
+TECH_DEFERRED_CHECKS = ("api-materialization", "ba-traceability")
 
 
 @dataclass
@@ -174,11 +177,21 @@ class DomainResult:
 class ValidationReport:
     """Group, de-duplicate, budget, and summarize mechanical validation results."""
 
-    def __init__(self) -> None:
+    def __init__(self, validation_profile: str = "complete") -> None:
+        if validation_profile not in VALIDATION_PROFILES:
+            raise ValueError(f"invalid validation profile: {validation_profile}")
+        self.validation_profile = validation_profile
         self.error_groups: dict[str, list[str]] = {}
         self.skipped_groups: dict[str, str] = {}
         self.warnings: list[str] = []
         self.domain_statuses: dict[str, str] = {}
+        self.deferred_checks: list[str] = (
+            list(TECH_DEFERRED_CHECKS)
+            if validation_profile == "tech-publication"
+            else []
+        )
+        self.deferred_link_count = 0
+        self.deferred_links: list[dict[str, str]] = []
         self.checked_links = 0
         self.checked_documents = 0
 
@@ -197,6 +210,13 @@ class ValidationReport:
 
     def skip(self, code: str, reason: str) -> None:
         self.skipped_groups.setdefault(code, reason)
+
+    def defer_link(self, check: str, source: str, target: str) -> None:
+        self.deferred_link_count += 1
+        if len(self.deferred_links) < MAX_DEFERRED_LINK_DETAILS:
+            self.deferred_links.append(
+                {"check": check, "source": source, "target": target}
+            )
 
     @property
     def primary_error_count(self) -> int:
@@ -222,6 +242,13 @@ class ValidationReport:
         }
         return {
             "result": "failed" if self.failed else "ok",
+            "validation_profile": self.validation_profile,
+            "deferred_checks": self.deferred_checks,
+            "deferred_link_count": self.deferred_link_count,
+            "deferred_links": self.deferred_links,
+            "deferred_links_suppressed": max(
+                0, self.deferred_link_count - len(self.deferred_links)
+            ),
             "primary_errors": self.primary_error_count,
             "warnings": len(self.warnings),
             "skipped_validation_groups": len(self.skipped_groups),
@@ -246,6 +273,8 @@ class ValidationReport:
                 print(f"ERROR [{code}] {suppressed} additional error(s) suppressed")
         for code, reason in self.skipped_groups.items():
             print(f"SKIPPED [{code}] {reason}")
+        for check in self.deferred_checks:
+            print(f"DEFERRED [{check}] later publication stage")
         for warning in self.warnings:
             print(f"WARNING {warning}")
         print(
@@ -254,6 +283,7 @@ class ValidationReport:
             f"warnings={payload['warnings']} "
             f"skipped_groups={payload['skipped_validation_groups']} "
             f"suppressed_errors={payload['suppressed_row_errors']} "
+            f"deferred_links={payload['deferred_link_count']} "
             f"checked_links={payload['checked_links']} "
             f"checked_documents={payload['checked_documents']}"
         )
@@ -303,6 +333,29 @@ def within_root(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def deferred_check_for_missing_target(
+    path: Path,
+    root: Path,
+    validation_profile: str,
+) -> str | None:
+    """Return the later publication check that owns a missing target."""
+    if validation_profile != "tech-publication" or not within_root(path, root):
+        return None
+    relative = path.relative_to(root)
+    parts = relative.parts
+    if relative.as_posix() == "tech-pack/endpoint-matrix.md":
+        return "api-materialization"
+    if (
+        len(parts) == 3
+        and parts[:2] == ("tech-pack", "contracts")
+        and parts[2].endswith(".api-contract.md")
+    ):
+        return "api-materialization"
+    if parts and parts[0] == "ba-pack":
+        return "ba-traceability"
+    return None
 
 
 def section_value(body: str, heading: str) -> str:
@@ -1581,6 +1634,15 @@ def main() -> int:
         action="store_true",
         help="skip Manifest only during executor post-promotion checks before State commit",
     )
+    parser.add_argument(
+        "--validation-profile",
+        choices=sorted(VALIDATION_PROFILES),
+        default="complete",
+        help=(
+            "validation maturity: tech-publication defers only missing future API/BA "
+            "artifacts; complete requires the fully materialized Pack"
+        ),
+    )
     args = parser.parse_args()
 
     if not args.pack_root.is_dir():
@@ -1592,7 +1654,7 @@ def main() -> int:
     if repo is not None and not repo.is_dir():
         print(f"ERROR: repository directory does not exist: {args.repo}")
         return 2
-    report = ValidationReport()
+    report = ValidationReport(args.validation_profile)
 
     manifest_path = root / ".work" / "artifact-manifest.json"
     if not args.skip_artifact_manifest and (
@@ -1623,9 +1685,19 @@ def main() -> int:
                     f"local link escapes pack root: {document.relative_to(root)} -> {match.group('target')}"
                 )
             elif not resolved.exists():
-                document_errors.append(
-                    f"broken local link: {document.relative_to(root)} -> {match.group('target')}"
+                deferred_check = deferred_check_for_missing_target(
+                    resolved, root, args.validation_profile
                 )
+                if deferred_check:
+                    report.defer_link(
+                        deferred_check,
+                        document.relative_to(root).as_posix(),
+                        match.group("target"),
+                    )
+                else:
+                    document_errors.append(
+                        f"broken local link: {document.relative_to(root)} -> {match.group('target')}"
+                    )
         report.add_errors("MARKDOWN-LINK", document_errors)
 
     catalog = root / "tech-pack" / "behavior-catalog.yaml"
@@ -1640,10 +1712,20 @@ def main() -> int:
             if not within_root(resolved, root):
                 report.error("CATALOG-LINK", f"catalog path escapes pack root: {target}")
             elif not resolved.exists():
-                report.error("CATALOG-LINK", f"broken catalog document path: {target}")
+                deferred_check = deferred_check_for_missing_target(
+                    resolved, root, args.validation_profile
+                )
+                if deferred_check:
+                    report.defer_link(
+                        deferred_check,
+                        catalog.relative_to(root).as_posix(),
+                        target,
+                    )
+                else:
+                    report.error("CATALOG-LINK", f"broken catalog document path: {target}")
 
     endpoint_matrix = root / "tech-pack" / "endpoint-matrix.md"
-    if endpoint_matrix.is_file():
+    if args.validation_profile == "complete" and endpoint_matrix.is_file():
         endpoint_errors: list[str] = []
         validate_endpoint_matrix(endpoint_matrix, root, endpoint_errors)
         report.add_errors("ENDPOINT-DOCUMENT", endpoint_errors)
@@ -1789,9 +1871,10 @@ def main() -> int:
     )
     report.add_errors("BEHAVIOR-REPOSITORY-BACKLINK", behavior_repository_errors)
 
-    ba_errors: list[str] = []
-    validate_ba_traceability(root, ba_errors)
-    report.add_errors("BA-LINK", ba_errors)
+    if args.validation_profile == "complete":
+        ba_errors: list[str] = []
+        validate_ba_traceability(root, ba_errors)
+        report.add_errors("BA-LINK", ba_errors)
 
     report.checked_documents = len(markdown_files)
     if args.json:
