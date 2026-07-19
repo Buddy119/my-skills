@@ -17,7 +17,7 @@ Reconstruct an independent business model from the completed repository synthesi
 - Generate the Business Model only after repository synthesis and the related Tech documents are complete at the same commit.
 - Generate the BA Pack only after the Business Model receives a semantic review and has status `complete` or `partial`.
 - Describe only the repository-observable portion of a business journey. Keep upstream, downstream, historical intent, policy rationale, and remote behavior `Unknown` when this repository cannot establish them.
-- Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown`; do not upgrade confidence during business modeling.
+- Preserve `Confirmed`, `Inferred`, `Conflicting`, and `Unknown` in the Business Model; do not upgrade confidence during business modeling. In BA Reader documents, Confirmed is the unmarked baseline and only Inferred, Unknown, or Conflicting is shown beside the affected business label.
 - Keep raw source citations in the Tech Pack. Use Journey and Scenario traceability links to reach supporting Tech Behaviors.
 
 ## Independent business-model stage

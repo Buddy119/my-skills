@@ -44,7 +44,7 @@ REQUIRED_HEADINGS = {
     "Outputs and side effects",
     "Failures, retries, and partial success",
     "Open questions and conflicts",
-    "Evidence index",
+    "Source notes",
 }
 
 ALLOWED_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
@@ -410,8 +410,6 @@ def main() -> int:
         if start < 1 or final_line > line_count:
             errors.append(f"citation outside file bounds: {rel}:{start}" + (f"-{end}" if end else ""))
 
-    if "Unknown" not in body and "Conflicting" not in body:
-        warnings.append("document contains no Unknown or Conflicting review items")
     placeholders = (
         "TODO",
         "TEMPLATE:",

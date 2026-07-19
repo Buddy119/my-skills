@@ -52,7 +52,7 @@ def behavior_document(
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -74,7 +74,7 @@ def behavior_document(
         "analysis_limitations: []\n"
         "---\n\n"
         "# Get customer\n\n"
-        "## Summary\n\nReturns the observed customer result. `src/Handler.java:1`\n\n"
+        "## Summary\n\nReturns the observed customer result. [E1](#e1)\n\n"
         "## Trigger and entry point\n\nThe application route invokes the handler.\n\n"
         + api_section
         + "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
@@ -86,7 +86,8 @@ def behavior_document(
         "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
         "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
-        "## Evidence index\n\n- `src/Handler.java:1`\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the behavior summary.\n'
     )
 
 

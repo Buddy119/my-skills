@@ -57,7 +57,7 @@ Publish `external-dependency-contracts.md` from reconciled Dependency Contracts,
 - State Call, target, resource, and Dependency identity once.
 - Nest Operations beneath their Dependency and link deeper field, lifecycle, configuration, failure, and behavior documents.
 - Use natural-language role and impact explanations before source notes.
-- Keep evidence compact under the Dependency section; do not reproduce the observation table.
+- Keep evidence compact in grouped Source Notes under the Dependency section; do not reproduce the observation table, a generic Status column, or repeated Confirmed labels. Put any Inferred, Unknown, or Conflicting qualifier beside the Dependency or Operation identity.
 - Omit the document when no executable external boundary is observed and record `Not observed` in Repository Overview.
 
 Project Dependency Operations into Repository Overview only through the synthesized Repository Connection model. Combine same-role Operations into one logical connection when direction, boundary, interaction role, and configuration-selection semantics match; split materially different roles. The Overview links back to the Dependency Contract and does not redefine or copy its Operation inventory.

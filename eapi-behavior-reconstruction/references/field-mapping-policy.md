@@ -121,7 +121,7 @@ Include only usages and mappings applicable to that behavior. Shared Call IDs an
 
 Start with one operation index row per Call ID. Then create one anchored `## HTTP-nnn — Operation name` section per operation containing:
 
-1. Call Overview, with identity, purpose, related behaviors, status, and call-level evidence once.
+1. Call Overview, with identity, purpose, and related behaviors once; preserve only an exceptional evidence qualifier beside the Call identity and use grouped Source Notes for support.
 2. Executable Usages when multiple usages exist or usage-specific conditions matter.
 3. Request Mappings.
 4. Response Mappings.

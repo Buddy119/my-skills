@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-overview"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 analysis_mode: "automatic"
@@ -16,15 +16,15 @@ Summarize what the repository appears to do from executable evidence. Separate c
 
 ## Technology and deployment
 
-| Area | Observed value | Status | Evidence |
-|---|---|---|---|
-| Runtime/framework/IaC | Value | Confirmed | `path/to/file.ext:line` |
+| Area | Observed value |
+|---|---|
+| Runtime/framework/IaC | Value [E1](#e1) |
 
 ## Entry-point inventory
 
-| Entry point | Trigger | Behavior ID | Classification | Status | Evidence |
-|---|---|---|---|---|---|
-| Handler or route | API/event/queue/schedule | repository.behavior | Business/integration/technical | Documented | `path/to/file.ext:line` |
+| Entry point | Trigger | Behavior ID | Classification |
+|---|---|---|---|
+| Handler or route | API/event/queue/schedule | repository.behavior | Business/integration/technical [E2](#e2) |
 
 ## Endpoint exposure summary
 
@@ -109,17 +109,17 @@ Publish only items from the Shared Behavior Model. An item must affect at least 
 
 ### Shared rules
 
-| Shared rule | Observable effect | Capabilities / Behaviors | Variations or overrides | Configuration / source of truth | Status | Deep dive |
-|---|---|---|---|---|---|---|
-| Human-readable rule | Shared validation, decision, authorization, transformation, state, output, or failure effect | Capability and Behavior links | Behavior-specific difference or None observed | Executable rule/configuration source | Confirmed/Inferred/Conflicting/Unknown | Relevant Behavior, Contract, Field, Config, Lifecycle, or Failure links |
+| Shared rule | Observable effect | Capabilities / Behaviors | Variations or overrides | Configuration / source of truth | Deep dive |
+|---|---|---|---|---|---|
+| Human-readable rule *(Unknown)* | Shared validation, decision, authorization, transformation, state, output, or failure effect | Capability and Behavior links | Behavior-specific difference or None observed | Executable rule/configuration source [E3](#e3) | Relevant Behavior, Contract, Field, Config, Lifecycle, or Failure links |
 
 ### Shared behavior-shaping components
 
 Lead with the component's role; include implementation names only to help developers locate the shared mechanism.
 
-| Component and role | Capabilities / Behaviors | Observable behavior impact | Config / variants | Change blast radius and limitations | Status | Deep dive |
-|---|---|---|---|---|---|---|
-| Behavior role — implementation identity | Capability and Behavior links | Path, result, state, boundary, or recovery effect | Binding/profile/target or None observed | Outcomes affected by a change and material Unknowns | Confirmed/Inferred/Conflicting/Unknown | Relevant Behavior, Field, Config, Lifecycle, Dependency, or Failure links |
+| Component and role | Capabilities / Behaviors | Observable behavior impact | Config / variants | Change blast radius and limitations | Deep dive |
+|---|---|---|---|---|---|
+| Behavior role — implementation identity *(Inferred)* | Capability and Behavior links | Path, result, state, boundary, or recovery effect | Binding/profile/target or None observed | Outcomes affected by a change and material Unknowns [E4](#e4) | Relevant Behavior, Field, Config, Lifecycle, Dependency, or Failure links |
 
 Do not list logging, ordinary monitoring, generated code, framework glue, trivial wrappers, generic serializers, or utilities that do not change observable behavior.
 
@@ -130,3 +130,13 @@ Account for excluded, duplicate, generated, dynamic, unreadable, and blocked ent
 ## Repository-level open questions
 
 List unknown responsibilities, conflicting wiring, missing schemas, environment-defined dependencies, and behavior that may live outside the repository.
+
+## Source notes
+
+<a id="e1"></a> **E1** — `path/to/runtime-or-build-file.ext:10-24` supports the technology and deployment summary.
+
+<a id="e2"></a> **E2** — `path/to/entry-point.ext:30-52` supports the entry-point inventory.
+
+<a id="e3"></a> **E3** — `path/to/shared-rule.ext:12-40` supports the shared-rule summary.
+
+<a id="e4"></a> **E4** — `path/to/shared-component.ext:18-61` supports the shared behavior-shaping component summary.

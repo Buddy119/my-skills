@@ -44,6 +44,8 @@ Organize `data-lifecycle.md` by Object. Use:
 - `flowchart` for Actions, resources, and boundaries.
 - The exact no-transition sentence from the lifecycle schema when an Object has processing or movement but no established Transition.
 
+The Register retains status and evidence for every Object, State, Action, and Transition. Reader tables omit those generic columns: Confirmed is unmarked, while Inferred, Unknown, or Conflicting appears beside the affected stable ID. Support related lifecycle rows with grouped Source Notes rather than a source column on every row.
+
 Keep the `lifecycle-state-diagram` and `lifecycle-processing-diagram` tags. In a State Diagram, declare each State using its stable ID and label every edge with its `TRANS-*` ID plus status. In a Processing Diagram, use `ACT-*` identities for action nodes and never present `STATE-*` as processing steps.
 
 The mechanical Validator checks declared types, references, and diagram projection. AI remains responsible for deciding whether a State definition and Transition meaning are supported by code.

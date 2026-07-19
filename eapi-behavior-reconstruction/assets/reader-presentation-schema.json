@@ -1,0 +1,37 @@
+{
+  "reader_presentation_schema_version": "1",
+  "validation_version": "1",
+  "exception_qualifiers": {
+    "Inferred": "*(Inferred)*",
+    "Unknown": "*(Unknown)*",
+    "Conflicting": "*(Conflicting)*"
+  },
+  "confirmed_baseline": "Confirmed",
+  "forbidden_table_headers": [
+    "Status",
+    "Evidence",
+    "Evidence level",
+    "Status and limitation"
+  ],
+  "affected_artifacts": {
+    "repository-overview": {"version": "2", "audience": "tech", "source_notes": true},
+    "tech-behavior": {"version": "3", "audience": "tech", "source_notes": true},
+    "data-lifecycle": {"version": "3", "audience": "tech", "source_notes": true},
+    "field-validation-and-mapping": {"version": "2", "audience": "tech", "source_notes": true},
+    "runtime-config-matrix": {"version": "2", "audience": "tech", "source_notes": true},
+    "external-dependency-contracts": {"version": "2", "audience": "tech", "source_notes": true},
+    "ba-overview": {"version": "2", "audience": "ba", "source_notes": false},
+    "ba-catalog": {"version": "2", "audience": "ba", "source_notes": false},
+    "ba-journey": {"version": "2", "audience": "ba", "source_notes": false},
+    "ba-scenario": {"version": "2", "audience": "ba", "source_notes": false}
+  },
+  "status_sensitive_exemptions": [
+    "endpoint-matrix",
+    "api-contract",
+    "failure-taxonomy"
+  ],
+  "source_notes": {
+    "marker_pattern": "E[1-9][0-9]*",
+    "accepted_heading_text": ["Source notes", "Related documents and source notes"]
+  }
+}

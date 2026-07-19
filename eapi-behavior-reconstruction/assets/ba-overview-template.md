@@ -1,6 +1,6 @@
 ---
 artifact_type: "ba-overview"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 business_model_status: "complete|partial"
@@ -18,9 +18,9 @@ Explain the business responsibility visible in this repository and clearly mark 
 
 ## Business capabilities
 
-| Capability | Business purpose | Actors or participants | Observable outcomes | Journeys | Status |
-|---|---|---|---|---|---|
-| Business capability | Supported purpose | Participants | Outcomes or handoffs | Journey links | Confirmed/Inferred/Conflicting/Unknown |
+| Capability | Business purpose | Actors or participants | Observable outcomes | Journeys |
+|---|---|---|---|---|
+| Business capability *(Inferred)* | Supported purpose | Participants | Outcomes or handoffs | Journey links |
 
 ## Journey landscape
 
@@ -33,15 +33,15 @@ flowchart LR
     J -. Unknown boundary .-> U[Upstream or downstream stage outside this repository]
 ```
 
-| Journey | Business goal | Actors | Scenarios | Observable outcome | Status |
-|---|---|---|---|---|---|
-| [Journey](journeys/repository.journey.business-goal.md) | Supported goal | Participants | Scenario links | Outcome/handoff | Confirmed/Inferred/Conflicting/Unknown |
+| Journey | Business goal | Actors | Scenarios | Observable outcome |
+|---|---|---|---|---|
+| [Journey](journeys/repository.journey.business-goal.md) *(Unknown)* | Supported goal | Participants | Scenario links | Outcome/handoff |
 
 ## Business actors and participants
 
-| Actor or participant | Business role | Journeys or Scenarios | Status and limitation |
+| Actor or participant | Business role | Journeys or Scenarios | Limitation |
 |---|---|---|---|
-| Person, channel, team, or business-visible system | Initiates, decides, receives, or supports an outcome | Business links | Confirmed/Inferred/Conflicting/Unknown |
+| Person, channel, team, or business-visible system *(Conflicting)* | Initiates, decides, receives, or supports an outcome | Business links | Boundary or interpretation limitation |
 
 ## Business objects and lifecycle
 

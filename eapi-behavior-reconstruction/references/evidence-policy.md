@@ -10,6 +10,8 @@ Describe observable implementation behavior without presenting reconstructed int
 
 Use `Confirmed` when direct evidence supports the statement. Prefer two independent sources for high-risk rules, such as implementation plus test or implementation plus IaC.
 
+Keep the complete evidence status in Dossiers, the Repository Register, Repository Synthesis, and the Business Model. In formal Reader artifacts, `Confirmed` is the unmarked baseline. Preserve `Inferred`, `Unknown`, and `Conflicting` beside the affected identity or label using the exact public qualifiers from the Reader Presentation Schema. Group Tech source support into Source Notes; do not require one citation per row. BA documents trace through Tech Behaviors instead of exposing source paths.
+
 Examples:
 
 - A validation branch explicitly rejects a closed customer.

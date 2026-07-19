@@ -40,7 +40,7 @@ def api_behavior_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -64,7 +64,7 @@ def api_behavior_fixture() -> str:
         "analysis_limitations: []\n"
         "---\n\n"
         "# Get customer\n\n"
-        "## Summary\n\nReturns the observed customer result. `src/Handler.java:1`\n\n"
+        "## Summary\n\nReturns the observed customer result. [E1](#e1)\n\n"
         "## Trigger and entry point\n\nThe application route invokes the handler.\n\n"
         "## API contracts\n\n"
         "- [GET /customers/{id}](../contracts/sample-repo.get-customer.api-contract.md)\n\n"
@@ -77,7 +77,8 @@ def api_behavior_fixture() -> str:
         "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
         "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
-        "## Evidence index\n\n- `src/Handler.java:1`\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the observed behavior.\n'
     )
 
 
@@ -186,7 +187,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -208,7 +209,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "analysis_limitations: []\n"
         "---\n\n"
         "# Manage customer profile\n\n"
-        "## Summary\n\nGets or updates the observed customer profile. `src/Handler.java:2-3`\n\n"
+        "## Summary\n\nGets or updates the observed customer profile. [E1](#e1)\n\n"
         "## Trigger and entry point\n\nThe application routes invoke the same profile behavior.\n\n"
         "## API contracts\n\n"
         + contract_links
@@ -225,7 +226,8 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "## Outputs and side effects\n\nReturns the caller-visible profile result.\n\n"
         "## Failures, retries, and partial success\n\nNo retry or partial success is modeled.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
-        "## Evidence index\n\n- `src/Handler.java:2-3`\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:2-3` supports the observed behavior.\n'
     )
 
 
@@ -271,12 +273,12 @@ def complete_repository_overview_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "repository-overview"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
         "# Repository overview\n\n"
-        "The fixture provides the observed customer profile capability.\n\n"
+        "The fixture provides the observed customer profile capability. [E1](#e1)\n\n"
         "## Endpoint exposure summary\n\n"
         "| Category | Count | Interpretation | Details |\n"
         "|---|---|---|---|\n"
@@ -292,7 +294,9 @@ def complete_repository_overview_fixture() -> str:
         "## Knowledge pack index\n\n"
         "| Knowledge area | Document | Availability | What it explains |\n"
         "|---|---|---|---|\n"
-        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application routes and contracts |\n"
+        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application routes and contracts |\n\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:2-3` supports the repository summary.\n'
     )
 
 
@@ -300,12 +304,12 @@ def single_repository_overview_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "repository-overview"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
         "# Repository overview\n\n"
-        "The fixture exposes one application route.\n\n"
+        "The fixture exposes one application route. [E1](#e1)\n\n"
         "## Endpoint exposure summary\n\n"
         "| Category | Count | Interpretation | Details |\n"
         "|---|---|---|---|\n"
@@ -321,7 +325,9 @@ def single_repository_overview_fixture() -> str:
         "## Knowledge pack index\n\n"
         "| Knowledge area | Document | Availability | What it explains |\n"
         "|---|---|---|---|\n"
-        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application route and contract |\n"
+        "| Endpoints | [Endpoint matrix](endpoint-matrix.md) | Not observed | Application route and contract |\n\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the repository summary.\n'
     )
 def complete_endpoint_matrix_fixture() -> str:
     rows = "".join(
@@ -411,7 +417,7 @@ def complete_ba_scenario_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "ba-scenario"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         f'scenario_id: "{COMPLETE_SCENARIO_ID}"\n'
         'title: "Customer profile request completed"\n'
         'repository: "sample-repo"\n'
@@ -444,7 +450,7 @@ def complete_ba_journey_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "ba-journey"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         f'journey_id: "{COMPLETE_JOURNEY_ID}"\n'
         'title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -478,7 +484,7 @@ def complete_ba_overview_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "ba-overview"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         'business_model_status: "complete"\n'
@@ -501,7 +507,7 @@ def complete_ba_catalog_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "ba-catalog"\n'
-        'artifact_schema_version: "1"\n'
+        'artifact_schema_version: "2"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         'business_model_status: "complete"\n'
@@ -2449,8 +2455,20 @@ class StageExecutorTests(unittest.TestCase):
             for result in tech_receipt["validators"]
             if any("validate_pack_links.py" in part for part in result["command"])
         )
+        presentation_validator = next(
+            result
+            for result in tech_receipt["validators"]
+            if any("validate_reader_presentation.py" in part for part in result["command"])
+        )
         self.assertIn("--allow-missing-api-contracts", behavior_validator["command"])
         self.assertEqual(behavior_validator["exit_code"], 0)
+        self.assertEqual(presentation_validator["exit_code"], 0)
+        self.assertEqual(
+            json.loads(presentation_validator["stdout"])[
+                "reader_presentation_validation_version"
+            ],
+            "1",
+        )
         self.assertEqual(
             pack_validator["command"][
                 pack_validator["command"].index("--validation-profile") + 1
@@ -2868,7 +2886,8 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_validation["reader_review_status"], "current")
         self.assertEqual(final_validation["finalization_review_unresolved_count"], 0)
         self.assertEqual(final_validation["finalization_review_stale_count"], 0)
-        self.assertEqual(final_receipt["finalization_review_validation_version"], "2")
+        self.assertEqual(final_receipt["finalization_review_validation_version"], "3")
+        self.assertEqual(final_receipt["reader_presentation_validation_version"], "1")
         self.assertEqual(final_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(final_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(final_receipt["reader_review_status"], "current")
@@ -3402,7 +3421,7 @@ class StageExecutorTests(unittest.TestCase):
         review_receipt = json.loads(
             Path(review_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(review_receipt["finalization_review_validation_version"], "2")
+        self.assertEqual(review_receipt["finalization_review_validation_version"], "3")
         self.assertEqual(review_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(review_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(review_receipt["reader_review_status"], "current")
@@ -3625,6 +3644,7 @@ class StageExecutorTests(unittest.TestCase):
                 "lifecycle": "valid",
                 "markdown": "valid",
                 "markdown-fragment": "valid",
+                "reader-presentation": "valid",
             },
         )
         self.assertEqual(receipt_payload["primary_error_count"], 0)

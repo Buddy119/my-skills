@@ -191,29 +191,29 @@ class LifecycleModelTests(unittest.TestCase):
         return (
             "---\n"
             'artifact_type: "data-lifecycle"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'repository: "fixture"\n'
             'source_commit: "unknown"\n'
             'coverage_status: "complete"\n'
             "---\n\n"
             "# Data and state lifecycle\n\n"
             "## Object landscape\n\n"
-            "| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Status | Details |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| `OBJ-001` | Customer record | record | Customer store | fixture.read-customer | Not established | Read | Confirmed | [Details](#obj-001) |\n\n"
+            "| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Details |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| `OBJ-001` | Customer record | record | Customer store | fixture.read-customer | Not established | Read | [Details](#obj-001) |\n\n"
             '<a id="obj-001"></a>\n'
             "## `OBJ-001` — Customer record\n\n"
             "### Object identity and ownership\n\nCustomer record in the customer store.\n\n"
             "### State vocabulary\n\n"
-            "| State ID | State | Basis | Definition or derivation | Persistence or observability | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|\n\n"
+            "| State ID | State | Basis | Definition or derivation | Persistence or observability |\n"
+            "|---|---|---|---|---|\n\n"
             f"{NO_TRANSITION_SENTENCE}\n\n"
             "### Processing and data movement\n\n"
             "<!-- lifecycle-processing-diagram: OBJ-001 -->\n"
             f"```mermaid\n{diagram}\n```\n\n"
-            "| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| `ACT-001` | Read | fixture.read-customer | customer store | handler | None | always | Confirmed | `src/Service.java:3` |\n\n"
+            "| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| `ACT-001` | Read | fixture.read-customer | customer store | handler | None | always |\n\n"
             "### Consistency and unresolved questions\n\nNo object state vocabulary was established.\n"
         )
 
@@ -227,38 +227,38 @@ class LifecycleModelTests(unittest.TestCase):
         return (
             "---\n"
             'artifact_type: "data-lifecycle"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'repository: "fixture"\n'
             'source_commit: "unknown"\n'
             'coverage_status: "complete"\n'
             "---\n\n"
             "# Data and state lifecycle\n\n"
             "## Object landscape\n\n"
-            "| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Status | Details |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| `OBJ-001` | Customer record | business-object | Customer table | fixture.activate-customer | Confirmed | Persist | Confirmed | [Details](#obj-001) |\n\n"
+            "| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Details |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| `OBJ-001` | Customer record | business-object | Customer table | fixture.activate-customer | Established | Persist | [Details](#obj-001) |\n\n"
             '<a id="obj-001"></a>\n'
             "## `OBJ-001` — Customer record\n\n"
             "### Object identity and ownership\n\nCustomer record persisted by this repository.\n\n"
             "### State vocabulary\n\n"
-            "| State ID | State | Basis | Definition or derivation | Persistence or observability | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|\n"
-            "| `STATE-001` | Pending | Explicit | status PENDING | persisted field | Confirmed | `src/Service.java:8` |\n"
-            "| `STATE-002` | Active | Explicit | status ACTIVE | persisted field | Confirmed | `src/Service.java:10` |\n\n"
+            "| State ID | State | Basis | Definition or derivation | Persistence or observability |\n"
+            "|---|---|---|---|---|\n"
+            "| `STATE-001` | Pending | Explicit | status PENDING | persisted field |\n"
+            "| `STATE-002` | Active | Explicit | status ACTIVE | persisted field |\n\n"
             "### State lifecycle diagram\n\n"
             "<!-- lifecycle-state-diagram: OBJ-001 -->\n"
             f"```mermaid\n{diagram}\n```\n\n"
             '<a id="trans-001"></a>\n'
             "### State transitions\n\n"
-            "| Transition ID | From state | To state | Triggering behavior | Causing action(s) | Condition | Result and consistency impact | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| `TRANS-001` | `STATE-001` | `STATE-002` | fixture.activate-customer | `ACT-001` | activation accepted | ACTIVE persisted in one transaction | Confirmed | `src/Service.java:8-12` |\n\n"
+            "| Transition ID | From state | To state | Triggering behavior | Causing action(s) | Condition | Result and consistency impact |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| `TRANS-001` | `STATE-001` | `STATE-002` | fixture.activate-customer | `ACT-001` | activation accepted | ACTIVE persisted in one transaction |\n\n"
             "### Processing and data movement\n\n"
             "<!-- lifecycle-processing-diagram: OBJ-001 -->\n"
             "```mermaid\nflowchart LR\n    INPUT[Pending record] --> ACT_001[\"ACT-001 — Persist\"]\n    ACT_001 --> STORE[Customer table]\n```\n\n"
-            "| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| `ACT-001` | Persist | fixture.activate-customer | Pending customer | customer table | `TRANS-001` | activation accepted | Confirmed | `src/Service.java:8-12` |\n\n"
+            "| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| `ACT-001` | Persist | fixture.activate-customer | Pending customer | customer table | `TRANS-001` | activation accepted |\n\n"
             "### Consistency and unresolved questions\n\nThe change occurs in one observed transaction.\n"
         )
 
@@ -296,6 +296,18 @@ class LifecycleModelTests(unittest.TestCase):
         self.add_transition_model()
         lifecycle, errors = self.validate_document(self.transition_document())
         self.assertEqual(lifecycle.errors, [])
+        self.assertEqual(errors, [])
+
+    def test_non_confirmed_action_requires_reader_qualifier(self) -> None:
+        self.add_action_only_model("Read")
+        self.rows["processing_actions"][0][8] = "Inferred"
+        _lifecycle, errors = self.validate_document(self.action_only_document())
+        self.assertTrue(any("*(Inferred)*" in item for item in errors))
+
+        qualified = self.action_only_document().replace(
+            "| `ACT-001` | Read |", "| `ACT-001` *(Inferred)* | Read |"
+        )
+        _lifecycle, errors = self.validate_document(qualified)
         self.assertEqual(errors, [])
 
     def test_derived_state_cannot_be_confirmed(self) -> None:

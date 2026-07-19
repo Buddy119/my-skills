@@ -114,7 +114,6 @@ FIELD_OPERATION_HEADERS = [
     "Client Operation",
     "Observable Purpose",
     "Related Behaviors",
-    "Status",
     "Details",
 ]
 FIELD_USAGE_HEADERS = [
@@ -122,8 +121,14 @@ FIELD_USAGE_HEADERS = [
     "Behavior",
     "Executable Call Site",
     "Invocation Condition or Config",
-    "Status",
-    "Evidence",
+]
+FIELD_OVERVIEW_HEADERS = [
+    "Method",
+    "Logical Target",
+    "Client Operation",
+    "Observable Purpose",
+    "Related Behaviors",
+    "Usage Summary",
 ]
 FIELD_MAPPING_HEADERS = [
     "Mapping ID",
@@ -133,8 +138,6 @@ FIELD_MAPPING_HEADERS = [
     "Transformation",
     "Condition/Default",
     "Lossy",
-    "Status",
-    "Evidence",
 ]
 DEPENDENCY_LANDSCAPE_HEADERS = [
     "Dependency",
@@ -142,7 +145,6 @@ DEPENDENCY_LANDSCAPE_HEADERS = [
     "Dependent capabilities",
     "Criticality",
     "Availability impact",
-    "Status",
     "Details",
 ]
 DEPENDENCY_OPERATION_DOCUMENT_HEADERS = [
@@ -151,7 +153,6 @@ DEPENDENCY_OPERATION_DOCUMENT_HEADERS = [
     "Purpose and condition",
     "Concepts sent, consumed, read, or written",
     "Affected capabilities/behaviors",
-    "Status",
 ]
 FAILURE_PATTERN_INDEX_HEADERS = [
     "Failure pattern",
@@ -496,6 +497,24 @@ def table_in_section(text: str, heading: str) -> tuple[list[str], list[list[str]
     return rows[0], [row for row in rows[1:] if not is_separator_row(row)]
 
 
+def rows_after_header(text: str, headers: list[str]) -> list[list[str]]:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip().startswith("|") and table_cells(line) == headers:
+            rows: list[list[str]] = []
+            for candidate in lines[index + 1 :]:
+                if not candidate.strip().startswith("|"):
+                    if rows:
+                        break
+                    continue
+                cells = table_cells(candidate)
+                if is_separator_row(cells):
+                    continue
+                rows.append(cells)
+            return rows
+    return []
+
+
 def code_value(cell: str) -> str:
     return cell.strip().strip("` ")
 
@@ -725,6 +744,24 @@ def validate_exact_label(
     return value
 
 
+def validate_reader_status_qualifier(
+    cell: str,
+    status: str,
+    context: str,
+    errors: list[str],
+) -> None:
+    qualifiers = re.findall(r"\*\((Confirmed|Inferred|Unknown|Conflicting)\)\*", cell)
+    if status == "Confirmed":
+        if qualifiers:
+            errors.append(f"{context} repeats a qualifier for Confirmed Reader content")
+        return
+    expected = f"*({status})*"
+    if expected not in cell:
+        errors.append(f"{context} must preserve Register status with {expected}")
+    if any(item != status for item in qualifiers):
+        errors.append(f"{context} qualifier conflicts with Register status {status}")
+
+
 def validate_usage_criticality(cell: str, context: str, errors: list[str]) -> None:
     value = normalized_label(cell)
     found = {
@@ -895,6 +932,9 @@ def validate_http_register(register: Path) -> DomainResult:
     usages_by_call: dict[str, set[str]] = {}
     usage_to_call: dict[str, str] = {}
     mapping_directions: dict[str, str] = {}
+    call_statuses: dict[str, str] = {}
+    usage_statuses: dict[str, str] = {}
+    mapping_statuses: dict[str, str] = {}
     if not register.is_file():
         return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
 
@@ -922,6 +962,8 @@ def validate_http_register(register: Path) -> DomainResult:
             continue
         call_ids.add(call_id)
         usages_by_call.setdefault(call_id, set())
+        call_statuses[call_id] = code_value(row[7])
+        validate_exact_label(row[7], EVIDENCE_STATUSES, f"Outbound Call {call_id} Status", errors)
 
     usage_refs_by_id: dict[str, str] = {}
     for row in usage_rows:
@@ -941,6 +983,8 @@ def validate_http_register(register: Path) -> DomainResult:
             continue
         usage_to_call[usage_id] = call_id
         usage_refs_by_id[usage_id] = call_id
+        usage_statuses[usage_id] = code_value(row[5])
+        validate_exact_label(row[5], EVIDENCE_STATUSES, f"Outbound Usage {usage_id} Status", errors)
         if not usage_id.startswith(f"{call_id}-U"):
             errors.append(f"outbound Usage ID does not belong to its Call ID: {usage_id} -> {call_id}")
 
@@ -963,6 +1007,8 @@ def validate_http_register(register: Path) -> DomainResult:
             partial = True
             continue
         mapping_directions[mapping_id] = direction
+        mapping_statuses[mapping_id] = code_value(row[9])
+        validate_exact_label(row[9], EVIDENCE_STATUSES, f"Outbound Mapping {mapping_id} Status", errors)
         mapping_refs.append((mapping_id, call_id, applies_to))
         if direction not in {"eapi-to-external", "external-to-eapi"}:
             errors.append(f"outbound Mapping {mapping_id} has an invalid direction: {direction}")
@@ -1002,6 +1048,9 @@ def validate_http_register(register: Path) -> DomainResult:
             "usages_by_call": usages_by_call,
             "usage_to_call": usage_to_call,
             "mapping_directions": mapping_directions,
+            "call_statuses": call_statuses,
+            "usage_statuses": usage_statuses,
+            "mapping_statuses": mapping_statuses,
         },
         errors,
     )
@@ -1016,6 +1065,8 @@ def validate_dependency_register(
     dependency_ids: set[str] = set()
     operations_by_dependency: dict[str, set[str]] = {}
     http_refs_by_operation: dict[str, set[str]] = {}
+    dependency_statuses: dict[str, str] = {}
+    operation_statuses: dict[str, str] = {}
     if not register.is_file():
         return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
 
@@ -1074,6 +1125,7 @@ def validate_dependency_register(
             partial = True
             continue
         dependency_ids.add(dependency_id)
+        dependency_statuses[dependency_id] = code_value(row[9])
         operations_by_dependency.setdefault(dependency_id, set())
         validate_exact_label(
             row[9], EVIDENCE_STATUSES, f"Dependency Contract {dependency_id} Status", errors
@@ -1104,6 +1156,7 @@ def validate_dependency_register(
             partial = True
             continue
         operation_parents[operation_id] = dependency_id
+        operation_statuses[operation_id] = code_value(row[8])
         if not DEPENDENCY_ID_RE.fullmatch(dependency_id):
             errors.append(
                 f"Dependency Operation {operation_id} has invalid Dependency ID: "
@@ -1175,6 +1228,8 @@ def validate_dependency_register(
             "dependency_ids": dependency_ids,
             "operations_by_dependency": operations_by_dependency,
             "http_refs_by_operation": http_refs_by_operation,
+            "dependency_statuses": dependency_statuses,
+            "operation_statuses": operation_statuses,
         },
         errors,
     )
@@ -1290,6 +1345,9 @@ def validate_field_mapping_document(
     register_usages_by_call: dict[str, set[str]],
     register_usage_to_call: dict[str, str],
     register_mapping_directions: dict[str, str],
+    register_call_statuses: dict[str, str],
+    register_usage_statuses: dict[str, str],
+    register_mapping_statuses: dict[str, str],
     errors: list[str],
 ) -> set[str]:
     if not document.is_file():
@@ -1312,15 +1370,20 @@ def validate_field_mapping_document(
         if len(row) != len(FIELD_OPERATION_HEADERS):
             errors.append("Field Validation and Mapping operation-index row has the wrong column count")
             continue
-        call_id = code_value(row[0])
-        if not CALL_ID_RE.fullmatch(call_id):
-            errors.append(f"invalid Call ID in Field Validation and Mapping index: {call_id or '<empty>'}")
+        call_match = CALL_ID_RE.search(row[0])
+        call_id = call_match.group(0) if call_match else ""
+        if not call_id:
+            errors.append("invalid Call ID in Field Validation and Mapping index: <empty>")
             continue
         if call_id in index_call_ids:
             errors.append(f"duplicate Call ID in Field Validation and Mapping index: {call_id}")
         index_call_ids.add(call_id)
+        if call_id in register_call_statuses:
+            validate_reader_status_qualifier(
+                row[0], register_call_statuses[call_id], f"Outbound Call {call_id}", errors
+            )
         anchor = call_id.lower()
-        if not re.search(rf"\]\(#{re.escape(anchor)}\)", row[6]):
+        if not re.search(rf"\]\(#{re.escape(anchor)}\)", row[5]):
             errors.append(f"Field operation index does not link its Call anchor: {call_id}")
 
     call_heading_matches = list(
@@ -1331,6 +1394,7 @@ def validate_field_mapping_document(
     final_mapping_ids: set[str] = set()
     final_mapping_directions: dict[str, str] = {}
     final_usages_by_call: dict[str, set[str]] = {}
+    usage_summaries_by_call: dict[str, str] = {}
 
     for match in call_heading_matches:
         call_id = match.group("call")
@@ -1348,6 +1412,13 @@ def validate_field_mapping_document(
         next_heading = re.search(r"^##\s+", text[match.end() :], re.M)
         section_end = match.end() + next_heading.start() if next_heading else len(text)
         section = text[match.end() : section_end]
+        overview_rows = rows_after_header(section, FIELD_OVERVIEW_HEADERS)
+        if not overview_rows:
+            errors.append(f"Field Call Overview has no valid summary table: {call_id}")
+        elif len(overview_rows[0]) != len(FIELD_OVERVIEW_HEADERS):
+            errors.append(f"Field Call Overview row has the wrong column count: {call_id}")
+        else:
+            usage_summaries_by_call[call_id] = overview_rows[0][5]
         current_direction: str | None = None
         for line in section.splitlines():
             heading_match = re.match(r"^###\s+(.+?)\s*$", line)
@@ -1372,23 +1443,35 @@ def validate_field_mapping_document(
             if first == "Mapping ID" and cells != FIELD_MAPPING_HEADERS:
                 errors.append(f"Field Mapping table columns are invalid under Call: {call_id}")
                 continue
-            if USAGE_ID_RE.fullmatch(first):
+            usage_match = USAGE_ID_RE.search(cells[0])
+            mapping_match = MAPPING_ID_RE.search(cells[0])
+            if usage_match:
+                first = usage_match.group(0)
                 if len(cells) != len(FIELD_USAGE_HEADERS):
                     errors.append(f"Field Usage row has the wrong column count: {first}")
                     continue
                 if first in final_usage_ids:
                     errors.append(f"duplicate Usage ID in Field Validation and Mapping: {first}")
                 final_usage_ids.add(first)
+                if first in register_usage_statuses:
+                    validate_reader_status_qualifier(
+                        cells[0], register_usage_statuses[first], f"Outbound Usage {first}", errors
+                    )
                 final_usages_by_call.setdefault(call_id, set()).add(first)
                 if not first.startswith(f"{call_id}-U"):
                     errors.append(f"Usage ID appears under the wrong Call section: {first} -> {call_id}")
-            elif MAPPING_ID_RE.fullmatch(first):
+            elif mapping_match:
+                first = mapping_match.group(0)
                 if len(cells) != len(FIELD_MAPPING_HEADERS):
                     errors.append(f"Field Mapping row has the wrong column count: {first}")
                     continue
                 if first in final_mapping_ids:
                     errors.append(f"duplicate Mapping ID in Field Validation and Mapping: {first}")
                 final_mapping_ids.add(first)
+                if first in register_mapping_statuses:
+                    validate_reader_status_qualifier(
+                        cells[0], register_mapping_statuses[first], f"Outbound Mapping {first}", errors
+                    )
                 if current_direction is None:
                     errors.append(f"Field Mapping is outside Request or Response mappings: {first}")
                 else:
@@ -1438,6 +1521,21 @@ def validate_field_mapping_document(
                 errors.append(
                     f"multi-usage outbound Call does not list Usage in Field document: {usage_id}"
                 )
+        elif len(usage_ids) == 1:
+            usage_id = next(iter(usage_ids))
+            if usage_id not in final_usage_ids:
+                summary = usage_summaries_by_call.get(call_id, "")
+                if usage_id not in summary:
+                    errors.append(
+                        f"single-usage outbound Call summary omits Usage ID: {usage_id}"
+                    )
+                elif usage_id in register_usage_statuses:
+                    validate_reader_status_qualifier(
+                        summary,
+                        register_usage_statuses[usage_id],
+                        f"Outbound Usage {usage_id}",
+                        errors,
+                    )
     for usage_id in sorted(final_usage_ids):
         if usage_id not in register_usage_to_call:
             errors.append(f"Field document contains an unregistered Usage ID: {usage_id}")
@@ -1445,7 +1543,12 @@ def validate_field_mapping_document(
     return section_call_ids
 
 
-def validate_behavior_call_links(root: Path, call_ids: set[str], errors: list[str]) -> None:
+def validate_behavior_call_links(
+    root: Path,
+    call_ids: set[str],
+    call_statuses: dict[str, str],
+    errors: list[str],
+) -> None:
     behaviors_dir = root / "tech-pack" / "behaviors"
     if not behaviors_dir.is_dir():
         return
@@ -1474,6 +1577,19 @@ def validate_behavior_call_links(root: Path, call_ids: set[str], errors: list[st
                     f"Tech Behavior does not link its outbound Call anchor: "
                     f"{behavior.relative_to(root)} -> {call_id}"
                 )
+            link_match = re.search(
+                rf"^(?P<line>[^\n]*\]\({re.escape(expected_target)}\)[^\n]*)$",
+                text,
+                re.M,
+            )
+            if link_match and call_id in call_statuses:
+                visible = link_match.group("line")
+                validate_reader_status_qualifier(
+                    visible,
+                    call_statuses[call_id],
+                    f"Tech Behavior {behavior.relative_to(root)} outbound Call {call_id}",
+                    errors,
+                )
 
 
 def validate_external_dependency_document(
@@ -1481,6 +1597,8 @@ def validate_external_dependency_document(
     dependency_ids: set[str],
     operations_by_dependency: dict[str, set[str]],
     http_refs_by_operation: dict[str, set[str]],
+    dependency_statuses: dict[str, str],
+    operation_statuses: dict[str, str],
     repo: Path | None,
     errors: list[str],
 ) -> None:
@@ -1516,16 +1634,17 @@ def validate_external_dependency_document(
         if dependency_id in index_ids:
             errors.append(f"duplicate Dependency landscape ID: {dependency_id}")
         index_ids.add(dependency_id)
+        if dependency_id in dependency_statuses:
+            validate_reader_status_qualifier(
+                row[0], dependency_statuses[dependency_id], f"Dependency {dependency_id}", errors
+            )
         validate_exact_label(
             row[3],
             DEPENDENCY_CRITICALITIES,
             f"Dependency landscape {dependency_id} Criticality",
             errors,
         )
-        validate_exact_label(
-            row[5], EVIDENCE_STATUSES, f"Dependency landscape {dependency_id} Status", errors
-        )
-        if not re.search(rf"\]\(#{re.escape(dependency_id.lower())}\)", row[6]):
+        if not re.search(rf"\]\(#{re.escape(dependency_id.lower())}\)", row[5]):
             errors.append(f"Dependency landscape does not link its detail anchor: {dependency_id}")
 
     sections = anchored_sections(text, DEPENDENCY_ID_RE)
@@ -1560,6 +1679,24 @@ def validate_external_dependency_document(
             errors.append(
                 f"Dependency detail section has no valid Operation table: {dependency_id}"
             )
+        operation_rows = rows_after_header(section, DEPENDENCY_OPERATION_DOCUMENT_HEADERS)
+        published_operations: set[str] = set()
+        for row in operation_rows:
+            if len(row) != len(DEPENDENCY_OPERATION_DOCUMENT_HEADERS):
+                errors.append(f"Dependency Operation row has the wrong column count: {dependency_id}")
+                continue
+            match = DEPENDENCY_OPERATION_ID_RE.search(row[0])
+            if not match:
+                errors.append(f"Dependency Operation row is missing an Operation ID: {dependency_id}")
+                continue
+            operation_id = match.group(0)
+            published_operations.add(operation_id)
+            if operation_id in operation_statuses:
+                validate_reader_status_qualifier(
+                    row[0], operation_statuses[operation_id], f"Dependency Operation {operation_id}", errors
+                )
+        for operation_id in sorted(published_operations - operation_ids):
+            errors.append(f"Dependency detail section contains an unregistered Operation: {operation_id}")
         for operation_id in sorted(operation_ids):
             if not re.search(rf"\b{re.escape(operation_id)}\b", section):
                 errors.append(
@@ -1650,6 +1787,7 @@ def validate_failure_taxonomy_document(
 def validate_behavior_repository_links(
     root: Path,
     dependency_ids: set[str] | None,
+    dependency_statuses: dict[str, str] | None,
     pattern_ids: set[str] | None,
     errors: list[str],
 ) -> None:
@@ -1686,6 +1824,18 @@ def validate_behavior_repository_links(
                     errors.append(
                         f"Tech Behavior does not link its Dependency anchor: "
                         f"{behavior.relative_to(root)} -> {dependency_id}"
+                    )
+                link_match = re.search(
+                    rf"^(?P<line>[^\n]*\]\({re.escape(expected)}\)[^\n]*)$",
+                    text,
+                    re.M,
+                )
+                if link_match and dependency_statuses and dependency_id in dependency_statuses:
+                    validate_reader_status_qualifier(
+                        link_match.group("line"),
+                        dependency_statuses[dependency_id],
+                        f"Tech Behavior {behavior.relative_to(root)} Dependency {dependency_id}",
+                        errors,
                     )
             for dependency_id in set(
                 re.findall(r"external-dependency-contracts\.md#(dep-\d+)", text, re.I)
@@ -1958,11 +2108,16 @@ def main() -> int:
             http_result.data["usages_by_call"],
             http_result.data["usage_to_call"],
             http_result.data["mapping_directions"],
+            http_result.data["call_statuses"],
+            http_result.data["usage_statuses"],
+            http_result.data["mapping_statuses"],
             http_document_errors,
         )
         report.add_errors("HTTP-DOCUMENT", http_document_errors)
         behavior_http_errors: list[str] = []
-        validate_behavior_call_links(root, published_call_ids, behavior_http_errors)
+        validate_behavior_call_links(
+            root, published_call_ids, http_result.data["call_statuses"], behavior_http_errors
+        )
         report.add_errors("BEHAVIOR-HTTP-BACKLINK", behavior_http_errors)
     else:
         report.skip(
@@ -2016,6 +2171,8 @@ def main() -> int:
             dependency_ids,
             dependency_result.data["operations_by_dependency"],
             dependency_result.data["http_refs_by_operation"],
+            dependency_result.data["dependency_statuses"],
+            dependency_result.data["operation_statuses"],
             repo,
             dependency_document_errors,
         )
@@ -2054,6 +2211,9 @@ def main() -> int:
     validate_behavior_repository_links(
         root,
         dependency_ids,
+        dependency_result.data.get("dependency_statuses")
+        if dependency_result.status == "valid"
+        else None,
         pattern_ids,
         behavior_repository_errors,
     )

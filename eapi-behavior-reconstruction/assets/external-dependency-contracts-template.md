@@ -1,6 +1,6 @@
 ---
 artifact_type: "external-dependency-contracts"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 coverage_status: "complete|partial|blocked"
@@ -14,9 +14,9 @@ Explain the external participants and resources this repository actually depends
 
 Use one row per Dependency ID. `Criticality` is the highest supported usage-level classification; call out mixed or Unknown usages in the detail section.
 
-| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Status | Details |
-|---|---|---|---|---|---|---|
-| `DEP-001` — Dependency name | Type — concise boundary role | Capability/Behavior links | Required/Degradable/Optional/Unknown | Concise visible impact | Confirmed/Inferred/Conflicting/Unknown | [Details](#dep-001) |
+| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Details |
+|---|---|---|---|---|---|
+| `DEP-001` — Dependency name | Type — concise boundary role | Capability/Behavior links | Required/Degradable/Optional/Unknown | Concise visible impact | [Details](#dep-001) |
 
 <a id="dep-001"></a>
 ## `DEP-001` — Dependency name
@@ -33,9 +33,9 @@ Describe the shared business or technical capabilities that depend on it. Link t
 
 List each operation once beneath this Dependency. Describe exchanged concepts rather than repeating field-level mappings.
 
-| Operation | Boundary reference | Purpose and condition | Concepts sent, consumed, read, or written | Affected capabilities/behaviors | Status |
-|---|---|---|---|---|---|
-| `DEP-001-OP01` | [HTTP-001](field-validation-and-mapping.md#http-001), event, or resource | Observable operation purpose and invocation condition | Business/data concepts | Behavior links | Confirmed/Inferred/Conflicting/Unknown |
+| Operation | Boundary reference | Purpose and condition | Concepts sent, consumed, read, or written | Affected capabilities/behaviors |
+|---|---|---|---|---|
+| `DEP-001-OP01` *(Inferred)* | [HTTP-001](field-validation-and-mapping.md#http-001), event, or resource | Observable operation purpose and invocation condition | Business/data concepts | Behavior links [E1](#e1) |
 
 ### Availability impact and criticality
 
@@ -54,7 +54,6 @@ Separate what this repository sends, consumes, or assumes from remote SLA, persi
 - Related Tech Behaviors:
 - Field mappings or resource details:
 - Failure patterns:
-- Source notes:
-  - `path/to/file.ext:line` — what the source establishes at this boundary
+<a id="e1"></a> **E1** — `path/to/dependency-boundary.ext:18-64` supports the grouped role, operations, and observed availability impact.
 
 Repeat one anchored `## DEP-nnn` section for each synthesized Dependency. Remove optional subsections that add no reader value.

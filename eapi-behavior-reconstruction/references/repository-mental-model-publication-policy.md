@@ -46,6 +46,8 @@ Use solid edges for `Confirmed` connections. Use dashed edges for `Inferred`, `U
 
 Follow the diagram with one compact connection matrix. The matrix is an orientation and navigation surface: summarize role, capabilities, concepts, configuration, criticality, and failure/state impact, then link to detail. Do not copy Operation, Mapping, Lifecycle, Config, or Failure tables.
 
+Keep complete connection status and evidence in Repository Synthesis. The Overview matrix has no generic Status/Evidence columns: Confirmed is the baseline, and only Inferred, Unknown, or Conflicting is appended to the affected connection label. Use grouped Source Notes for the context model.
+
 ## Shared behavior model
 
 Include a Shared Rule or Shared Behavior-shaping Component only when:

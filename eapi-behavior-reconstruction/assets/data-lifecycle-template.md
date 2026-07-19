@@ -1,6 +1,6 @@
 ---
 artifact_type: "data-lifecycle"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 coverage_status: "complete|partial|blocked"
@@ -12,9 +12,9 @@ coverage_status: "complete|partial|blocked"
 
 Start with the repository's important business objects, records, events, jobs, and state resources. Keep the object state model, processing actions, and data movement visibly separate.
 
-| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Status | Details |
-|---|---|---|---|---|---|---|---|---|
-| `OBJ-001` | Human-readable identity | business-object/record/event/job/resource/other | Origin, owner, and store | Behavior links | Confirmed/Inferred/Not established | Summary | Confirmed | [Details](#obj-001) |
+| Object ID | Logical object or resource | Type | Source, ownership, and store | Behaviors | State model | Processing and data movement | Details |
+|---|---|---|---|---|---|---|---|
+| `OBJ-001` | Human-readable identity | business-object/record/event/job/resource/other | Origin, owner, and store | Behavior links | Established/Not established | Summary [E1](#e1) | [Details](#obj-001) |
 
 <a id="obj-001"></a>
 ## `OBJ-001` — Object name
@@ -25,9 +25,9 @@ Explain what the object is, where it originates, who owns or observes it, where 
 
 ### State vocabulary
 
-| State ID | State | Basis | Definition or derivation | Persistence or observability | Status | Evidence |
-|---|---|---|---|---|---|---|
-| `STATE-001` | Object condition | Explicit/Observable/Derived | Exact meaning or derivation | Field, record existence, predicate, or direct observation | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.ext:line` |
+| State ID | State | Basis | Definition or derivation | Persistence or observability |
+|---|---|---|---|---|
+| `STATE-001` *(Inferred)* | Object condition | Derived | Exact meaning or derivation | Field, record existence, predicate, or direct observation [E2](#e2) |
 
 ### State lifecycle diagram
 
@@ -48,9 +48,9 @@ stateDiagram-v2
 
 <a id="trans-001"></a>
 
-| Transition ID | From state | To state | Triggering behavior | Causing action(s) | Condition | Result and consistency impact | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|
-| `TRANS-001` | `STATE-001` | `STATE-002` | Behavior link | `ACT-001` | Condition | Persisted/observable result and consistency impact | Confirmed/Inferred | `path/to/file.ext:line` |
+| Transition ID | From state | To state | Triggering behavior | Causing action(s) | Condition | Result and consistency impact |
+|---|---|---|---|---|---|---|
+| `TRANS-001` | `STATE-001` | `STATE-002` | Behavior link | `ACT-001` | Condition | Persisted/observable result and consistency impact [E3](#e3) |
 
 When no Transition is established, omit the state diagram and transition table and write exactly:
 
@@ -69,10 +69,20 @@ flowchart LR
     ACT_002 --> DESTINATION[Store, output, or external boundary]
 ```
 
-| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition | Status | Evidence |
-|---|---|---|---|---|---|---|---|---|
-| `ACT-001` | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Behavior link | Input or source | Output or destination | `TRANS-001` or None | Condition | Confirmed | `path/to/file.ext:line` |
+| Action ID | Role | Behavior | Input or source | Output or destination | Related transition | Condition |
+|---|---|---|---|---|---|---|
+| `ACT-001` *(Unknown)* | Read/Observe/Validate/Transform/Map/Persist/Delete/Invoke/Emit/Route/Other | Behavior link | Input or source | Output or destination | `TRANS-001` or None | Condition [E4](#e4) |
 
 ### Consistency and unresolved questions
 
 Explain transaction boundaries, concurrent updates, partial writes, retention, ordering, unknown ownership, ambiguous state definitions, and deliberately unproven lifecycle relationships.
+
+## Source notes
+
+<a id="e1"></a> **E1** — `path/to/object-or-resource.ext:10-28` supports object identity, ownership, and storage boundaries.
+
+<a id="e2"></a> **E2** — `path/to/state-definition.ext:16-42` supports the state definition or derivation.
+
+<a id="e3"></a> **E3** — `path/to/state-change.ext:35-72` supports the transition, causing action, and observable result.
+
+<a id="e4"></a> **E4** — `path/to/processing.ext:44-91` supports the processing and data-movement actions.

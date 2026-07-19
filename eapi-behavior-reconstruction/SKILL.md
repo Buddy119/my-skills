@@ -73,6 +73,7 @@ When no options are present, continue to accept a repository path and optional o
 - Treat [assets/migration-transform-registry.json](assets/migration-transform-registry.json) as the only executable migration-transform registry. A mechanical transform requires an exact source schema, target schema, registered handler, and test fixture. An unknown or unversioned schema is archived and rebuilt; it is never guessed or AI-adopted inside Migration.
 - Treat [assets/publication-maturity-rules.json](assets/publication-maturity-rules.json) as the mechanical contract for execution-stage residue in Reader artifacts. Explicit workflow phrases may block publication; ambiguous words remain review prompts and never become business-semantic decisions in Python.
 - Treat [assets/reader-projection-schema.json](assets/reader-projection-schema.json) as the cross-stage Reader Projection contract. The executor may refresh stable identities, paths, backlinks, navigation cells, and deterministic counts; AI must review and write every affected semantic summary.
+- Treat [assets/reader-presentation-schema.json](assets/reader-presentation-schema.json) as the Reader status/evidence presentation contract. Working Artifacts keep complete evidence states; Reader tables omit generic Status/Evidence columns, treat Confirmed as the baseline, preserve only exceptional qualifiers, and group Tech evidence in Source Notes.
 - Validate every local Markdown deep link against a real explicit HTML anchor or a deterministically parsed GFM heading slug. Use explicit stable anchors for Endpoint, `HTTP-*`, `DEP-*`, and `FAIL-*` identities; use heading fragments only for simple stable editorial sections. Never accept file existence alone as proof that `#fragment` is clickable.
 - Do not modify this Skill, its templates, references, or scripts during a repository analysis run. A writable Skill root is valid.
 - Execute bundled Python scripts with the available `python3` and their absolute paths. They use only the Python standard library. If the stage executor or a required Validator cannot run, retain the Candidate and stop publication; do not patch the script, install dependencies, or advance lifecycle state manually.
@@ -95,6 +96,8 @@ After observing any object read, write, condition, persistence, deletion, event 
 Before building the repository connection model, shared behavior model, or Repository Overview, read [references/repository-mental-model-publication-policy.md](references/repository-mental-model-publication-policy.md) completely.
 
 Before publishing final documents, read [references/editorial-review-policy.md](references/editorial-review-policy.md) completely.
+
+Before writing any Tech or BA Reader Artifact, read [references/reader-evidence-presentation-policy.md](references/reader-evidence-presentation-policy.md) completely.
 
 Before beginning `finalization`, read [references/finalization-review-policy.md](references/finalization-review-policy.md) completely.
 
@@ -341,7 +344,7 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
 8. Build `failure-taxonomy.md` as one index row and one anchored section per `FAIL-nnn`. Lead with repository-wide High and Unknown attention, then explain trigger, caller visibility, state outcome, retry/recovery, and cross-Behavior variations. Link API errors, lifecycle changes, Dependency Contracts, and Tech flows instead of repeating them. Never publish the Failure Observation table.
 9. Link each behavior only to relevant repository references. Use stable `dependency_id` entries and `failure_patterns` IDs in affected Tech frontmatter, with one concise usage-specific row linking each repository-level anchor. Do not duplicate detailed contracts or repository-wide tables inside every behavior.
 
-Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
+Keep prose natural. In Reader artifacts, do not add generic Status/Evidence columns or repeat `Confirmed`. Put `*(Inferred)*`, `*(Unknown)*`, or `*(Conflicting)*` beside the affected primary label, and support coherent Tech sections with grouped `[E#]` Source Notes rather than one citation per row. BA documents expose no source citations and trace through Scenario-to-Tech relationships.
 
 Complete all Tech publication checkpoints through the executor. Commit `tech-publication` only after its Behavior checks, publication-maturity check, and the `tech-publication` Pack validation profile pass. That profile fully validates the HTTP Call/Usage/Mapping model, Dependency Contracts, Failure Taxonomy, their Register relationships, Tech Behavior backlinks, ordinary Tech links, and Artifact integrity. It records missing future API materialization and BA traceability as `deferred`, never as a successful `SKIPPED` check. Only missing Contract files, Endpoint Matrix, and future `ba-pack/` targets are deferred; identity, stable destination, visible links, path containment, publication-neutral prose, and all current Tech artifacts remain strict. This commit advances only the Working Generation.
 

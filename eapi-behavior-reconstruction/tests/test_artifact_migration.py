@@ -283,6 +283,45 @@ class ArtifactMigrationTests(unittest.TestCase):
         step = next(step for step in self.plan()["steps"] if step["artifact_type"] == "api-contract")
         self.assertEqual(step["action"], "archive-and-rebuild")
 
+    def test_reader_presentation_versions_republish_from_tech_without_rebuilding_models(self) -> None:
+        self.add_evidence()
+        synthesis = self.output / ".work" / "repository-synthesis.md"
+        synthesis.write_text(
+            "---\nartifact_type: \"repository-synthesis\"\n"
+            "artifact_schema_version: \"2\"\nrepository: \"repo\"\n"
+            "source_commit: \"unknown\"\n---\n\n# Repository synthesis\n",
+            encoding="utf-8",
+        )
+        business_model = self.output / ".work" / "business-model.md"
+        business_model.write_text(
+            "---\nartifact_type: \"business-model\"\n"
+            "artifact_schema_version: \"1\"\nrepository: \"repo\"\n"
+            "source_commit: \"unknown\"\n---\n\n# Business model\n",
+            encoding="utf-8",
+        )
+        overview = self.output / "tech-pack" / "repository-overview.md"
+        overview.parent.mkdir(parents=True)
+        overview.write_text(
+            "---\nartifact_type: \"repository-overview\"\n"
+            "artifact_schema_version: \"1\"\n---\n\n# Old overview\n",
+            encoding="utf-8",
+        )
+        ba_overview = self.output / "ba-pack" / "business-overview.md"
+        ba_overview.parent.mkdir(parents=True)
+        ba_overview.write_text(
+            "---\nartifact_type: \"ba-overview\"\n"
+            "artifact_schema_version: \"1\"\n---\n\n# Old BA overview\n",
+            encoding="utf-8",
+        )
+
+        payload = self.resume()
+        self.assertEqual(payload["resume_stage_after_migration"], "tech-publication")
+        steps = {step["artifact_type"]: step for step in self.plan()["steps"]}
+        self.assertEqual(steps["repository-overview"]["action"], "archive-and-rebuild")
+        self.assertEqual(steps["ba-overview"]["action"], "archive-and-rebuild")
+        self.assertEqual(steps["repository-synthesis"]["action"], "preserve")
+        self.assertEqual(steps["business-model"]["action"], "preserve")
+
     def test_unversioned_new_looking_contract_remains_unknown(self) -> None:
         self.add_evidence()
         contracts = self.output / "tech-pack" / "contracts"

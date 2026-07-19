@@ -67,6 +67,8 @@ For sampled endpoints, verify that each layer cites evidence of that layer, corr
 
 ### Reader review
 
+Review status and evidence density explicitly. Reader tables must not repeat generic `Status`, `Evidence`, `Evidence level`, or `Status and limitation` columns except in the documented status-sensitive Endpoint Matrix, API Contract, and Failure Taxonomy views. Confirmed facts should read as the baseline; verify that every sampled Inferred, Unknown, or Conflicting working fact keeps the matching exceptional qualifier in its Reader projection. Tech Source Notes may support a paragraph, rule set, or whole table; reject audit-style one-citation-per-row repetition when it hides the explanation. BA documents must remain source-path free while preserving Scenario-to-Tech traceability.
+
 Read the document without using source code and ask:
 
 - Can a developer retell the complete success and material failure paths?

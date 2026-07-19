@@ -215,21 +215,22 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         status: str = "Confirmed",
         boundary_reference: str = "customer table",
     ) -> None:
+        qualifier = "" if status == "Confirmed" else f" *({status})*"
         path = self.root / "tech-pack" / "external-dependency-contracts.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "---\nartifact_type: \"external-dependency-contracts\"\n"
-            "artifact_schema_version: \"1\"\n---\n\n"
+            "artifact_schema_version: \"2\"\n---\n\n"
             "# External dependency contracts\n\n"
             "## Dependency landscape\n\n"
-            "| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Status | Details |\n"
-            "|---|---|---|---|---|---|---|\n"
-            f"| `DEP-001` | database / state persistence | customer profile | {criticality} | request fails before completion | {status} | [Details](#dep-001) |\n\n"
+            "| Dependency | Type and repository-observed role | Dependent capabilities | Criticality | Availability impact | Details |\n"
+            "|---|---|---|---|---|---|\n"
+            f"| `DEP-001`{qualifier} | database / state persistence | customer profile | {criticality} | request fails before completion | [Details](#dep-001) |\n\n"
             '<a id="dep-001"></a>\n'
             "## `DEP-001` — Customer store\n\n"
-            "| Operation | Boundary reference | Purpose and condition | Concepts sent, consumed, read, or written | Affected capabilities/behaviors | Status |\n"
-            "|---|---|---|---|---|---|\n"
-            f"| `DEP-001-OP01` | {boundary_reference} | write customer | customer state | `fixture.behavior` | Confirmed |\n",
+            "| Operation | Boundary reference | Purpose and condition | Concepts sent, consumed, read, or written | Affected capabilities/behaviors |\n"
+            "|---|---|---|---|---|\n"
+            f"| `DEP-001-OP01` | {boundary_reference} | write customer | customer state | `fixture.behavior` |\n",
             encoding="utf-8",
         )
 
@@ -238,22 +239,22 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "---\nartifact_type: \"field-validation-and-mapping\"\n"
-            "artifact_schema_version: \"1\"\n---\n\n"
+            "artifact_schema_version: \"2\"\n---\n\n"
             "# Field validation and mapping\n\n"
             "## Outbound HTTP operation index\n\n"
-            "| Call ID | Method and Logical Target | Client Operation | Observable Purpose | Related Behaviors | Status | Details |\n"
-            "|---|---|---|---|---|---|---|\n"
-            "| HTTP-001 | `POST customer-system/profile` | `updateProfile` | send profile update | [Behavior](behaviors/fixture.md) | Confirmed | [Details](#http-001) |\n\n"
+            "| Call ID | Method and Logical Target | Client Operation | Observable Purpose | Related Behaviors | Details |\n"
+            "|---|---|---|---|---|---|\n"
+            "| HTTP-001 | `POST customer-system/profile` | `updateProfile` | send profile update | [Behavior](behaviors/fixture.md) | [Details](#http-001) |\n\n"
             '<a id="http-001"></a>\n'
             "## HTTP-001 — Update customer profile\n\n"
             "### Call overview\n\n"
-            "| Method | Logical Target | Client Operation | Observable Purpose | Related Behaviors | Usage Summary | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|---|\n"
-            "| POST | customer-system/profile | updateProfile | send profile update | [Behavior](behaviors/fixture.md) | one usage | Confirmed | source.java:3 |\n\n"
+            "| Method | Logical Target | Client Operation | Observable Purpose | Related Behaviors | Usage Summary |\n"
+            "|---|---|---|---|---|---|\n"
+            "| POST | customer-system/profile | updateProfile | send profile update | [Behavior](behaviors/fixture.md) | `HTTP-001-U01` — one usage |\n\n"
             "### Request mappings\n\n"
-            "| Mapping ID | Applies to Usage(s) | Source Field(s) | Target Field(s) | Transformation | Condition/Default | Lossy | Status | Evidence |\n"
-            "|---|---|---|---|---|---|---|---|---|\n"
-            "| FM-001 | all | `customerId` | `customer_id` | rename | None | No | Confirmed | source.java:3 |\n",
+            "| Mapping ID | Applies to Usage(s) | Source Field(s) | Target Field(s) | Transformation | Condition/Default | Lossy |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| FM-001 | all | `customerId` | `customer_id` | rename | None | No |\n",
             encoding="utf-8",
         )
 
@@ -536,7 +537,7 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.write_failure_document()
         for kwargs, expected in (
             ({"criticality": "Mandatory"}, "Criticality"),
-            ({"status": "Ready"}, "Status"),
+            ({"status": "Inferred"}, "Confirmed"),
         ):
             with self.subTest(expected=expected):
                 self.write_dependency_document(**kwargs)
@@ -550,6 +551,39 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
                     )
                 )
                 self.assertNotIn("FAIL-DOCUMENT", payload["errors"])
+
+    def test_http_and_dependency_non_confirmed_status_requires_reader_qualifier(self) -> None:
+        fixture = RegisterFixture(self.root)
+        self.add_http_records(fixture)
+        self.add_dependency_and_failure_records(fixture)
+        fixture.rows["http_operations"][0][7] = "Unknown"
+        fixture.rows["dependency_contracts"][0][9] = "Inferred"
+        fixture.write()
+        self.write_field_document()
+        self.write_dependency_document()
+        self.write_failure_document()
+
+        result, payload = self.validate("tech-publication")
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(
+            any("*(Unknown)*" in item for item in payload["errors"]["HTTP-DOCUMENT"])
+        )
+        self.assertTrue(
+            any("*(Inferred)*" in item for item in payload["errors"]["DEP-DOCUMENT"])
+        )
+
+        field = self.root / "tech-pack" / "field-validation-and-mapping.md"
+        field.write_text(
+            field.read_text(encoding="utf-8").replace(
+                "| HTTP-001 |", "| HTTP-001 *(Unknown)* |", 1
+            ),
+            encoding="utf-8",
+        )
+        self.write_dependency_document(status="Inferred")
+        result, payload = self.validate("tech-publication")
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("HTTP-DOCUMENT", payload["errors"])
+        self.assertNotIn("DEP-DOCUMENT", payload["errors"])
 
     def test_tech_profile_rejects_failure_reader_enum_error(self) -> None:
         fixture = RegisterFixture(self.root)

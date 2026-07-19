@@ -1,6 +1,6 @@
 ---
 artifact_type: "ba-scenario"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 scenario_id: "repository.scenario.context-outcome"
 title: "Business scenario title"
 repository: "repository-name"
@@ -26,9 +26,9 @@ Explain the supported business situation, goal, and visible result. Do not descr
 
 ## Actors, trigger, and preconditions
 
-| Actor or participant | Business event or role | Relevant precondition | Status |
-|---|---|---|---|
-| Business participant | Starts, receives, or supports the Scenario | Business or information condition | Confirmed/Inferred/Conflicting/Unknown |
+| Actor or participant | Business event or role | Relevant precondition |
+|---|---|---|
+| Business participant | Starts, receives, or supports the Scenario | Business or information condition |
 
 ## Business flow
 
@@ -46,9 +46,9 @@ flowchart TD
 
 Record a rule only when its business meaning is supported. Keep transport, null, formatting, and framework validation as information preconditions unless business semantics are established.
 
-| Decision or rule | Business meaning | Effect on outcome | Status |
-|---|---|---|---|
-| Business condition | Supported meaning | Result or path change | Confirmed/Inferred/Conflicting/Unknown |
+| Decision or rule | Business meaning | Effect on outcome |
+|---|---|---|
+| Business condition *(Inferred)* | Supported meaning | Result or path change |
 
 ## Business information
 
@@ -56,9 +56,9 @@ Describe concepts rather than API fields, schemas, mappings, storage records, or
 
 ## Business outcomes
 
-| Outcome | Affected participant or object | Condition | Completion or state meaning | Status |
-|---|---|---|---|---|
-| Successful, alternative, or failed visible outcome | Actor/object | Business condition | Completion and meaningful state | Confirmed/Inferred/Conflicting/Unknown |
+| Outcome | Affected participant or object | Condition | Completion or state meaning |
+|---|---|---|---|
+| Successful, alternative, or failed visible outcome *(Unknown)* | Actor/object | Business condition | Completion and meaningful state |
 
 ## Business-visible exceptions
 
@@ -70,9 +70,9 @@ Include only participants whose role or unavailability changes a business intera
 
 ## Open questions
 
-| Question | Business importance | Status |
-|---|---|---|
-| Unresolved business meaning or repository boundary | Decision or outcome it affects | Unknown/Conflicting |
+| Question | Business importance |
+|---|---|
+| Unresolved business meaning or repository boundary *(Conflicting)* | Decision or outcome it affects |
 
 ## Traceability
 

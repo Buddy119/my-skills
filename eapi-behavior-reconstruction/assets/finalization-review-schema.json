@@ -1,6 +1,6 @@
 {
-  "finalization_review_schema_version": "2",
-  "validation_version": "2",
+  "finalization_review_schema_version": "3",
+  "validation_version": "3",
   "outcomes": [
     "passed",
     "corrected",
@@ -38,7 +38,8 @@
         "dependency-identity-and-criticality",
         "failure-pattern-and-retry-safety",
         "java-call-and-di-binding",
-        "scenario-to-tech-traceability"
+        "scenario-to-tech-traceability",
+        "evidence-qualification-projection"
       ]
     },
     "reader": {
@@ -52,7 +53,8 @@
         "journey-and-scenario",
         "catalog-navigation-and-projection",
         "publication-language-and-diagrams",
-        "lifecycle-model-and-diagrams"
+        "lifecycle-model-and-diagrams",
+        "status-and-evidence-density"
       ]
     }
   }

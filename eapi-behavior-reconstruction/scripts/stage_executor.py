@@ -90,6 +90,11 @@ from reader_projection import (
     receipt_projection_summary,
     refresh_projections,
 )
+from reader_presentation import (
+    READER_PRESENTATION_VALIDATION_VERSION,
+    ReaderPresentationError,
+    validate_bundled_reader_contract,
+)
 
 
 WORKFLOW_SCHEMA_VERSION = "4"
@@ -1118,6 +1123,7 @@ def command_init(args: argparse.Namespace) -> int:
         load_projection_schema()
         load_review_schema()
         load_lifecycle_schema()
+        validate_bundled_reader_contract(registry, assets_root=template_root())
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
@@ -1132,6 +1138,8 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(f"bundled Finalization Review Schema is invalid: {exc}") from exc
     except LifecycleSchemaError as exc:
         raise ExecutorError(f"bundled Lifecycle Model Schema is invalid: {exc}") from exc
+    except ReaderPresentationError as exc:
+        raise ExecutorError(f"bundled Reader Presentation Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1294,6 +1302,18 @@ def validator_commands(
                 python,
                 str(scripts / "validate_publication_maturity.py"),
                 str(candidate),
+                "--json",
+            ]
+        )
+
+    if stage in {"tech-publication", "ba-publication", "finalization"}:
+        commands.append(
+            [
+                python,
+                str(scripts / "validate_reader_presentation.py"),
+                str(candidate),
+                "--repo",
+                str(repo),
                 "--json",
             ]
         )
@@ -3280,6 +3300,14 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
                 str(output),
                 "--json",
             ],
+            [
+                sys.executable,
+                str(scripts / "validate_reader_presentation.py"),
+                str(output),
+                "--repo",
+                str(repo),
+                "--json",
+            ],
         ]
     return [run_validator(command, output) for command in commands]
 
@@ -3300,6 +3328,8 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "markdown_fragment_error_count": 0,
         "markdown_fragment_skipped_group_count": 0,
         "lifecycle_model_validation_version": None,
+        "reader_presentation_validation_version": None,
+        "reader_presentation_invalid_document_count": 0,
     }
     for result in results:
         try:
@@ -3311,6 +3341,14 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         domain_statuses = payload.get("domain_statuses", {})
         if isinstance(domain_statuses, dict):
             summary["validator_domain_statuses"].update(domain_statuses)
+        presentation_version = payload.get("reader_presentation_validation_version")
+        if isinstance(presentation_version, str):
+            summary["reader_presentation_validation_version"] = presentation_version
+            invalid_documents = payload.get("invalid_documents")
+            if isinstance(invalid_documents, int):
+                summary["reader_presentation_invalid_document_count"] = max(
+                    summary["reader_presentation_invalid_document_count"], invalid_documents
+                )
         maturity_version = payload.get("publication_maturity_validation_version")
         if isinstance(maturity_version, str):
             summary["publication_maturity_validation_version"] = maturity_version

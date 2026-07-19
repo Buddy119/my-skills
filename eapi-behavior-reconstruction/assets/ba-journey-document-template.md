@@ -1,6 +1,6 @@
 ---
 artifact_type: "ba-journey"
-artifact_schema_version: "1"
+artifact_schema_version: "2"
 journey_id: "repository.journey.business-goal"
 title: "Business journey title"
 repository: "repository-name"
@@ -26,9 +26,9 @@ Explain the outcome pursued by the actor and the part of the journey observable 
 
 ## Actors and start/end conditions
 
-| Actor or participant | Role | Start condition | Observable end condition | Status |
-|---|---|---|---|---|
-| Business participant | Journey role | Supported start or Unknown | Outcome or handoff | Confirmed/Inferred/Conflicting/Unknown |
+| Actor or participant | Role | Start condition | Observable end condition |
+|---|---|---|---|
+| Business participant *(Unknown)* | Journey role | Supported start or Unknown | Outcome or handoff |
 
 ## Journey map
 
@@ -44,9 +44,9 @@ flowchart LR
 
 ## Stages and scenarios
 
-| Stage | Business meaning | Scenario | Object or responsibility change | Visible outcome or handoff | Status |
-|---|---|---|---|---|---|
-| Business stage | Why the stage matters | [Scenario](../scenarios/repository.scenario.context-outcome.md) | Business-object change or None observed | Outcome/handoff | Confirmed/Inferred/Conflicting/Unknown |
+| Stage | Business meaning | Scenario | Object or responsibility change | Visible outcome or handoff |
+|---|---|---|---|---|
+| Business stage *(Inferred)* | Why the stage matters | [Scenario](../scenarios/repository.scenario.context-outcome.md) | Business-object change or None observed | Outcome/handoff |
 
 ## Business-object progression
 
@@ -62,9 +62,9 @@ Explain only business-visible incomplete, delayed, reduced, inconsistent, or rec
 
 ## Open questions and journey boundaries
 
-| Question or boundary | Business importance | Status |
-|---|---|---|
-| Unknown upstream/downstream stage or decision | Impact on the Journey interpretation | Unknown/Conflicting |
+| Question or boundary | Business importance |
+|---|---|
+| Unknown upstream/downstream stage or decision *(Conflicting)* | Impact on the Journey interpretation |
 
 ## Traceability
 

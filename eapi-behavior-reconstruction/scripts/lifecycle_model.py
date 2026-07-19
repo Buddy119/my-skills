@@ -19,7 +19,7 @@ from register_schema import RegisterSchema, section_value
 
 
 DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "assets" / "lifecycle-model-schema.json"
-LIFECYCLE_MODEL_VALIDATION_VERSION = "1"
+LIFECYCLE_MODEL_VALIDATION_VERSION = "2"
 NO_TRANSITION_SENTENCE = "No object state transition was established from repository evidence."
 CODE_RE = re.compile(r"`([^`]+)`")
 FRONTMATTER_RE = re.compile(r"\A---\n(?P<body>.*?)\n---\n", re.S)
@@ -65,8 +65,10 @@ def load_lifecycle_schema(path: Path = DEFAULT_SCHEMA_PATH) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise LifecycleSchemaError(f"cannot load lifecycle model schema {path}: {exc}") from exc
-    if not isinstance(payload, dict) or payload.get("lifecycle_model_schema_version") != "1":
+    if not isinstance(payload, dict) or payload.get("lifecycle_model_schema_version") != "2":
         raise LifecycleSchemaError("unsupported lifecycle model schema version")
+    if payload.get("validation_version") != LIFECYCLE_MODEL_VALIDATION_VERSION:
+        raise LifecycleSchemaError("lifecycle model validation version mismatch")
     required = {"ids", "state_bases", "evidence_statuses", "action_roles", "reader_tables", "diagram_contract"}
     missing = sorted(required - set(payload))
     if missing:
@@ -211,7 +213,11 @@ def validate_lifecycle_register(
         observation_refs = _ids(row[5], patterns["observation"])
         if not observation_refs:
             errors.append(f"Object {identifier} has no Lifecycle Observation IDs")
-        objects[identifier] = {"observations": observation_refs, "row": row}
+        objects[identifier] = {
+            "observations": observation_refs,
+            "status": _code(row[6]),
+            "row": row,
+        }
 
     states: dict[str, dict[str, Any]] = {}
     for row in rows["object_states"]:
@@ -369,29 +375,17 @@ def _reader_ids(rows: list[list[str]], pattern: re.Pattern[str]) -> set[str]:
     return {_code(row[0]) for row in rows if row and pattern.fullmatch(_code(row[0]))}
 
 
-def _validate_citations(cells: list[str], repo: Path | None, context: str, errors: list[str]) -> None:
-    evidence = " ".join(cells)
-    matches = list(SOURCE_RE.finditer(evidence))
-    if not matches:
-        errors.append(f"{context} has no source citation")
+def _validate_status_qualifier(cell: str, status: str, context: str, errors: list[str]) -> None:
+    qualifiers = re.findall(r"\*\((Confirmed|Inferred|Unknown|Conflicting)\)\*", cell)
+    if status == "Confirmed":
+        if qualifiers:
+            errors.append(f"{context} repeats a qualifier for Confirmed Reader content")
         return
-    if repo is None:
-        return
-    for match in matches:
-        relative = match.group("path")
-        start = int(match.group("start"))
-        end = int(match.group("end") or start)
-        source = repo / relative
-        if not source.is_file():
-            errors.append(f"{context} cites missing file: {relative}")
-            continue
-        if end < start:
-            errors.append(f"{context} has invalid citation range: {relative}:{start}-{end}")
-            continue
-        with source.open(encoding="utf-8", errors="replace") as handle:
-            line_count = sum(1 for _ in handle)
-        if start < 1 or end > line_count:
-            errors.append(f"{context} citation is outside file bounds: {relative}:{start}-{end}")
+    expected = f"*({status})*"
+    if expected not in cell:
+        errors.append(f"{context} must preserve Register status with {expected}")
+    if any(item != status for item in qualifiers):
+        errors.append(f"{context} has a qualifier that conflicts with Register status {status}")
 
 
 def validate_lifecycle_document(
@@ -416,8 +410,8 @@ def validate_lifecycle_document(
     text = document.read_text(encoding="utf-8")
     if _frontmatter_value(text, "artifact_type") != "data-lifecycle":
         errors.append("data-lifecycle.md has the wrong artifact_type")
-    if _frontmatter_value(text, "artifact_schema_version") != "2":
-        errors.append("data-lifecycle.md must use artifact_schema_version 2")
+    if _frontmatter_value(text, "artifact_schema_version") != "3":
+        errors.append("data-lifecycle.md must use artifact_schema_version 3")
 
     object_header, object_rows = _table(text, "Object landscape")
     if object_header != schema["reader_tables"]["object_landscape"]:
@@ -428,6 +422,10 @@ def validate_lifecycle_document(
             "Data Lifecycle Object landscape does not match Register Objects: "
             f"missing={sorted(set(objects) - published_objects)}, extra={sorted(published_objects - set(objects))}"
         )
+    for row in object_rows:
+        object_id = _code(row[0]) if row else ""
+        if object_id in objects:
+            _validate_status_qualifier(row[0], objects[object_id]["status"], f"Object {object_id}", errors)
 
     sections = _object_sections(text)
     if set(sections) != set(objects):
@@ -467,8 +465,9 @@ def validate_lifecycle_document(
         if published_states != object_states:
             errors.append(f"Data Lifecycle {object_id} State vocabulary does not match Register States")
         for row in state_rows:
-            if row and _code(row[0]) in states:
-                _validate_citations(row[-1:], repo, f"State {_code(row[0])}", errors)
+            state_id = _code(row[0]) if row else ""
+            if state_id in states:
+                _validate_status_qualifier(row[0], states[state_id]["status"], f"State {state_id}", errors)
 
         transition_header, transition_rows = _subsection_table(section, "State transitions")
         published_transitions = _reader_ids(transition_rows, re.compile(schema["ids"]["transition"]))
@@ -481,8 +480,11 @@ def validate_lifecycle_document(
                 if f'id="{transition_id.lower()}"' not in section:
                     errors.append(f"Data Lifecycle Transition lacks stable anchor: {transition_id}")
             for row in transition_rows:
-                if row and _code(row[0]) in transitions:
-                    _validate_citations(row[-1:], repo, f"Transition {_code(row[0])}", errors)
+                transition_id = _code(row[0]) if row else ""
+                if transition_id in transitions:
+                    _validate_status_qualifier(
+                        row[0], transitions[transition_id]["status"], f"Transition {transition_id}", errors
+                    )
         elif transition_header or transition_rows:
             errors.append(f"Data Lifecycle {object_id} publishes a Transition table without Register Transitions")
 
@@ -547,8 +549,9 @@ def validate_lifecycle_document(
                     errors.append(f"Data Lifecycle {object_id} lists Action from another Object: {action_id}")
             covered_actions.update(published_actions)
             for row in action_rows:
-                if row and _code(row[0]) in actions:
-                    _validate_citations(row[-1:], repo, f"Action {_code(row[0])}", errors)
+                action_id = _code(row[0]) if row else ""
+                if action_id in actions:
+                    _validate_status_qualifier(row[0], actions[action_id]["status"], f"Action {action_id}", errors)
         elif action_header or action_rows:
             errors.append(f"Data Lifecycle {object_id} publishes Processing Actions absent from the Register")
 
@@ -607,6 +610,23 @@ def validate_behavior_lifecycle_projection(root: Path, lifecycle: LifecycleDomai
             errors.append(f"Tech Behavior {behavior_id} Action projection does not match the Register")
         if transition_ids != expected_transitions:
             errors.append(f"Tech Behavior {behavior_id} Transition projection does not match the Register")
+        _action_header, action_rows = _table(text, "Data access and processing")
+        for row in action_rows:
+            action_id = _code(row[0]) if row else ""
+            if action_id in actions:
+                _validate_status_qualifier(
+                    row[0], actions[action_id]["status"], f"Tech Behavior {behavior_id} Action {action_id}", errors
+                )
+        _transition_header, transition_rows = _table(text, "Object state transitions")
+        for row in transition_rows:
+            transition_id = _code(row[0]) if row else ""
+            if transition_id in transitions:
+                _validate_status_qualifier(
+                    row[0],
+                    transitions[transition_id]["status"],
+                    f"Tech Behavior {behavior_id} Transition {transition_id}",
+                    errors,
+                )
         for transition_id in transition_ids & set(transitions):
             target = f"../data-lifecycle.md#{transition_id.lower()}"
             if f"]({target})" not in text:

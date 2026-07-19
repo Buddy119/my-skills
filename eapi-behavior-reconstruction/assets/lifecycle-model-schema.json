@@ -1,6 +1,6 @@
 {
-  "lifecycle_model_schema_version": "1",
-  "validation_version": "1",
+  "lifecycle_model_schema_version": "2",
+  "validation_version": "2",
   "ids": {
     "observation": "^LIFE-OBS-[0-9]+$",
     "object": "^OBJ-[0-9]+$",
@@ -32,7 +32,6 @@
       "Behaviors",
       "State model",
       "Processing and data movement",
-      "Status",
       "Details"
     ],
     "state_vocabulary": [
@@ -40,9 +39,7 @@
       "State",
       "Basis",
       "Definition or derivation",
-      "Persistence or observability",
-      "Status",
-      "Evidence"
+      "Persistence or observability"
     ],
     "state_transitions": [
       "Transition ID",
@@ -51,9 +48,7 @@
       "Triggering behavior",
       "Causing action(s)",
       "Condition",
-      "Result and consistency impact",
-      "Status",
-      "Evidence"
+      "Result and consistency impact"
     ],
     "processing_actions": [
       "Action ID",
@@ -62,9 +57,7 @@
       "Input or source",
       "Output or destination",
       "Related transition",
-      "Condition",
-      "Status",
-      "Evidence"
+      "Condition"
     ]
   },
   "diagram_contract": {
