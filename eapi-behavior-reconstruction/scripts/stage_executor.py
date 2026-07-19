@@ -231,6 +231,29 @@ def scalar_value(text: str, key: str) -> str | None:
     return unquote(match.group("value")) if match else None
 
 
+def yaml_block(text: str, key: str) -> tuple[str, str]:
+    match = re.search(
+        rf"^{re.escape(key)}:[ \t]*(?P<inline>[^\n]*)\n"
+        rf"(?P<body>(?:[ \t]+[^\n]*(?:\n|$))*)",
+        text,
+        re.M,
+    )
+    if not match:
+        return "", ""
+    return match.group("inline").strip(), match.group("body")
+
+
+def markdown_frontmatter(path: Path) -> str | None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not text.startswith("---\n"):
+        return None
+    end = text.find("\n---\n", 4)
+    return text[4:end] if end != -1 else None
+
+
 def set_scalar(text: str, key: str, value: str | None) -> str:
     line = f"{key}: {yaml_scalar(value)}"
     pattern = re.compile(rf"^{re.escape(key)}:\s*[^\n]*(?:\n|$)", re.M)
@@ -1039,6 +1062,8 @@ def validator_commands(stage: str, candidate: Path, repo: Path) -> list[list[str
             command = [python, str(scripts / "validate_behavior_doc.py"), str(document), "--repo", str(repo)]
             if stage in {"tech-publication", "api-contract-publication"}:
                 command.append("--allow-missing-ba")
+            if stage == "tech-publication":
+                command.append("--allow-missing-api-contracts")
             commands.append(command)
 
     if stage in {"api-contract-publication", "ba-publication", "finalization"}:
@@ -1245,6 +1270,59 @@ def stage_skip_allowed(stage: str, candidate: Path, reason: str | None) -> None:
         contracts = list((candidate / "tech-pack" / "contracts").glob("*.api-contract.md"))
         if contracts:
             raise ExecutorError("cannot skip API Contract publication while application contracts exist")
+
+        api_behaviors: list[str] = []
+        declared_contracts: set[str] = set()
+        unreadable_behaviors: list[str] = []
+        behaviors_dir = candidate / "tech-pack" / "behaviors"
+        for document in sorted(behaviors_dir.glob("*.md")):
+            frontmatter = markdown_frontmatter(document)
+            if frontmatter is None:
+                unreadable_behaviors.append(document.name)
+                continue
+            if scalar_value(frontmatter, "entry_type") == "api":
+                api_behaviors.append(
+                    scalar_value(frontmatter, "behavior_id") or document.name
+                )
+            _, api_contract_block = yaml_block(frontmatter, "api_contracts")
+            declared_contracts.update(
+                item.strip()
+                for item in re.findall(
+                    r"^\s*-\s+endpoint_id:\s*[\"']?([^\"'\n]+?)[\"']?\s*$",
+                    api_contract_block,
+                    re.M,
+                )
+            )
+
+        catalog = candidate / "tech-pack" / "behavior-catalog.yaml"
+        if catalog.is_file():
+            declared_contracts.update(
+                item.strip()
+                for item in re.findall(
+                    r"^\s*-\s+endpoint_id:\s*[\"']?([^\"'\n]+?)[\"']?\s*$",
+                    catalog.read_text(encoding="utf-8"),
+                    re.M,
+                )
+            )
+
+        blockers: list[str] = []
+        if api_behaviors:
+            blockers.append("API Behaviors: " + ", ".join(sorted(api_behaviors)))
+        if declared_contracts:
+            blockers.append(
+                "planned API Contracts: " + ", ".join(sorted(declared_contracts))
+            )
+        if unreadable_behaviors:
+            blockers.append(
+                "unreadable Tech Behavior frontmatter: "
+                + ", ".join(sorted(unreadable_behaviors))
+            )
+        if blockers:
+            raise ExecutorError(
+                "cannot skip API Contract publication while API publication intent exists ("
+                + "; ".join(blockers)
+                + ")"
+            )
         return
     if stage == "ba-publication" and scalar_value(state, "business_model_status") == "blocked":
         return

@@ -28,6 +28,120 @@ def load_executor_module():
         sys.path.pop(0)
 
 
+def api_behavior_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "tech-behavior"\n'
+        'artifact_schema_version: "1"\n'
+        'behavior_id: "sample-repo.get-customer"\n'
+        'title: "Get customer"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'entry_type: "api"\n'
+        'entry_point: "GET /customers/{id}"\n'
+        'behavior_category: "business"\n'
+        'overall_status: "Confirmed"\n'
+        "api_contracts:\n"
+        '  - endpoint_id: "sample-repo.get-customer"\n'
+        '    document: "../contracts/sample-repo.get-customer.api-contract.md"\n'
+        "ba_scenarios: []\n"
+        "consumes: []\n"
+        "produces: []\n"
+        "reads: []\n"
+        "writes: []\n"
+        "external_dependencies: []\n"
+        "external_http_calls: []\n"
+        "field_mappings: []\n"
+        "failure_patterns: []\n"
+        "analysis_limitations: []\n"
+        "---\n\n"
+        "# Get customer\n\n"
+        "## Summary\n\nReturns the observed customer result. `src/Handler.java:1`\n\n"
+        "## Trigger and entry point\n\nThe application route invokes the handler.\n\n"
+        "## API contracts\n\n"
+        "- [GET /customers/{id}](../contracts/sample-repo.get-customer.api-contract.md)\n\n"
+        "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
+        "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
+        "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"
+        "## Happy path\n\n1. Accept the request.\n2. Return the result.\n\n"
+        "## Data access and state changes\n\nNo state change was observed.\n\n"
+        "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
+        "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
+        "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
+        "## Evidence index\n\n- `src/Handler.java:1`\n"
+    )
+
+
+def endpoint_matrix_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "endpoint-matrix"\n'
+        'artifact_schema_version: "1"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'coverage_status: "complete"\n'
+        "---\n\n"
+        "# Endpoint matrix\n\n"
+        "## Endpoint summary\n\n"
+        "| Endpoint or Exposure ID | Operation Role | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract |\n"
+        "|---|---|---|---|---|---|---|---|---|\n"
+        "| `sample-repo.get-customer` | application-endpoint | Confirmed — `GET /customers/{id}` | Not observed | Not observed | Not observed | Not observed | [Behavior](behaviors/sample-repo.get-customer.md) | [Contract](contracts/sample-repo.get-customer.api-contract.md) |\n\n"
+        "## Evidence and reconciliation notes\n\n"
+        '<a id="sample-repo-get-customer"></a>\n\n'
+        "### `sample-repo.get-customer`\n\n"
+        "| Layer | Observed value | Status | Evidence |\n"
+        "|---|---|---|---|\n"
+        "| Application Route | `GET /customers/{id}` | Confirmed | `src/Handler.java:1` |\n"
+        "| External Entry Declaration | None observed | Not observed | Repository scope reviewed |\n"
+        "| Environment Deployment Intent | None observed | Not observed | Repository scope reviewed |\n"
+        "| Observed Runtime Deployment | None supplied | Not observed | Analysis boundary |\n"
+        "| External Reachability Assessment | No external exposure evidence | Not observed | Derived from the preceding rows |\n\n"
+        "## Unknowns and conflicts\n\nExternal deployment remains Unknown.\n"
+    )
+
+
+def api_contract_fixture() -> str:
+    return (
+        "---\n"
+        'artifact_type: "api-contract"\n'
+        'artifact_schema_version: "2"\n'
+        'behavior_id: "sample-repo.get-customer"\n'
+        'endpoint_id: "sample-repo.get-customer"\n'
+        'title: "Get customer API"\n'
+        'repository: "sample-repo"\n'
+        'source_commit: "unknown"\n'
+        'entry_point: "GET /customers/{id}"\n'
+        'method: "GET"\n'
+        'route: "/customers/{id}"\n'
+        'contract_status: "Confirmed"\n'
+        'application_route_status: "Confirmed"\n'
+        'external_reachability_status: "Not observed"\n'
+        'behavior_document: "../behaviors/sample-repo.get-customer.md"\n'
+        'endpoint_matrix: "../endpoint-matrix.md#sample-repo-get-customer"\n'
+        "---\n\n"
+        "# Get customer API\n\n"
+        "Returns the observed customer result to the caller. [E1](#e1)\n\n"
+        "## Quick reference\n\n"
+        "| Property | Value |\n"
+        "|---|---|\n"
+        "| Method and application route | `GET /customers/{id}` [E1](#e1) |\n"
+        "| Authentication | Unknown |\n"
+        "| Content type | Unknown |\n"
+        "| Contract confidence | Confirmed |\n"
+        "| External reachability | [Not observed](../endpoint-matrix.md#sample-repo-get-customer) |\n\n"
+        "## Request\n\nThe route contains the customer identifier; further wire rules are Unknown.\n\n"
+        "## Responses\n\n"
+        "| HTTP status | When | Body/schema | Relevant headers |\n"
+        "|---|---|---|---|\n"
+        "| 200 | The handler completes | Customer result [E1](#e1) | None observed |\n\n"
+        "## Related documents\n\n"
+        "- [Tech Behavior](../behaviors/sample-repo.get-customer.md)\n"
+        "- [Endpoint Matrix](../endpoint-matrix.md#sample-repo-get-customer)\n\n"
+        "## Source notes\n\n"
+        '<a id="e1"></a> **E1** — `src/Handler.java:1` establishes the route and observed response.\n'
+    )
+
+
 class StageExecutorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -690,6 +804,10 @@ class StageExecutorTests(unittest.TestCase):
                 self.assertIn('current_stage: "tracing"', state)
 
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
+        source = self.repo / "src" / "Handler.java"
+        source.parent.mkdir(parents=True)
+        source.write_text("class Handler {}\n", encoding="utf-8")
+
         transaction, candidate = self.begin("inventory")
         (candidate / ".work" / "evidence-index.json").write_text(
             '{"artifact_type":"evidence-index","artifact_schema_version":"1"}\n',
@@ -774,6 +892,9 @@ class StageExecutorTests(unittest.TestCase):
 
         tech, candidate = self.begin("tech-publication")
         (candidate / "tech-pack" / "behaviors").mkdir(parents=True)
+        (candidate / "tech-pack" / "behaviors" / "sample-repo.get-customer.md").write_text(
+            api_behavior_fixture(), encoding="utf-8"
+        )
         (candidate / "tech-pack" / "repository-overview.md").write_text(
             "---\n"
             'artifact_type: "repository-overview"\n'
@@ -781,15 +902,31 @@ class StageExecutorTests(unittest.TestCase):
             'repository: "sample-repo"\n'
             'source_commit: "unknown"\n'
             "---\n\n"
-            "# Repository overview\n\nNo executable behavior was observed in this fixture.\n",
+            "# Repository overview\n\nThe fixture exposes one application route.\n",
             encoding="utf-8",
         )
-        catalog_text = (candidate / ".work" / "behavior-catalog.yaml").read_text(
-            encoding="utf-8"
-        ).replace(
-            'artifact_type: "working-behavior-catalog"',
-            'artifact_type: "tech-behavior-catalog"',
-            1,
+        catalog_text = (
+            'artifact_type: "tech-behavior-catalog"\n'
+            'artifact_schema_version: "1"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            'analysis_mode: "automatic"\n'
+            "behaviors:\n"
+            '  - behavior_id: "sample-repo.get-customer"\n'
+            '    title: "Get customer"\n'
+            '    category: "business"\n'
+            "    triggers:\n"
+            '      - type: "api"\n'
+            '        name: "GET /customers/{id}"\n'
+            "    entry_points:\n"
+            '      - "src/Handler.java:1"\n'
+            '    status: "documented"\n'
+            "    duplicate_of: null\n"
+            '    document: "behaviors/sample-repo.get-customer.md"\n'
+            "    ba_scenarios: []\n"
+            "    api_contracts:\n"
+            '      - endpoint_id: "sample-repo.get-customer"\n'
+            '        document: "contracts/sample-repo.get-customer.api-contract.md"\n'
         )
         (candidate / "tech-pack" / "behavior-catalog.yaml").write_text(
             catalog_text, encoding="utf-8"
@@ -797,16 +934,19 @@ class StageExecutorTests(unittest.TestCase):
         self.run_cmd("commit", "--output", str(self.output), "--transaction", tech)
         self.assertFalse((self.output / "tech-pack" / "repository-overview.md").exists())
 
-        api, _candidate = self.begin("api-contract-publication")
+        api, candidate = self.begin("api-contract-publication")
+        (candidate / "tech-pack" / "endpoint-matrix.md").write_text(
+            endpoint_matrix_fixture(), encoding="utf-8"
+        )
+        (candidate / "tech-pack" / "contracts").mkdir(parents=True)
+        (
+            candidate
+            / "tech-pack"
+            / "contracts"
+            / "sample-repo.get-customer.api-contract.md"
+        ).write_text(api_contract_fixture(), encoding="utf-8")
         self.run_cmd(
-            "commit",
-            "--output",
-            str(self.output),
-            "--transaction",
-            api,
-            "--skip",
-            "--reason",
-            "No application route was observed in the fixture.",
+            "commit", "--output", str(self.output), "--transaction", api
         )
 
         model, candidate = self.begin("business-model")

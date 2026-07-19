@@ -292,9 +292,8 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
 
 1. Build each Tech Behavior from its completed dossier. Use [assets/behavior-document-template.md](assets/behavior-document-template.md).
 2. Build `repository-overview.md` from the completed Connection and Shared Behavior models in `repository-synthesis.md` using [assets/repository-overview-template.md](assets/repository-overview-template.md), not directly from the evidence index, dependency names, configuration names, or file roles. Publish one grouped system-context Mermaid diagram and a compact connection matrix; then publish separate Shared Rules and Shared Behavior-shaping Components tables. Link to detailed models instead of copying their Operation, Mapping, Lifecycle, Config, or Failure tables. Leave BA Scenario links empty until the independent Business Model is complete.
-3. Create `tech-pack/behavior-catalog.yaml` from [assets/tech-behavior-catalog-template.yaml](assets/tech-behavior-catalog-template.yaml), populate it from the reconciled working catalog, and replace working dossier paths with final document links. Do not copy the Working Catalog's Artifact identity into the Tech Catalog.
+3. Create `tech-pack/behavior-catalog.yaml` from [assets/tech-behavior-catalog-template.yaml](assets/tech-behavior-catalog-template.yaml), populate it from the reconciled working catalog, and replace working dossier paths with final document links. Do not copy the Working Catalog's Artifact identity into the Tech Catalog. For every API Behavior, declare each stable Endpoint ID and planned Contract path in both the Behavior and Catalog. Use `../contracts/<endpoint-id>.api-contract.md` in the Behavior and `contracts/<endpoint-id>.api-contract.md` in the Catalog. These are forward references for the next stage: keep the visible links, but do not create empty Contract stubs or an Endpoint Matrix during Tech publication. Use `api_contracts: []` for non-API Behaviors.
 4. Generate applicable repository references from the corresponding reconciled register records and repository-synthesis models:
-   - [assets/endpoint-matrix-template.md](assets/endpoint-matrix-template.md)
    - [assets/data-lifecycle-template.md](assets/data-lifecycle-template.md)
    - [assets/field-validation-and-mapping-template.md](assets/field-validation-and-mapping-template.md)
    - [assets/runtime-config-matrix-template.md](assets/runtime-config-matrix-template.md)
@@ -308,13 +307,13 @@ Begin `tech-publication` and write in its Candidate for a developer who needs to
 
 Keep prose natural. Attach evidence to a paragraph, meaningful rule, flow explanation, or table row; do not label every sentence.
 
-Complete all Tech publication checkpoints through the executor. Commit `tech-publication` only after its Behavior, cross-link, and repository-document gates pass. This commit advances only the Working Generation.
+Complete all Tech publication checkpoints through the executor. Commit `tech-publication` only after its Behavior, forward-reference identity/path, cross-link, and repository-document gates pass. Contract target existence is intentionally deferred to API Contract publication; every other Behavior link remains strict. This commit advances only the Working Generation.
 
 ### 7. Publish endpoint evidence and application API contracts
 
 Begin `api-contract-publication` and use its Candidate.
 
-First generate `endpoint-matrix.md` whenever the register contains evidence from any endpoint layer. Treat it as a reader-facing projection rather than a dump of every register row:
+First generate `endpoint-matrix.md` from [assets/endpoint-matrix-template.md](assets/endpoint-matrix-template.md) whenever the register contains evidence from any endpoint layer. Treat it as a reader-facing projection rather than a dump of every register row:
 
 - Publish every reconciled `application-endpoint` and `meaningful-external-exposure`.
 - Publish every `unresolved` record and every orphaned, conflicting, or environment-inconsistent protocol-support record as an exception.
@@ -333,13 +332,13 @@ For every confirmed application endpoint:
 7. Use compact `[E#]` markers and grouped Source notes. Do not expose a repeated Evidence column or one citation per sentence when a meaningful row or paragraph can share support.
 8. Generate request and response examples only when code, schema, or tests support their fields, statuses, and wire shapes. Omit unsafe examples and record the caller impact instead of inventing values or serialization.
 9. Set the contract's `behavior_document` backlink.
-10. Add every related application endpoint to the Tech Behavior's `api_contracts` list and visible `API contracts` links. Use `api_contracts: []` for non-API behaviors.
+10. Materialize every Contract declared by the Tech Behavior and Catalog forward references. Verify the Endpoint ID, Contract filename, Behavior backlink, visible link, Catalog path, and Matrix links as one relationship. Correct Tech Behavior or Catalog endpoint relationships only when reconciliation requires it; do not leave any declared Contract target missing when this stage commits.
 
 Do not generate a contract or behavior for an external-only, configuration-only, or ordinary protocol-support record. Multiple external entries mapped to one application endpoint share its one application contract.
 
 Validate each endpoint contract and its backlink before continuing.
 
-Complete the Endpoint Matrix, Contract, backlink, and validation checkpoints. Commit this stage after the executor validates application Contracts and Matrix links. When the repository has no application API Contract, commit it with `--skip` and an evidence-based reason; do not create empty Contracts. Either result advances only the Working Generation.
+Complete the Endpoint Matrix, Contract, backlink, and validation checkpoints. Commit this stage after the executor strictly validates every forward reference, application Contract, Catalog path, Behavior backlink, and Matrix link. Use `--skip` only when there are no Contract files, no API Behaviors, and no declared `api_contracts` in the Tech Behavior or Catalog; do not create empty Contracts. Either result advances only the Working Generation.
 
 ### 8. Build an independent Business Model and publish the BA Pack
 

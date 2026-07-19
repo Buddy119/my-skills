@@ -16,6 +16,7 @@ behaviors:
     duplicate_of: null
     document: "behaviors/repository.behavior-name.md"
     ba_scenarios: []
+    # Declare stable planned Contract paths during Tech publication; API publication materializes them.
     api_contracts:
       - endpoint_id: "repository.method-route"
         document: "contracts/repository.method-route.api-contract.md"

@@ -114,6 +114,14 @@ def main() -> int:
         action="store_true",
         help="pre-BA validation only: allow the declared BA target file to be created later",
     )
+    parser.add_argument(
+        "--allow-missing-api-contracts",
+        action="store_true",
+        help=(
+            "Tech-publication validation only: allow declared API Contract target files "
+            "to be materialized by the next stage"
+        ),
+    )
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -166,6 +174,10 @@ def main() -> int:
     document_count = len(re.findall(r"^\s+document:", api_block, re.M))
     if endpoint_count != document_count:
         errors.append("every api_contracts entry must contain endpoint_id and document")
+    if len({item[0] for item in contracts}) != len(contracts):
+        errors.append("api_contracts contains duplicate Endpoint IDs")
+    if len({item[1] for item in contracts}) != len(contracts):
+        errors.append("api_contracts contains duplicate documents")
 
     if entry_type == "api":
         if "API contracts" not in headings:
@@ -173,8 +185,14 @@ def main() -> int:
         if not contracts:
             errors.append("API behavior must list at least one endpoint contract in api_contracts")
         for endpoint_id, document in contracts:
+            expected_document = f"../contracts/{endpoint_id}.api-contract.md"
+            if document != expected_document:
+                errors.append(
+                    "api_contracts document must match its Endpoint ID: "
+                    f"{endpoint_id} -> {expected_document}"
+                )
             contract_path = (args.document.parent / document).resolve()
-            if not contract_path.is_file():
+            if not contract_path.is_file() and not args.allow_missing_api_contracts:
                 errors.append(f"linked API contract does not exist: {document}")
             if not re.search(rf"\]\({re.escape(document)}\)", body):
                 errors.append(f"API behavior body must link endpoint {endpoint_id}: {document}")

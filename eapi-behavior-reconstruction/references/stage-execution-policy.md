@@ -111,7 +111,7 @@ python3 <skill-root>/scripts/stage_executor.py commit \
   --json
 ```
 
-Use `--semantic-result complete` for Synthesis. Use `--semantic-result complete|partial|blocked` for the Business Model. Skip only the API Contract stage when no application contracts exist or the BA publication stage when the Business Model is blocked:
+Use `--semantic-result complete` for Synthesis. Use `--semantic-result complete|partial|blocked` for the Business Model. Skip only the API Contract stage when no Contract files, API Behaviors, or declared `api_contracts` exist, or skip the BA publication stage when the Business Model is blocked:
 
 ```bash
 python3 <skill-root>/scripts/stage_executor.py commit \
@@ -220,8 +220,8 @@ Use this sequence without reordering:
 1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
-4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation.
-5. `api-contract-publication`: Endpoint Matrix and application Contracts in the Generation, or evidence-based skip.
+4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract forward references, but this stage creates neither Contract stubs nor Endpoint Matrix. Its Behavior validation relaxes only target-file existence; identity, exact path, uniqueness, and visible links remain mandatory.
+5. `api-contract-publication`: Materialize every planned application Contract and the Endpoint Matrix in the Generation, then strictly validate Behavior, Contract, Catalog, and Matrix relationships; use an evidence-based skip only when no API publication intent exists.
 6. `business-model`: independent Business Model in the Generation.
 7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip.
 8. `finalization`: Markdown-first mechanical validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.
