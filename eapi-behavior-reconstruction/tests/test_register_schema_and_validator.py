@@ -282,6 +282,19 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
             {"dependency": "valid", "failure": "valid", "http": "valid"},
         )
 
+    def test_reader_catalog_template_instruction_is_rejected(self) -> None:
+        RegisterFixture(self.root).write()
+        catalog = self.root / "tech-pack" / "behavior-catalog.yaml"
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text(
+            'repository: "fixture"\n# TEMPLATE: remove this publication instruction\nbehaviors: []\n',
+            encoding="utf-8",
+        )
+        result, payload = self.validate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CATALOG-DOCUMENT", payload["errors"])
+        self.assertEqual(payload["primary_errors"], 1)
+
     def test_tech_profile_defers_only_future_api_and_ba_targets(self) -> None:
         RegisterFixture(self.root).write()
         reader = self.root / "tech-pack" / "behaviors" / "fixture.md"

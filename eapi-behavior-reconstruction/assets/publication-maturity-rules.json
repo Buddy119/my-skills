@@ -1,0 +1,72 @@
+{
+  "publication_maturity_rules_schema_version": "1",
+  "publication_maturity_validation_version": "1",
+  "blocking_rules": [
+    {
+      "rule_id": "forward-reference",
+      "pattern": "\\bforward[ -]references?\\b",
+      "message": "reader text exposes an execution-time forward reference"
+    },
+    {
+      "rule_id": "until-publication",
+      "pattern": "\\b(?:n/?a|not applicable|not available|unavailable)\\s+until\\b[^.\\n]{0,80}\\b(?:publication|published)\\b",
+      "message": "reader text says information is unavailable until a publication step"
+    },
+    {
+      "rule_id": "future-stage-materialization",
+      "pattern": "\\b(?:will be|to be)\\s+(?:generated|published|materiali[sz]ed|created)\\b[^.\\n]{0,80}\\b(?:in|during|by)\\s+(?:the\\s+)?(?:next|later|api(?:\\s+contract)?|ba|final(?:ization)?|publication)(?:\\s+(?:publication|stage))?\\b",
+      "message": "reader text promises that an artifact will be created by a later workflow stage"
+    },
+    {
+      "rule_id": "planned-artifact",
+      "pattern": "\\b(?:planned|pending)\\s+(?:api\\s+contracts?|contract\\s+paths?|documents?|artifacts?|links?|endpoint\\s+matrix|ba\\s+pack|tech\\s+pack|publication|materiali[sz]ation)\\b",
+      "message": "reader text describes a knowledge artifact as planned or pending"
+    },
+    {
+      "rule_id": "tech-publication-stage",
+      "pattern": "\\bduring\\s+(?:the\\s+)?tech(?:nical)?\\s+publication\\b",
+      "message": "reader text refers to the Tech publication stage"
+    },
+    {
+      "rule_id": "api-publication-materializes",
+      "pattern": "\\bapi(?:\\s+contract)?\\s+publication\\s+(?:will\\s+)?materiali[sz]es?\\b",
+      "message": "reader text explains API publication materialization"
+    },
+    {
+      "rule_id": "artifact-not-yet-materialized",
+      "pattern": "(?:\\b(?:contracts?|documents?|artifacts?|matrix|packs?|links?)\\b[^.\\n]{0,60}\\bnot yet\\s+(?:generated|published|materiali[sz]ed|available)\\b|\\bnot yet\\s+(?:generated|published|materiali[sz]ed|available)\\b[^.\\n]{0,60}\\b(?:contracts?|documents?|artifacts?|matrix|packs?|links?)\\b)",
+      "message": "reader text says a knowledge artifact is not yet available"
+    },
+    {
+      "rule_id": "workflow-stage-action",
+      "pattern": "\\b(?:tech|api(?:\\s+contract)?|business[- ]model|ba|finalization)\\s+(?:publication\\s+)?stage\\b[^.\\n]{0,100}\\b(?:generate|publish|materiali[sz]e|create|add|replace|update)\\w*\\b",
+      "message": "reader text explains an internal workflow stage action"
+    }
+  ],
+  "review_terms": [
+    {
+      "rule_id": "planned",
+      "pattern": "\\bplanned\\b"
+    },
+    {
+      "rule_id": "pending",
+      "pattern": "\\bpending\\b"
+    },
+    {
+      "rule_id": "not-yet",
+      "pattern": "\\bnot yet\\b"
+    },
+    {
+      "rule_id": "temporary",
+      "pattern": "\\btemporary\\b"
+    },
+    {
+      "rule_id": "future",
+      "pattern": "\\bfuture\\b"
+    },
+    {
+      "rule_id": "later",
+      "pattern": "\\blater\\b"
+    }
+  ]
+}

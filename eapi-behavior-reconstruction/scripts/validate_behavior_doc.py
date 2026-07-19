@@ -413,6 +413,7 @@ def main() -> int:
         warnings.append("document contains no Unknown or Conflicting review items")
     placeholders = (
         "TODO",
+        "TEMPLATE:",
         "path/to/",
         "repository.behavior-name",
         "repository.method-route",

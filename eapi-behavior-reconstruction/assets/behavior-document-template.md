@@ -53,9 +53,9 @@ Describe the observable behavior in two or three sentences. Do not claim that th
 
 ## API contracts
 
-Include this section only for `entry_type: api`. Keep it short and link to every endpoint contract implemented by this behavior:
+Include this section only for `entry_type: api`. Keep it short and link to every endpoint contract implemented by this behavior.
 
-During Tech publication, declare each stable Endpoint ID in `api_contracts` and use the exact forward path `../contracts/<endpoint-id>.api-contract.md` here even though the Contract is materialized in the next stage. Do not create an empty Contract or Endpoint Matrix stub to satisfy this link. Non-API Behaviors must omit this section and use `api_contracts: []`.
+<!-- TEMPLATE: Use the stable `../contracts/<endpoint-id>.api-contract.md` destination and durable reader wording such as "API Contract". Do not describe generation order, a forward reference, or whether the target currently exists. Remove this comment. Non-API Behaviors must omit this section and use `api_contracts: []`. -->
 
 - [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
 

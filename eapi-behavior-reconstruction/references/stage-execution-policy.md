@@ -41,10 +41,13 @@ python3 <skill-root>/scripts/stage_executor.py resume \
   --json
 ```
 
-Resume has two outcomes:
+Resume has three outcomes:
 
 - A current Workflow 4 Pack with a valid Artifact Manifest resumes its explicit `current_stage`.
+- A completed current Pack whose latest Finalization Receipt predates the current publication-maturity validation returns `revalidation-required`. Resume remains read-only; begin `finalization` to create a new Working Generation from the formal Pack, revise only Reader publication wording, and publish transactionally.
 - Any version mismatch or missing/invalid Manifest produces `.work/migration-plan.yaml` plus a Migration Planning Receipt without modifying State, Register, Synthesis, Reader Packs, or Archive.
+
+Publication-maturity revalidation is not Migration. It does not archive or reinterpret Dossiers, Register, Synthesis, Business Model, or current Reader facts. Abort restores the prior completed State and removes the new Generation. Failed validation retains the Candidate while the formal Pack and previous published Generation remain unchanged.
 
 For a planned migration, begin the conditional stage before any normal stage:
 
@@ -248,7 +251,7 @@ Do not infer completion from an agent message. A stage is complete only when its
 
 ## Versioned Artifact and Register contracts
 
-`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. `assets/migration-transform-registry.json` is the registry for deterministic transforms and their exact source/target schemas and fixtures. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records path, identity, version, checksum, producing stage, invalidation, and latest transaction. `init` validates both Registries, the Register Schema, API Contract structure contract, and active templates as one release set.
+`assets/artifact-schema.json` is the registry for long-lived working, reader, and operational Artifacts. `assets/migration-transform-registry.json` is the registry for deterministic transforms and their exact source/target schemas and fixtures. Every current Artifact declares its type and version, and `.work/artifact-manifest.json` records path, identity, version, checksum, producing stage, invalidation, and latest transaction. `init` validates both Registries, the Register Schema, API Contract structure contract, publication-maturity rule contract, and active templates as one release set.
 
 Never use headings, directories, old fields, or prose to detect a legacy generation. Only explicit Artifact metadata, Manifest entries, file existence, hashes, and registry migration chains may drive Resume.
 
@@ -264,10 +267,10 @@ Use this sequence without reordering:
 1. `inventory`: project detection, entry points, evidence index, working catalog, and Register observations.
 2. `tracing`: completed or explicitly blocked Behavior Dossiers and updated observations.
 3. `synthesis`: first Working Generation; reconciled Register and Repository Synthesis.
-4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract forward references, but this stage creates neither Contract stubs nor Endpoint Matrix. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, ordinary links, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`. Behavior validation still requires identity, exact path, uniqueness, and visible links.
-5. `api-contract-publication`: Materialize every planned application Contract and the Endpoint Matrix in the Generation, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
+4. `tech-publication`: Tech Behaviors, Overview, Catalog, and applicable repository documents in the Generation. API Behaviors declare stable Contract destinations, but this stage creates neither Contract stubs nor Endpoint Matrix. Reader wording must already be durable; the execution report alone calls absent targets forward references. Run the Pack Validator with `--validation-profile tech-publication`: fully validate HTTP, Dependency, Failure, Tech backlinks, ordinary links, publication maturity, and Artifact integrity; report only missing future Contract/Matrix/BA targets as `deferred`, not `SKIPPED`.
+5. `api-contract-publication`: Materialize every declared application Contract and the Endpoint Matrix in the Generation, reconcile source-document wording during `api-backlinks`, then run the `complete` profile to strictly validate Behavior, Contract, Catalog, Matrix, publication maturity, and all previously deferred relationships; use an evidence-based skip only when no API publication intent exists.
 6. `business-model`: independent Business Model in the Generation.
-7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip.
-8. `finalization`: Markdown-first mechanical validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.
+7. `ba-publication`: BA Overview, Catalog, Journeys, Scenarios, and backlinks in the Generation, or blocked-model skip. Reconcile source-document BA wording during `ba-backlinks`.
+8. `finalization`: Markdown-first mechanical validation, publication-maturity validation, fact/readability review, transactional formal publication, post-promotion validation, and completion.
 
 All workflow paths are relative to the active Candidate root. A normal stage Receipt uses `promotion_scope: generation` until Finalization. Only a successful Finalization Receipt has `promotion_scope: formal-pack` and `formal_pack_published: true`.

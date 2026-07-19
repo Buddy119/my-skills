@@ -58,6 +58,7 @@ from markdown_structure import (
     validate_api_contract_tables,
 )
 from migration_transforms import MigrationTransformError, execute_transform
+from publication_maturity import PublicationMaturityError, load_rules
 
 
 WORKFLOW_SCHEMA_VERSION = "4"
@@ -845,11 +846,20 @@ def receipt_for_transaction(output: Path, transaction_id: str) -> Path | None:
     return None
 
 
-def committed_finalization_receipt(output: Path) -> Path | None:
+def _receipt_sequence(path: Path) -> int:
+    try:
+        return int(path.name.split("-", 1)[0])
+    except (TypeError, ValueError):
+        return -1
+
+
+def committed_finalization_receipt(
+    output: Path, generation_id: str | None = None
+) -> Path | None:
     receipts = execution_root(output) / "receipts"
     if not receipts.is_dir():
         return None
-    for path in sorted(receipts.glob("*.json")):
+    for path in sorted(receipts.glob("*.json"), key=_receipt_sequence, reverse=True):
         try:
             payload = read_json(path)
         except ExecutorError:
@@ -861,9 +871,41 @@ def committed_finalization_receipt(output: Path) -> Path | None:
             and payload.get("result") == "committed"
             and payload.get("promotion_scope") == "formal-pack"
             and payload.get("formal_pack_published") is True
+            and (
+                generation_id is None
+                or payload.get("generation_id") == generation_id
+            )
         ):
             return path
     return None
+
+
+def publication_maturity_receipt_status(output: Path, state: str) -> dict[str, Any]:
+    expected = load_rules().version
+    published_generation_id = scalar_value(state, "published_generation_id")
+    receipt = committed_finalization_receipt(output, published_generation_id)
+    if receipt is None:
+        return {
+            "status": "unknown",
+            "expected_version": expected,
+            "observed_version": None,
+            "blocking_count": None,
+            "review_count": None,
+            "receipt": None,
+        }
+    payload = read_json(receipt)
+    observed = payload.get("publication_maturity_validation_version")
+    blocking = payload.get("publication_maturity_blocking_count")
+    review = payload.get("publication_maturity_review_count")
+    current = observed == expected and blocking == 0
+    return {
+        "status": "current" if current else "revalidation-required",
+        "expected_version": expected,
+        "observed_version": observed if isinstance(observed, str) else None,
+        "blocking_count": blocking if isinstance(blocking, int) else None,
+        "review_count": review if isinstance(review, int) else None,
+        "receipt": str(receipt),
+    }
 
 
 def audit_archive_directory(path: Path) -> dict[str, Any]:
@@ -902,12 +944,15 @@ def command_init(args: argparse.Namespace) -> int:
         bundled_check = validate_bundled_contract(template)
         registry = load_registry()
         load_scaffold_schema(registry, assets_root=template_root())
+        load_rules()
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
         raise ExecutorError(f"bundled Artifact Schema is invalid: {exc}") from exc
     except ArtifactScaffoldError as exc:
         raise ExecutorError(f"bundled Artifact Scaffold Schema is invalid: {exc}") from exc
+    except PublicationMaturityError as exc:
+        raise ExecutorError(f"bundled publication maturity rules are invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1055,6 +1100,20 @@ def validator_commands(
             [
                 python,
                 str(scripts / "validate_markdown_structure.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+    if stage in {
+        "tech-publication",
+        "api-contract-publication",
+        "ba-publication",
+        "finalization",
+    }:
+        commands.append(
+            [
+                python,
+                str(scripts / "validate_publication_maturity.py"),
                 str(candidate),
                 "--json",
             ]
@@ -1369,7 +1428,42 @@ def parse_validator_diagnostics(
     except json.JSONDecodeError:
         payload = None
 
-    if payload is not None and isinstance(payload.get("documents"), list):
+    if payload is not None and isinstance(payload.get("blocking_residues"), list):
+        for item in payload["blocking_residues"]:
+            if not isinstance(item, dict):
+                continue
+            semantic.append(
+                validation_item(
+                    str(item.get("code", "DOC-PUBLICATION-RESIDUE")),
+                    str(item.get("message", "reader text exposes publication lifecycle wording")),
+                    source=name,
+                    path=str(item.get("path", "")) or None,
+                    line=item.get("line") if isinstance(item.get("line"), int) else None,
+                )
+            )
+        for item in payload.get("review_terms", []):
+            if not isinstance(item, dict):
+                continue
+            warnings.append(
+                validation_item(
+                    str(item.get("code", "DOC-PUBLICATION-TERM")),
+                    str(item.get("message", "review publication-sensitive wording")),
+                    source=name,
+                    path=str(item.get("path", "")) or None,
+                    line=item.get("line") if isinstance(item.get("line"), int) else None,
+                )
+            )
+        semantic_total = (
+            payload.get("blocking_count")
+            if isinstance(payload.get("blocking_count"), int)
+            else len(semantic)
+        )
+        warning_total = (
+            payload.get("review_count")
+            if isinstance(payload.get("review_count"), int)
+            else len(warnings)
+        )
+    elif payload is not None and isinstance(payload.get("documents"), list):
         for document in payload["documents"]:
             if not isinstance(document, dict):
                 continue
@@ -1937,6 +2031,7 @@ def command_begin(args: argparse.Namespace) -> int:
     if args.plan is not None:
         raise ExecutorError("--plan is accepted only for the migration stage")
     formal_state = state_text(output)
+    pre_transaction_state = formal_state
     repo, commit = verify_repo_and_commit(formal_state)
     current_stage = scalar_value(formal_state, "current_stage")
     status = scalar_value(formal_state, "stage_status")
@@ -1952,8 +2047,36 @@ def command_begin(args: argparse.Namespace) -> int:
             "formal Artifact Manifest is invalid; run resume audit: "
             + " | ".join(manifest_errors)
         )
+    revalidation_kind: str | None = None
+    previous_published_generation_id: str | None = None
     if current_stage == "completed":
-        raise ExecutorError("workflow is already completed")
+        if args.stage != "finalization":
+            raise ExecutorError("workflow is already completed")
+        try:
+            maturity = publication_maturity_receipt_status(output, formal_state)
+        except PublicationMaturityError as exc:
+            raise ExecutorError(
+                f"bundled publication maturity rules are invalid: {exc}"
+            ) from exc
+        if maturity["status"] == "unknown":
+            raise ExecutorError(
+                "completed workflow has no trusted Finalization Receipt for its published Generation"
+            )
+        if maturity["status"] == "current":
+            raise ExecutorError("workflow is already completed and publication maturity is current")
+        revalidation_kind = "publication-maturity"
+        previous_published_generation_id = scalar_value(
+            formal_state, "published_generation_id"
+        )
+        formal_state = set_scalar(formal_state, "current_stage", "finalization")
+        formal_state = set_scalar(formal_state, "stage_status", "pending")
+        formal_state = set_scalar(formal_state, "current_checkpoint", None)
+        formal_state = set_scalar(formal_state, "checkpoint_status", "pending")
+        formal_state = set_scalar(formal_state, "active_transaction", None)
+        formal_state = set_scalar(formal_state, "working_generation_id", None)
+        formal_state = set_scalar(formal_state, "publication_status", "staging")
+        current_stage = "finalization"
+        status = "pending"
     if current_stage not in STAGE_INDEX:
         raise ExecutorError(f"invalid current_stage in analysis state: {current_stage}")
     if args.stage != current_stage:
@@ -1982,7 +2105,7 @@ def command_begin(args: argparse.Namespace) -> int:
         source_root = output
         if current_stage in GENERATION_STAGES:
             if generation_id is None:
-                if current_stage != "synthesis":
+                if current_stage != "synthesis" and revalidation_kind is None:
                     raise ExecutorError("a working generation must exist before this stage")
                 generation_id, source_root = create_generation(output, formal_state)
                 generation_created = True
@@ -1992,6 +2115,13 @@ def command_begin(args: argparse.Namespace) -> int:
         snapshot_copy(source_root, candidate)
         automatic_actions: list[str] = []
         candidate_state = (candidate / STATE_FILE).read_text(encoding="utf-8")
+        if revalidation_kind is not None:
+            candidate_state = set_scalar(candidate_state, "current_stage", "finalization")
+            candidate_state = set_scalar(candidate_state, "stage_status", "pending")
+            candidate_state = set_scalar(candidate_state, "current_checkpoint", None)
+            candidate_state = set_scalar(candidate_state, "checkpoint_status", "pending")
+            candidate_state = set_scalar(candidate_state, "active_transaction", None)
+            candidate_state = set_scalar(candidate_state, "publication_status", "staging")
         candidate_state = set_scalar(candidate_state, "stage_status", "in-progress")
         candidate_state = set_scalar(candidate_state, "active_transaction", transaction_id)
         first_checkpoint = STAGE_CHECKPOINTS[current_stage][0]
@@ -2040,11 +2170,13 @@ def command_begin(args: argparse.Namespace) -> int:
             "baseline": str(baseline),
             "generation_id": generation_id,
             "generation_created": generation_created,
+            "revalidation_kind": revalidation_kind,
+            "previous_published_generation_id": previous_published_generation_id,
             "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "created_at": now_utc(),
             "automatic_actions": automatic_actions,
         }
-        atomic_write_text(tx_dir / "pre-state.yaml", formal_state)
+        atomic_write_text(tx_dir / "pre-state.yaml", pre_transaction_state)
         atomic_write_json(tx_dir / "transaction.json", transaction)
         atomic_write_json(
             tx_dir / "promotion-journal.json",
@@ -2073,6 +2205,7 @@ def command_begin(args: argparse.Namespace) -> int:
             "transaction_id": transaction_id,
             "candidate": str(candidate),
             "generation_id": generation_id,
+            "revalidation_kind": revalidation_kind,
             "promotion_scope": "generation" if current_stage in GENERATION_STAGES and current_stage != "finalization" else "formal-pack",
             "instruction": "write every stage artifact under candidate, then run commit",
         },
@@ -2562,15 +2695,20 @@ def post_promotion_checks(stage: str, output: Path, repo: Path) -> list[dict[str
             ]
         )
     if stage == "finalization":
-        commands.insert(
-            0,
+        commands[0:0] = [
             [
                 sys.executable,
                 str(scripts / "validate_markdown_structure.py"),
                 str(output),
                 "--json",
             ],
-        )
+            [
+                sys.executable,
+                str(scripts / "validate_publication_maturity.py"),
+                str(output),
+                "--json",
+            ],
+        ]
     return [run_validator(command, output) for command in commands]
 
 
@@ -2581,6 +2719,9 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "primary_error_count": 0,
         "skipped_group_count": 0,
         "suppressed_error_count": 0,
+        "publication_maturity_validation_version": None,
+        "publication_maturity_blocking_count": 0,
+        "publication_maturity_review_count": 0,
     }
     for result in results:
         try:
@@ -2592,6 +2733,19 @@ def pack_validation_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         domain_statuses = payload.get("domain_statuses", {})
         if isinstance(domain_statuses, dict):
             summary["validator_domain_statuses"].update(domain_statuses)
+        maturity_version = payload.get("publication_maturity_validation_version")
+        if isinstance(maturity_version, str):
+            summary["publication_maturity_validation_version"] = maturity_version
+            blocking_count = payload.get("blocking_count")
+            review_count = payload.get("review_count")
+            if isinstance(blocking_count, int):
+                summary["publication_maturity_blocking_count"] = max(
+                    summary["publication_maturity_blocking_count"], blocking_count
+                )
+            if isinstance(review_count, int):
+                summary["publication_maturity_review_count"] = max(
+                    summary["publication_maturity_review_count"], review_count
+                )
         for source_key, target_key in (
             ("primary_errors", "primary_error_count"),
             ("skipped_validation_groups", "skipped_group_count"),
@@ -3351,6 +3505,19 @@ def command_commit(args: argparse.Namespace) -> int:
                 + details
             )
 
+        generation_previous: Path | None = None
+        if stage == "finalization" and transaction.get("generation_id"):
+            generation_manifest_path = generation_dir(
+                output, str(transaction["generation_id"])
+            ) / "generation-manifest.json"
+            shutil.copy2(
+                generation_manifest_path,
+                tx_dir / "generation-manifest-before-finalization.json",
+            )
+            generation_previous = promote_finalization_generation_root(
+                output, tx_dir, transaction, candidate, journal
+            )
+
         sequence = receipt_count(output)
         validation_summary = pack_validation_summary(validators + post_results)
         register_artifact_schema_version = scalar_value(
@@ -3403,13 +3570,6 @@ def command_commit(args: argparse.Namespace) -> int:
                 + " | ".join(manifest_errors)
             )
         if stage == "finalization" and transaction.get("generation_id"):
-            generation_manifest_path = generation_dir(
-                output, str(transaction["generation_id"])
-            ) / "generation-manifest.json"
-            shutil.copy2(
-                generation_manifest_path,
-                tx_dir / "generation-manifest-before-finalization.json",
-            )
             update_generation_manifest(
                 output,
                 str(transaction["generation_id"]),
@@ -3472,6 +3632,8 @@ def command_commit(args: argparse.Namespace) -> int:
         journal["updated_at"] = now_utc()
         atomic_write_json(journal_path, journal)
         try:
+            if generation_previous is not None and generation_previous.exists():
+                shutil.rmtree(generation_previous)
             release_lock(output, args.transaction)
             shutil.rmtree(tx_dir)
         except OSError:
@@ -3481,7 +3643,11 @@ def command_commit(args: argparse.Namespace) -> int:
         if commit_recorded:
             # State plus Receipt already establish completion. Leave cleanup to status/recover.
             pass
-        elif journal is not None and journal.get("phase") == "content-promoted":
+        elif journal is not None and journal.get("phase") in {
+            "content-promoted",
+            "generation-root-promoted",
+        }:
+            restore_finalization_generation_root(journal)
             rollback_promotion(output, archive, journal)
             generation_backup = tx_dir / "generation-manifest-before-finalization.json"
             generation_id = transaction.get("generation_id")
@@ -4019,6 +4185,12 @@ def status_payload(output: Path) -> dict[str, Any]:
         "published_source_commit": scalar_value(text, "published_source_commit"),
         "formal_drift_status": scalar_value(text, "formal_drift_status") or "unknown",
         "release_readiness": "not-ready",
+        "publication_maturity_status": "unknown",
+        "publication_maturity_validation_version": None,
+        "publication_maturity_observed_version": None,
+        "publication_maturity_blocking_count": None,
+        "publication_maturity_review_count": None,
+        "publication_maturity_receipt": None,
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
@@ -4112,6 +4284,31 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["working_generation_status"] = "invalid"
             payload["integrity_errors"].append(f"Working Generation invalid: {exc}")
 
+    try:
+        maturity = publication_maturity_receipt_status(output, text)
+    except PublicationMaturityError as exc:
+        payload["integrity_errors"].append(
+            f"Publication maturity rules invalid: {exc}"
+        )
+    else:
+        payload["publication_maturity_status"] = maturity["status"]
+        payload["publication_maturity_validation_version"] = maturity[
+            "expected_version"
+        ]
+        payload["publication_maturity_observed_version"] = maturity[
+            "observed_version"
+        ]
+        payload["publication_maturity_blocking_count"] = maturity[
+            "blocking_count"
+        ]
+        payload["publication_maturity_review_count"] = maturity["review_count"]
+        payload["publication_maturity_receipt"] = maturity["receipt"]
+        if payload["current_stage"] == "completed" and maturity["status"] != "current":
+            payload["release_readiness"] = "not-ready"
+            payload["requirements"].append(
+                "resume and revalidate Finalization under the current publication maturity policy"
+            )
+
     active = payload["active_transaction"]
     if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
         active = payload["lock"].get("transaction_id")
@@ -4201,7 +4398,13 @@ def status_payload(output: Path) -> dict[str, Any]:
             payload["promotion_journal"] = read_json(journal_path) if journal_path.is_file() else None
         except ExecutorError as exc:
             payload["transaction"] = {"error": str(exc)}
-    if payload["current_stage"] == "completed" and committed_finalization_receipt(output) is None:
+    if (
+        payload["current_stage"] == "completed"
+        and committed_finalization_receipt(
+            output, payload.get("published_generation_id")
+        )
+        is None
+    ):
         payload["integrity_errors"].append(
             "completed state has no committed finalization Receipt"
         )
@@ -4254,6 +4457,11 @@ def status_payload(output: Path) -> dict[str, Any]:
     )
     if payload["artifact_manifest_status"] != "valid" or payload["integrity_errors"]:
         payload["release_readiness"] = "not-ready"
+    if (
+        payload["current_stage"] == "completed"
+        and payload["publication_maturity_status"] != "current"
+    ):
+        payload["release_readiness"] = "not-ready"
     return payload
 
 
@@ -4288,7 +4496,10 @@ def command_resume(args: argparse.Namespace) -> int:
     if (
         scalar_value(text, "workflow_schema_version") == WORKFLOW_SCHEMA_VERSION
         and scalar_value(text, "current_stage") == "completed"
-        and committed_finalization_receipt(output) is None
+        and committed_finalization_receipt(
+            output, scalar_value(text, "published_generation_id")
+        )
+        is None
     ):
         raise ExecutorError(
             "completed state has no committed finalization Receipt; this is an integrity "
@@ -4304,11 +4515,40 @@ def command_resume(args: argparse.Namespace) -> int:
     if current_pack_is_versioned(output, registry):
         verify_repo_and_commit(text, repo)
         status = status_payload(output)
-        if status["current_stage"] == "completed" and committed_finalization_receipt(output) is None:
+        if (
+            status["current_stage"] == "completed"
+            and committed_finalization_receipt(
+                output, status.get("published_generation_id")
+            )
+            is None
+        ):
             raise ExecutorError(
                 "completed state has no committed finalization Receipt; "
                 "this is an integrity failure and cannot be repaired by rewriting State"
             )
+        if (
+            status["current_stage"] == "completed"
+            and status["publication_maturity_status"] == "revalidation-required"
+        ):
+            emit(
+                {
+                    "result": "revalidation-required",
+                    "required_stage": "finalization",
+                    "reason": "publication-maturity-validation-outdated",
+                    "required_validation_version": status[
+                        "publication_maturity_validation_version"
+                    ],
+                    "observed_validation_version": status[
+                        "publication_maturity_observed_version"
+                    ],
+                    "finalization_receipt": status[
+                        "publication_maturity_receipt"
+                    ],
+                    **status,
+                },
+                args.json,
+            )
+            return 0
         emit({"result": "resume-ready", **status}, args.json)
         return 0
 
@@ -4398,6 +4638,66 @@ def restore_finalization_generation_manifest(
     shutil.copy2(backup, destination)
 
 
+def promote_finalization_generation_root(
+    output: Path,
+    tx_dir: Path,
+    transaction: dict[str, Any],
+    candidate: Path,
+    journal: dict[str, Any],
+) -> Path:
+    generation_id = str(transaction.get("generation_id") or "")
+    if not generation_id:
+        raise ExecutorError("finalization transaction has no working Generation")
+    directory = generation_dir(output, generation_id)
+    current = generation_candidate_root(output, generation_id)
+    if not current.is_dir():
+        raise ExecutorError("finalization working Generation root is missing")
+    prepared = directory / f".candidate-root-{transaction['transaction_id']}.tmp"
+    previous = directory / f"previous-finalization-{transaction['transaction_id']}"
+    if prepared.exists() or previous.exists():
+        raise ExecutorError("finalization Generation promotion has stale temporary paths")
+    snapshot_copy(candidate, prepared)
+    if knowledge_manifest(prepared) != knowledge_manifest(candidate):
+        shutil.rmtree(prepared, ignore_errors=True)
+        raise ExecutorError("prepared Generation root does not match the Finalization Candidate")
+    os.replace(current, previous)
+    try:
+        os.replace(prepared, current)
+    except Exception:
+        os.replace(previous, current)
+        shutil.rmtree(prepared, ignore_errors=True)
+        raise
+    journal["generation_candidate_previous"] = str(previous)
+    journal["generation_candidate_current"] = str(current)
+    journal["phase"] = "generation-root-promoted"
+    journal["updated_at"] = now_utc()
+    atomic_write_json(tx_dir / "promotion-journal.json", journal)
+    return previous
+
+
+def restore_finalization_generation_root(journal: dict[str, Any]) -> None:
+    previous_value = journal.get("generation_candidate_previous")
+    current_value = journal.get("generation_candidate_current")
+    if not previous_value or not current_value:
+        return
+    previous = Path(str(previous_value))
+    current = Path(str(current_value))
+    if not previous.is_dir():
+        return
+    if current.exists():
+        shutil.rmtree(current)
+    os.replace(previous, current)
+
+
+def cleanup_finalization_generation_previous(journal: dict[str, Any]) -> None:
+    previous_value = journal.get("generation_candidate_previous")
+    if not previous_value:
+        return
+    previous = Path(str(previous_value))
+    if previous.exists():
+        shutil.rmtree(previous)
+
+
 def repair_operational_manifest_after_receipt(
     output: Path, transaction: dict[str, Any]
 ) -> None:
@@ -4462,6 +4762,8 @@ def command_recover(args: argparse.Namespace) -> int:
                     else read_json(receipt)
                 )
                 repair_operational_manifest_after_receipt(output, recovery_record)
+                if tx_dir.is_dir():
+                    cleanup_finalization_generation_previous(orphan_journal)
                 lock_path(output).unlink()
                 if tx_dir.exists():
                     shutil.rmtree(tx_dir)
@@ -4499,6 +4801,7 @@ def command_recover(args: argparse.Namespace) -> int:
                     archive,
                     {"operations": journal.get("completed_operations", [])},
                 )
+                restore_finalization_generation_root(journal)
                 restore_finalization_generation_manifest(output, tx_dir, transaction)
                 pre_state = tx_dir / "pre-state.yaml"
                 if transaction.get("stage") == MIGRATION_STAGE:
@@ -4564,6 +4867,7 @@ def command_recover(args: argparse.Namespace) -> int:
         candidate_state = (candidate / STATE_FILE).read_text(encoding="utf-8")
         atomic_write_text(state_path(output), candidate_state)
         repair_operational_manifest_after_receipt(output, transaction)
+        cleanup_finalization_generation_previous(journal)
         journal["phase"] = "committed"
         journal["receipt"] = str(receipt)
         journal["updated_at"] = now_utc()
@@ -4601,6 +4905,7 @@ def command_recover(args: argparse.Namespace) -> int:
     archive_value = journal.get("archive")
     archive = Path(archive_value) if archive_value else None
     rollback_promotion(output, archive, {"operations": journal.get("completed_operations", [])})
+    restore_finalization_generation_root(journal)
     restore_finalization_generation_manifest(output, tx_dir, transaction)
     journal["phase"] = "rolled-back-by-recover"
     journal["updated_at"] = now_utc()

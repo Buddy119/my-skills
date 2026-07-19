@@ -1703,6 +1703,11 @@ def main() -> int:
     catalog = root / "tech-pack" / "behavior-catalog.yaml"
     if catalog.is_file():
         catalog_text = catalog.read_text(encoding="utf-8")
+        if any(placeholder in catalog_text for placeholder in PLACEHOLDERS):
+            report.error(
+                "CATALOG-DOCUMENT",
+                "template placeholder remains: tech-pack/behavior-catalog.yaml",
+            )
         for match in CATALOG_PATH_RE.finditer(catalog_text):
             target = match.group("target").strip()
             if target.lower() in {"null", "none"}:

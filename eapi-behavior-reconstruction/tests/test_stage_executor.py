@@ -1211,6 +1211,45 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(forward, [])
         self.assertEqual(forward_total, 0)
 
+        maturity_result = {
+            "command": ["python3", "/skill/scripts/validate_publication_maturity.py"],
+            "exit_code": 1,
+            "stdout": json.dumps(
+                {
+                    "publication_maturity_validation_version": "1",
+                    "blocking_count": 1,
+                    "review_count": 2,
+                    "blocking_residues": [
+                        {
+                            "code": "DOC-PUBLICATION-RESIDUE",
+                            "path": "tech-pack/behaviors/get.md",
+                            "line": 12,
+                            "message": "reader text exposes an execution-time forward reference",
+                        }
+                    ],
+                    "review_terms": [
+                        {
+                            "code": "DOC-PUBLICATION-TERM",
+                            "path": "ba-pack/scenarios/approval.md",
+                            "line": 8,
+                            "message": "review domain wording",
+                        }
+                    ],
+                }
+            ),
+            "stderr": "",
+        }
+        semantic, blocking, warnings, _forward, _forward_total, semantic_total, warning_total = (
+            executor.parse_validator_diagnostics(maturity_result)
+        )
+        self.assertEqual(semantic[0]["code"], "DOC-PUBLICATION-RESIDUE")
+        self.assertEqual(semantic[0]["path"], "tech-pack/behaviors/get.md")
+        self.assertEqual(semantic[0]["line"], 12)
+        self.assertEqual(blocking, [])
+        self.assertEqual(warnings[0]["code"], "DOC-PUBLICATION-TERM")
+        self.assertEqual(semantic_total, 1)
+        self.assertEqual(warning_total, 2)
+
     def test_stage_validation_semantic_projection_is_precommit_only(self) -> None:
         executor = load_executor_module()
         state = self.output / ".work" / "analysis-state.yaml"
@@ -2529,6 +2568,9 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["generation_id"], generation_id)
         self.assertEqual(final_receipt["primary_error_count"], 0)
         self.assertEqual(final_receipt["skipped_group_count"], 0)
+        self.assertEqual(final_receipt["publication_maturity_validation_version"], "1")
+        self.assertEqual(final_receipt["publication_maturity_blocking_count"], 0)
+        self.assertEqual(final_receipt["publication_maturity_review_count"], 0)
 
         artifact_manifest_path = self.output / ".work" / "artifact-manifest.json"
         artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
@@ -2587,6 +2629,229 @@ class StageExecutorTests(unittest.TestCase):
         independent_payload = json.loads(independent.stdout)
         self.assertEqual(independent_payload["primary_errors"], 0)
         self.assertEqual(independent_payload["skipped_validation_groups"], 0)
+
+        # Simulate a current-schema Pack finalized before publication-maturity
+        # validation existed. Resume must request a transactional Finalization
+        # revalidation rather than creating a Migration Plan.
+        old_receipt_path = Path(final_payload["receipt"])
+        old_receipt = json.loads(old_receipt_path.read_text(encoding="utf-8"))
+        old_receipt.pop("publication_maturity_validation_version")
+        old_receipt.pop("publication_maturity_blocking_count")
+        old_receipt.pop("publication_maturity_review_count")
+        old_receipt_path.write_text(
+            json.dumps(old_receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        state_text = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        executor.write_artifact_manifest(
+            self.output,
+            executor.load_registry(),
+            str(self.repo),
+            executor.scalar_value(state_text, "source_commit") or "unknown",
+            "finalization",
+            finalization,
+            [],
+        )
+        before_resume = raw_tree_hashes(self.output)
+        resume = self.run_cmd(
+            "resume",
+            "--repo",
+            str(self.repo),
+            "--state",
+            str(self.output / ".work" / "analysis-state.yaml"),
+        )
+        resume_payload = json.loads(resume.stdout)
+        self.assertEqual(resume_payload["result"], "revalidation-required")
+        self.assertEqual(resume_payload["required_stage"], "finalization")
+        self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+        self.assertEqual(raw_tree_hashes(self.output), before_resume)
+
+        formal_before_revalidation = executor.knowledge_manifest(self.output)
+        revalidation, revalidation_candidate = self.begin("finalization")
+        revalidation_transaction = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / revalidation
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        revalidation_generation = revalidation_transaction["generation_id"]
+        self.assertEqual(
+            revalidation_transaction["revalidation_kind"], "publication-maturity"
+        )
+        self.assertNotEqual(revalidation_generation, generation_id)
+        self.assertEqual(executor.knowledge_manifest(self.output), formal_before_revalidation)
+
+        overview = revalidation_candidate / "tech-pack" / "repository-overview.md"
+        durable_overview = overview.read_text(encoding="utf-8")
+        overview.write_text(
+            durable_overview + "\nThe API Contract is a forward reference.\n",
+            encoding="utf-8",
+        )
+        self.complete_checkpoints(revalidation)
+        blocked_revalidation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                revalidation,
+                expected=1,
+            ).stdout
+        )
+        self.assertTrue(
+            any(
+                item["code"] == "DOC-PUBLICATION-RESIDUE"
+                for item in blocked_revalidation["semantic_or_document_errors"]["items"]
+            )
+        )
+        failed_revalidation = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            revalidation,
+            expected=1,
+        )
+        self.assertEqual(json.loads(failed_revalidation.stdout)["result"], "failed")
+        self.assertEqual(executor.knowledge_manifest(self.output), formal_before_revalidation)
+
+        overview.write_text(
+            durable_overview
+            + "\nThe API Contract documents the callable endpoint while customer approval is pending.\n",
+            encoding="utf-8",
+        )
+        warning_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                revalidation,
+            ).stdout
+        )
+        self.assertEqual(warning_validation["result"], "ready")
+        self.assertTrue(
+            any(
+                item["code"] == "DOC-PUBLICATION-TERM"
+                for item in warning_validation["warnings"]["items"]
+            )
+        )
+        overview.write_text(
+            durable_overview + "\nThe API Contract documents the callable endpoint.\n",
+            encoding="utf-8",
+        )
+        committed_revalidation = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            revalidation,
+        )
+        committed_revalidation_payload = json.loads(committed_revalidation.stdout)
+        revalidation_receipt = json.loads(
+            Path(committed_revalidation_payload["receipt"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            revalidation_receipt["publication_maturity_validation_version"], "1"
+        )
+        self.assertEqual(revalidation_receipt["publication_maturity_blocking_count"], 0)
+        revalidated_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(revalidated_status["publication_maturity_status"], "current")
+        self.assertEqual(revalidated_status["release_readiness"], "ready")
+        self.assertEqual(
+            revalidated_status["working_generation_id"], revalidation_generation
+        )
+        self.assertEqual(
+            revalidated_status["published_generation_id"], revalidation_generation
+        )
+        revalidation_generation_root = (
+            self.output
+            / ".work"
+            / "execution"
+            / "generations"
+            / revalidation_generation
+            / "candidate-root"
+        )
+        self.assertEqual(
+            executor.knowledge_manifest(revalidation_generation_root),
+            executor.knowledge_manifest(self.output),
+        )
+        resumed_current = json.loads(
+            self.run_cmd(
+                "resume",
+                "--repo",
+                str(self.repo),
+                "--state",
+                str(self.output / ".work" / "analysis-state.yaml"),
+            ).stdout
+        )
+        self.assertEqual(resumed_current["result"], "resume-ready")
+
+        # An aborted revalidation restores the prior completed State and removes
+        # the newly created Generation without touching the formal knowledge Pack.
+        latest_receipt_path = Path(committed_revalidation_payload["receipt"])
+        latest_receipt = json.loads(latest_receipt_path.read_text(encoding="utf-8"))
+        latest_receipt.pop("publication_maturity_validation_version")
+        latest_receipt.pop("publication_maturity_blocking_count")
+        latest_receipt.pop("publication_maturity_review_count")
+        latest_receipt_path.write_text(
+            json.dumps(latest_receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        state_text = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        executor.write_artifact_manifest(
+            self.output,
+            executor.load_registry(),
+            str(self.repo),
+            executor.scalar_value(state_text, "source_commit") or "unknown",
+            "finalization",
+            revalidation,
+            [],
+        )
+        before_abort = executor.knowledge_manifest(self.output)
+        abort_transaction, _abort_candidate = self.begin("finalization")
+        abort_record = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / abort_transaction
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        abort_generation = abort_record["generation_id"]
+        self.run_cmd(
+            "abort",
+            "--output",
+            str(self.output),
+            "--transaction",
+            abort_transaction,
+        )
+        aborted_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(aborted_status["current_stage"], "completed")
+        self.assertEqual(executor.knowledge_manifest(self.output), before_abort)
+        self.assertFalse(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "generations"
+                / abort_generation
+            ).exists()
+        )
 
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         source = self.repo / "src" / "Handler.java"

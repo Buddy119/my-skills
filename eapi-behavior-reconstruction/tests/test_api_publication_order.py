@@ -215,6 +215,11 @@ class ApiPublicationOrderTests(unittest.TestCase):
             self.repo,
             diagnostic_manifest=True,
         )
+        ba_commands = executor.validator_commands("ba-publication", candidate, self.repo)
+        final_commands = executor.validator_commands("finalization", candidate, self.repo)
+        business_model_commands = executor.validator_commands(
+            "business-model", candidate, self.repo
+        )
         tech_behavior = next(
             command for command in tech_commands if "validate_behavior_doc.py" in command[1]
         )
@@ -248,6 +253,16 @@ class ApiPublicationOrderTests(unittest.TestCase):
         )
         self.assertIn("--skip-artifact-manifest", diagnostic_pack)
         self.assertNotIn("--require-artifact-manifest", diagnostic_pack)
+        for commands in (tech_commands, api_commands, ba_commands, final_commands):
+            self.assertTrue(
+                any("validate_publication_maturity.py" in command[1] for command in commands)
+            )
+        self.assertFalse(
+            any(
+                "validate_publication_maturity.py" in command[1]
+                for command in business_model_commands
+            )
+        )
 
     def test_api_stage_skip_rejects_behavior_or_catalog_intent(self) -> None:
         executor = load_executor_module()

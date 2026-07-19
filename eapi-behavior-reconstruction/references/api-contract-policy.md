@@ -28,7 +28,7 @@ Keep these frontmatter fields and meanings:
 - `behavior_document`: backlink to the related Tech Behavior.
 - `endpoint_matrix`: link to the endpoint's evidence and reconciliation detail.
 
-The Tech Behavior must list every endpoint contract in `api_contracts`. During Tech publication these entries are deliberate forward references to `../contracts/<endpoint-id>.api-contract.md`: require stable identities, exact paths, unique entries, and visible Markdown links, but do not create empty Contract stubs. API Contract publication must materialize every declared target and then validate the Contract filename, Behavior backlink, Catalog path, and Endpoint Matrix links strictly. Use `api_contracts: []` for non-API behaviors.
+The Tech Behavior must list every endpoint contract in `api_contracts` with the stable destination `../contracts/<endpoint-id>.api-contract.md`. The executor may classify a missing target as a cross-stage forward reference, but Reader text must use durable labels and must not describe the Contract as planned, pending, unmaterialized, or owned by a later stage. Do not create empty Contract stubs. API Contract publication must materialize every declared target, reconcile the source Behavior and Catalog wording, and then validate the Contract filename, Behavior backlink, Catalog path, and Endpoint Matrix links strictly. Use `api_contracts: []` for non-API behaviors.
 
 ## Reader-facing structure
 
