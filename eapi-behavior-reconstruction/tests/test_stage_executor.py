@@ -717,6 +717,8 @@ class StageExecutorTests(unittest.TestCase):
         if not ledger_path.is_file():
             return
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        if ledger.get("stage") == "finalization":
+            self.record_finalization_reviews(transaction, output=output)
         for item in ledger["checkpoints"]:
             if item["status"] in {"complete", "skipped", "blocked"}:
                 continue
@@ -739,6 +741,136 @@ class StageExecutorTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def record_finalization_reviews(
+        self, transaction: str, *, output: Path | None = None
+    ) -> None:
+        output = output or self.output
+        tx_dir = output / ".work" / "execution" / "transactions" / transaction
+        transaction_payload = json.loads(
+            (tx_dir / "transaction.json").read_text(encoding="utf-8")
+        )
+        candidate = Path(transaction_payload["candidate"])
+        schema = json.loads(
+            (SKILL_ROOT / "assets" / "finalization-review-schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        subject_candidates = sorted(
+            path
+            for path in (candidate / "tech-pack").rglob("*.md")
+            if path.is_file()
+        )
+        if not subject_candidates:
+            subject_candidates = [candidate / ".work" / "repository-synthesis.md"]
+        subject = subject_candidates[0]
+        subject_relative = subject.relative_to(candidate).as_posix()
+        source_candidates = sorted(
+            path
+            for path in self.repo.rglob("*")
+            if path.is_file() and ".git" not in path.parts
+        )
+        diagnostic = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "validate",
+                "--output",
+                str(output),
+                "--transaction",
+                transaction,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn(diagnostic.returncode, {0, 1}, diagnostic.stdout + diagnostic.stderr)
+        diagnostic_payload = json.loads(diagnostic.stdout)
+        mechanical_warning_messages = [
+            item["message"]
+            for item in diagnostic_payload["warnings"]["items"]
+            if isinstance(item, dict) and item.get("message")
+        ]
+
+        def review_input(review_type: str) -> dict:
+            categories = schema["reviews"][review_type]["categories"]
+            reviewed = categories[0]
+            items = [
+                {
+                    "sample_id": review_type.replace("-", "_") + "_fixture_001",
+                    "category": reviewed,
+                    "subject": {
+                        "path": subject_relative,
+                        "identity": subject.stem,
+                    },
+                    "question": "Does this representative fixture satisfy the review concern?",
+                    "outcome": "passed",
+                    "conclusion": "The representative fixture satisfies the recorded concern.",
+                    "findings": [],
+                    "corrections": [],
+                    "evidence": [],
+                }
+            ]
+            if review_type == "semantic-fact" and source_candidates:
+                source = source_candidates[0]
+                items[0]["evidence"] = [
+                    {
+                        "path": source.relative_to(self.repo).as_posix(),
+                        "start_line": 1,
+                        "end_line": 1,
+                    }
+                ]
+            elif review_type == "semantic-fact" and not source_candidates:
+                items = []
+            return {
+                "overall_conclusion": "passed",
+                "summary": f"Completed the {review_type} fixture review.",
+                "coverage": [
+                    {
+                        "category": category,
+                        "status": (
+                            "reviewed"
+                            if category == reviewed and items
+                            else "not-applicable"
+                        ),
+                        "reason": (
+                            None
+                            if category == reviewed and items
+                            else "Not observed in this lifecycle fixture."
+                        ),
+                    }
+                    for category in categories
+                ],
+                "items": items,
+                "warning_dispositions": [
+                    {
+                        "warning": warning,
+                        "decision": "retained",
+                        "reason": "The fixture term describes observed domain state, not publication lifecycle.",
+                    }
+                    for warning in (
+                        mechanical_warning_messages if review_type == "mechanical" else []
+                    )
+                ],
+            }
+
+        for review_type in ("mechanical", "semantic-fact", "reader"):
+            input_path = tx_dir / f"{review_type}-review-input.json"
+            input_path.write_text(
+                json.dumps(review_input(review_type), indent=2) + "\n",
+                encoding="utf-8",
+            )
+            self.run_cmd(
+                "record-review",
+                "--output",
+                str(output),
+                "--transaction",
+                transaction,
+                "--review",
+                review_type,
+                "--input",
+                str(input_path),
+            )
 
     def refresh_and_review_projections(
         self, transaction: str, *, output: Path | None = None
@@ -2612,6 +2744,44 @@ class StageExecutorTests(unittest.TestCase):
             self.assertTrue(all(result["exit_code"] == 0 for result in matching))
 
         finalization, _candidate = self.begin("finalization")
+        missing_review_checkpoint = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "checkpoint",
+                "--output",
+                str(self.output),
+                "--transaction",
+                finalization,
+                "--checkpoint",
+                "mechanical-review",
+                "--status",
+                "complete",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(missing_review_checkpoint.returncode, 2)
+        self.assertIn(
+            "requires a current mechanical Review record",
+            missing_review_checkpoint.stderr,
+        )
+        missing_review_validation = json.loads(
+            self.run_cmd(
+                "validate",
+                "--output",
+                str(self.output),
+                "--transaction",
+                finalization,
+                expected=1,
+            ).stdout
+        )
+        self.assertEqual(missing_review_validation["mechanical_pass_status"], "missing")
+        self.assertEqual(
+            missing_review_validation["semantic_fact_review_status"], "missing"
+        )
+        self.assertEqual(missing_review_validation["reader_review_status"], "missing")
         finalization_scaffold = json.loads(
             self.run_cmd(
                 "scaffold",
@@ -2688,6 +2858,23 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["reader_projection_pending_count"], 0)
         self.assertEqual(final_receipt["reader_projection_stale_count"], 0)
         self.assertEqual(status["reader_projection_validation_status"], "current")
+        self.assertEqual(final_validation["mechanical_pass_status"], "passed")
+        self.assertEqual(final_validation["semantic_fact_review_status"], "current")
+        self.assertEqual(final_validation["reader_review_status"], "current")
+        self.assertEqual(final_validation["finalization_review_unresolved_count"], 0)
+        self.assertEqual(final_validation["finalization_review_stale_count"], 0)
+        self.assertEqual(final_receipt["finalization_review_validation_version"], "1")
+        self.assertEqual(final_receipt["mechanical_pass_status"], "passed")
+        self.assertEqual(final_receipt["semantic_fact_review_status"], "current")
+        self.assertEqual(final_receipt["reader_review_status"], "current")
+        self.assertEqual(final_receipt["finalization_review_unresolved_count"], 0)
+        review_record = self.output / final_receipt["finalization_review_record"]
+        self.assertTrue(review_record.is_file())
+        self.assertEqual(
+            executor.sha256_file(review_record),
+            final_receipt["finalization_review_record_sha256"],
+        )
+        self.assertEqual(status["finalization_review_validation_status"], "current")
 
         artifact_manifest_path = self.output / ".work" / "artifact-manifest.json"
         artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
@@ -2708,6 +2895,7 @@ class StageExecutorTests(unittest.TestCase):
         manifest_entries = {
             entry["path"]: entry for entry in artifact_manifest["artifacts"]
         }
+        self.assertNotIn(final_receipt["finalization_review_record"], manifest_entries)
         self.assertTrue(expected_artifacts.issubset(manifest_entries))
         for relative in expected_artifacts:
             document = self.output / relative
@@ -2812,7 +3000,6 @@ class StageExecutorTests(unittest.TestCase):
             durable_overview + "\nThe API Contract is a forward reference.\n",
             encoding="utf-8",
         )
-        self.complete_checkpoints(revalidation)
         blocked_revalidation = json.loads(
             self.run_cmd(
                 "validate",
@@ -2829,15 +3016,22 @@ class StageExecutorTests(unittest.TestCase):
                 for item in blocked_revalidation["semantic_or_document_errors"]["items"]
             )
         )
-        failed_revalidation = self.run_cmd(
-            "commit",
-            "--output",
-            str(self.output),
-            "--transaction",
-            revalidation,
-            expected=1,
+        failed_revalidation = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "commit",
+                "--output",
+                str(self.output),
+                "--transaction",
+                revalidation,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
         )
-        self.assertEqual(json.loads(failed_revalidation.stdout)["result"], "failed")
+        self.assertEqual(failed_revalidation.returncode, 2)
+        self.assertIn("incomplete checkpoints", failed_revalidation.stderr)
         self.assertEqual(executor.knowledge_manifest(self.output), formal_before_revalidation)
 
         overview.write_text(
@@ -2852,9 +3046,10 @@ class StageExecutorTests(unittest.TestCase):
                 str(self.output),
                 "--transaction",
                 revalidation,
+                expected=1,
             ).stdout
         )
-        self.assertEqual(warning_validation["result"], "ready")
+        self.assertEqual(warning_validation["result"], "blocked")
         self.assertTrue(
             any(
                 item["code"] == "DOC-PUBLICATION-TERM"
@@ -3132,6 +3327,85 @@ class StageExecutorTests(unittest.TestCase):
         )
         self.assertEqual(projection_status["reader_projection_validation_status"], "current")
         self.assertEqual(projection_status["release_readiness"], "ready")
+
+        # A completed Pack finalized before the three-pass Review protocol is
+        # revalidated without a schema Migration or semantic reconstruction.
+        projection_receipt_path = Path(projection_commit["receipt"])
+        old_review_receipt = json.loads(
+            projection_receipt_path.read_text(encoding="utf-8")
+        )
+        for key in tuple(old_review_receipt):
+            if key.startswith("finalization_review_") or key in {
+                "mechanical_pass_status",
+                "semantic_fact_review_status",
+                "reader_review_status",
+            }:
+                old_review_receipt.pop(key)
+        projection_receipt_path.write_text(
+            json.dumps(old_review_receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        state_text = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        executor.write_artifact_manifest(
+            self.output,
+            executor.load_registry(),
+            str(self.repo),
+            executor.scalar_value(state_text, "source_commit") or "unknown",
+            "finalization",
+            projection_revalidation,
+            [],
+        )
+        review_resume = json.loads(
+            self.run_cmd(
+                "resume",
+                "--repo",
+                str(self.repo),
+                "--state",
+                str(self.output / ".work" / "analysis-state.yaml"),
+            ).stdout
+        )
+        self.assertEqual(review_resume["result"], "revalidation-required")
+        self.assertEqual(
+            review_resume["reason"], "finalization-review-validation-outdated"
+        )
+        self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+        review_revalidation, _review_candidate = self.begin("finalization")
+        review_transaction = json.loads(
+            (
+                self.output
+                / ".work"
+                / "execution"
+                / "transactions"
+                / review_revalidation
+                / "transaction.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            review_transaction["revalidation_kind"], "finalization-reviews"
+        )
+        review_commit = json.loads(
+            self.run_cmd(
+                "commit",
+                "--output",
+                str(self.output),
+                "--transaction",
+                review_revalidation,
+            ).stdout
+        )
+        review_receipt = json.loads(
+            Path(review_commit["receipt"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(review_receipt["finalization_review_validation_version"], "1")
+        self.assertEqual(review_receipt["mechanical_pass_status"], "passed")
+        self.assertEqual(review_receipt["semantic_fact_review_status"], "current")
+        self.assertEqual(review_receipt["reader_review_status"], "current")
+        review_status = json.loads(
+            self.run_cmd("status", "--output", str(self.output)).stdout
+        )
+        self.assertEqual(review_status["finalization_review_validation_status"], "current")
+        self.assertEqual(review_status["release_readiness"], "ready")
 
     def test_full_mechanical_stage_chain_requires_final_receipt(self) -> None:
         source = self.repo / "src" / "Handler.java"

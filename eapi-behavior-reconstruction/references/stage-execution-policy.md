@@ -113,6 +113,8 @@ Allowed statuses are `in-progress`, `complete`, `skipped`, `blocked`, and `faile
 
 Checkpoint Ledgers are operational progress records, not business evidence. They do not judge whether a Dependency, Failure Pattern, Journey, or prose conclusion is semantically correct.
 
+Finalization adds a stronger gate: `mechanical-review`, `fact-sampling`, and `readability-review` can be completed only when the matching current Review record exists. Record the reviews with `record-review` after the Candidate is stable. `release-readiness` reruns the complete validation gate and requires all three records to bind the same Candidate content Hash with no unresolved finding. See the Finalization Review Policy for the input contract and risk-category coverage.
+
 Migration is the exception: its four checkpoints are completed only by the executor while it creates the deterministic Candidate and Mechanical Output Manifest. Do not call `checkpoint` for Migration.
 
 Fixed Checkpoints:

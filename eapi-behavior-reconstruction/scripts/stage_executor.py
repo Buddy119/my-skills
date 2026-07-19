@@ -60,6 +60,20 @@ from markdown_structure import (
 )
 from migration_transforms import MigrationTransformError, execute_transform
 from publication_maturity import PublicationMaturityError, load_rules
+from finalization_review import (
+    FINALIZATION_REVIEW_VALIDATION_VERSION,
+    FinalizationReviewError,
+    evaluate_reviews,
+    initialize_review_baseline,
+    ledger_path as finalization_review_ledger_path,
+    load_review_schema,
+    persist_review_sidecar,
+    persisted_review_status,
+    read_json as read_finalization_review_json,
+    receipt_review_summary,
+    record_review,
+    review_content_manifest,
+)
 from reader_projection import (
     PROJECTION_STAGES,
     READER_PROJECTION_VALIDATION_VERSION,
@@ -192,6 +206,7 @@ SNAPSHOT_EXCLUDED_PREFIXES = {
     ".work/execution/transactions",
     ".work/execution/archive",
     ".work/execution/generations",
+    ".work/execution/reviews",
     ".work/legacy-ba-pack",
     ".work/legacy-artifacts",
 }
@@ -994,12 +1009,51 @@ def reader_projection_receipt_status(output: Path, state: str) -> dict[str, Any]
     }
 
 
+def finalization_review_receipt_status(output: Path, state: str) -> dict[str, Any]:
+    published_generation_id = scalar_value(state, "published_generation_id")
+    receipt = committed_finalization_receipt(output, published_generation_id)
+    if receipt is None:
+        return {
+            "status": "unknown",
+            "expected_version": FINALIZATION_REVIEW_VALIDATION_VERSION,
+            "observed_version": None,
+            "mechanical_pass_status": None,
+            "semantic_fact_review_status": None,
+            "reader_review_status": None,
+            "sample_count": None,
+            "finding_count": None,
+            "correction_count": None,
+            "unresolved_count": None,
+            "stale_count": None,
+            "record": None,
+            "record_sha256": None,
+            "errors": [],
+            "receipt": None,
+        }
+    payload = read_json(receipt)
+    result = persisted_review_status(
+        output=output,
+        receipt=payload,
+        repository=str(payload.get("repository") or scalar_value(state, "repository_path") or ""),
+        source_commit=str(payload.get("source_commit") or scalar_value(state, "source_commit") or "unknown"),
+    )
+    result["receipt"] = str(receipt)
+    return result
+
+
 def finalization_revalidation_reasons(
     output: Path, state: str
-) -> tuple[list[str], dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    list[str],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
     maturity = publication_maturity_receipt_status(output, state)
     fragments = markdown_fragment_receipt_status(output, state)
     projections = reader_projection_receipt_status(output, state)
+    reviews = finalization_review_receipt_status(output, state)
     reasons: list[str] = []
     if maturity["status"] == "revalidation-required":
         reasons.append("publication-maturity-validation-outdated")
@@ -1007,7 +1061,9 @@ def finalization_revalidation_reasons(
         reasons.append("markdown-fragment-validation-outdated")
     if projections["status"] == "revalidation-required":
         reasons.append("reader-projection-validation-outdated")
-    return reasons, maturity, fragments, projections
+    if reviews["status"] == "revalidation-required":
+        reasons.append("finalization-review-validation-outdated")
+    return reasons, maturity, fragments, projections, reviews
 
 
 def audit_archive_directory(path: Path) -> dict[str, Any]:
@@ -1048,6 +1104,7 @@ def command_init(args: argparse.Namespace) -> int:
         load_scaffold_schema(registry, assets_root=template_root())
         load_rules()
         load_projection_schema()
+        load_review_schema()
     except RegisterSchemaError as exc:
         raise ExecutorError(f"bundled Register Schema is invalid: {exc}") from exc
     except ArtifactSchemaError as exc:
@@ -1058,6 +1115,8 @@ def command_init(args: argparse.Namespace) -> int:
         raise ExecutorError(f"bundled publication maturity rules are invalid: {exc}") from exc
     except ReaderProjectionError as exc:
         raise ExecutorError(f"bundled Reader Projection Schema is invalid: {exc}") from exc
+    except FinalizationReviewError as exc:
+        raise ExecutorError(f"bundled Finalization Review Schema is invalid: {exc}") from exc
     if not bundled_check.valid:
         details = list(bundled_check.errors)
         details.extend(
@@ -1739,6 +1798,15 @@ def empty_stage_validation_report(
         },
         "pending_projection_count": 0,
         "stale_projection_count": 0,
+        "finalization_review_validation_version": FINALIZATION_REVIEW_VALIDATION_VERSION,
+        "mechanical_pass_status": "not-applicable",
+        "semantic_fact_review_status": "not-applicable",
+        "reader_review_status": "not-applicable",
+        "finalization_review_sample_count": 0,
+        "finalization_review_finding_count": 0,
+        "finalization_review_correction_count": 0,
+        "finalization_review_unresolved_count": 0,
+        "finalization_review_stale_count": 0,
         "validator_summary": [],
     }
 
@@ -2171,6 +2239,7 @@ def command_begin(args: argparse.Namespace) -> int:
                 maturity,
                 fragments,
                 projections,
+                reviews,
             ) = finalization_revalidation_reasons(output, formal_state)
         except PublicationMaturityError as exc:
             raise ExecutorError(
@@ -2180,9 +2249,15 @@ def command_begin(args: argparse.Namespace) -> int:
             maturity["status"] == "unknown"
             or fragments["status"] == "unknown"
             or projections["status"] == "unknown"
+            or reviews["status"] == "unknown"
         ):
             raise ExecutorError(
                 "completed workflow has no trusted Finalization Receipt for its published Generation"
+            )
+        if reviews["status"] == "invalid":
+            raise ExecutorError(
+                "completed workflow has an invalid Finalization Review record: "
+                + " | ".join(reviews.get("errors", []))
             )
         if not revalidation_reasons:
             raise ExecutorError("workflow is already completed and finalization validation is current")
@@ -2192,6 +2267,8 @@ def command_begin(args: argparse.Namespace) -> int:
             revalidation_kind = "markdown-fragments"
         elif revalidation_reasons == ["reader-projection-validation-outdated"]:
             revalidation_kind = "reader-projections"
+        elif revalidation_reasons == ["finalization-review-validation-outdated"]:
+            revalidation_kind = "finalization-reviews"
         else:
             revalidation_kind = "finalization-validation"
         previous_published_generation_id = scalar_value(
@@ -2286,6 +2363,8 @@ def command_begin(args: argparse.Namespace) -> int:
                 "cannot initialize Candidate Artifact Manifest: "
                 + " | ".join(candidate_manifest_errors)
             )
+        if current_stage == "finalization":
+            initialize_review_baseline(tx_dir, candidate)
         initialize_checkpoints(tx_dir, transaction_id, current_stage)
         transaction = {
             "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
@@ -2372,6 +2451,50 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     )
     if target is not first_open and target.get("status") not in TERMINAL_CHECKPOINT_STATUS:
         raise ExecutorError(f"checkpoint order violation; current checkpoint is {first_open['checkpoint_id']}")
+
+    if stage == "finalization" and args.status == "complete":
+        formal = state_text(output)
+        repository, commit = verify_repo_and_commit(formal)
+        try:
+            review_evaluation = evaluate_reviews(
+                transaction_dir=tx_dir,
+                candidate=candidate,
+                transaction_id=args.transaction,
+                generation_id=str(transaction.get("generation_id") or ""),
+                repository=repository,
+                source_commit=commit,
+            )
+        except FinalizationReviewError as exc:
+            raise ExecutorError(str(exc)) from exc
+        review_by_checkpoint = {
+            "mechanical-review": "mechanical",
+            "fact-sampling": "semantic-fact",
+            "readability-review": "reader",
+        }
+        required_review = review_by_checkpoint.get(args.checkpoint)
+        if required_review and review_evaluation["statuses"].get(required_review) != "current":
+            raise ExecutorError(
+                f"checkpoint {args.checkpoint} requires a current {required_review} Review record"
+            )
+        if args.checkpoint == "release-readiness":
+            if any(
+                review_evaluation["statuses"].get(review_type) != "current"
+                for review_type in ("mechanical", "semantic-fact", "reader")
+            ) or review_evaluation["counts"].get("unresolved"):
+                raise ExecutorError(
+                    "release-readiness requires current Mechanical, Semantic Fact, and Reader Reviews with no unresolved findings"
+                )
+            release_report = collect_stage_validation_report(output, args.transaction)
+            semantic_count = release_report["semantic_or_document_errors"]["count"]
+            other_blockers = [
+                item
+                for item in release_report["blocking_errors"]["items"]
+                if item.get("code") != "CHECKPOINT-INCOMPLETE"
+            ]
+            if semantic_count or other_blockers:
+                raise ExecutorError(
+                    "release-readiness requires a successful complete stage validation"
+                )
 
     target["status"] = args.status
     target["reason"] = args.reason
@@ -2673,6 +2796,199 @@ def command_mark_projection(args: argparse.Namespace) -> int:
             "projection_status": args.status,
             "path": item.get("path"),
             "reviewed_sha256": item.get("reviewed_sha256"),
+        },
+        args.json,
+    )
+    return 0
+
+
+def _review_transaction(
+    output: Path, transaction_id: str
+) -> tuple[Path, dict[str, Any], Path, Path, str]:
+    tx_dir, transaction, candidate = load_transaction(output, transaction_id)
+    if transaction.get("stage") != "finalization":
+        raise ExecutorError("record-review is allowed only during finalization")
+    if transaction.get("status") not in VALIDATABLE_TRANSACTION_STATUSES:
+        raise ExecutorError(
+            f"transaction status {transaction.get('status')} does not allow Finalization Review work"
+        )
+    formal = state_text(output)
+    if scalar_value(formal, "active_transaction") != transaction_id:
+        raise ExecutorError("analysis state does not own this Finalization Review transaction")
+    lock = read_json(lock_path(output))
+    if lock.get("transaction_id") != transaction_id or lock.get("stage") != "finalization":
+        raise ExecutorError("execution lock does not own the Finalization Review transaction")
+    journal = read_json(tx_dir / "promotion-journal.json")
+    if journal.get("phase") not in VALIDATABLE_JOURNAL_PHASES:
+        raise ExecutorError(
+            f"promotion journal phase {journal.get('phase')} requires recover before Finalization Review work"
+        )
+    repository, commit = verify_repo_and_commit(formal)
+    if transaction.get("repository") != str(repository) or transaction.get("source_commit") != commit:
+        raise ExecutorError("Finalization Review transaction repository or commit mismatch")
+    generation_id = transaction.get("generation_id")
+    if not isinstance(generation_id, str) or not generation_id:
+        raise ExecutorError("Finalization Review transaction has no Generation identity")
+    return tx_dir, transaction, candidate, repository, commit
+
+
+def _mechanical_review_summary(
+    *,
+    candidate: Path,
+    transaction_id: str,
+    repository: Path,
+    commit: str,
+    transaction_dir_path: Path,
+) -> dict[str, Any]:
+    try:
+        registry = load_registry()
+        manifest_payload = read_json(candidate / ".work" / "artifact-manifest.json")
+        invalidated = manifest_payload.get("invalidated_artifacts", [])
+        write_artifact_manifest(
+            candidate,
+            registry,
+            str(repository),
+            commit,
+            "finalization",
+            transaction_id,
+            invalidated if isinstance(invalidated, list) else [],
+        )
+    except (ArtifactSchemaError, ExecutorError) as exc:
+        raise ExecutorError(f"cannot prepare Mechanical Review Manifest: {exc}") from exc
+    errors, results = stage_gates("finalization", candidate, repository)
+    try:
+        projection = evaluate_projection(
+            root=candidate,
+            transaction_dir=transaction_dir_path,
+            transaction_id=transaction_id,
+            stage="finalization",
+            repository=scalar_value(
+                (candidate / STATE_FILE).read_text(encoding="utf-8"), "repository"
+            )
+            or repository.name,
+            source_commit=commit,
+        )
+    except ReaderProjectionError as exc:
+        errors.append(f"Reader Projection Schema: {exc}")
+        projection_status = {"api": "invalid", "ba": "invalid"}
+    else:
+        projection_status = projection["statuses"]
+        errors.extend(f"Reader Projection: {item}" for item in projection["semantic_errors"])
+        errors.extend(f"Reader Projection: {item}" for item in projection["blocking_errors"])
+    summary = pack_validation_summary(results)
+    warning_count = 0
+    warning_messages: list[str] = []
+    validator_summary: list[dict[str, Any]] = []
+    for result in results:
+        (
+            _semantic,
+            _blocking,
+            parsed_warnings,
+            _forward,
+            _forward_total,
+            _semantic_total,
+            warning_total,
+        ) = parse_validator_diagnostics(result)
+        warning_count += warning_total
+        warning_messages.extend(
+            str(item.get("message"))
+            for item in parsed_warnings
+            if item.get("message")
+        )
+        validator_summary.append(
+            {
+                "validator": validator_name(result),
+                "result": "ok" if result.get("exit_code") == 0 else "failed",
+            }
+        )
+    try:
+        manifest_status = assess_artifact_manifest(candidate, registry).status
+    except ArtifactSchemaError as exc:
+        errors.append(f"Artifact Manifest: {exc}")
+        manifest_status = "invalid"
+    if (
+        summary.get("primary_error_count")
+        or summary.get("skipped_group_count")
+        or manifest_status != "valid"
+    ):
+        errors.append("Mechanical Review requires zero Primary Errors, zero skipped groups, and a valid Manifest")
+    if errors:
+        raise ExecutorError("Mechanical Review validation failed: " + " | ".join(sorted(set(errors))))
+    return {
+        "result": "passed",
+        "primary_error_count": summary.get("primary_error_count", 0),
+        "skipped_group_count": summary.get("skipped_group_count", 0),
+        "suppressed_error_count": summary.get("suppressed_error_count", 0),
+        "warning_count": warning_count,
+        "warnings": sorted(set(warning_messages)),
+        "artifact_manifest_status": manifest_status,
+        "markdown_fragment_validation_version": summary.get(
+            "markdown_fragment_validation_version"
+        ),
+        "publication_maturity_validation_version": summary.get(
+            "publication_maturity_validation_version"
+        ),
+        "reader_projection_status": projection_status,
+        "validators": validator_summary,
+        "recorded_at": now_utc(),
+    }
+
+
+def command_record_review(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    tx_dir, transaction, candidate, repository, commit = _review_transaction(
+        output, args.transaction
+    )
+    try:
+        input_payload = read_finalization_review_json(args.input.expanduser().resolve())
+        mechanical_summary = (
+            _mechanical_review_summary(
+                candidate=candidate,
+                transaction_id=args.transaction,
+                repository=repository,
+                commit=commit,
+                transaction_dir_path=tx_dir,
+            )
+            if args.review == "mechanical"
+            else None
+        )
+        ledger = record_review(
+            transaction_dir=tx_dir,
+            candidate=candidate,
+            repository=repository,
+            transaction_id=args.transaction,
+            generation_id=str(transaction["generation_id"]),
+            source_commit=commit,
+            review_type=args.review,
+            input_payload=input_payload,
+            mechanical_summary=mechanical_summary,
+        )
+        evaluation = evaluate_reviews(
+            transaction_dir=tx_dir,
+            candidate=candidate,
+            transaction_id=args.transaction,
+            generation_id=str(transaction["generation_id"]),
+            repository=repository,
+            source_commit=commit,
+        )
+    except FinalizationReviewError as exc:
+        raise ExecutorError(str(exc)) from exc
+    review = ledger["reviews"][args.review]
+    emit(
+        {
+            "result": "review-recorded",
+            "stage": "finalization",
+            "transaction_id": args.transaction,
+            "review": args.review,
+            "review_status": evaluation["statuses"][args.review],
+            "candidate_knowledge_manifest_sha256": review[
+                "candidate_knowledge_manifest_sha256"
+            ],
+            "sample_count": review["sample_count"],
+            "finding_count": review["finding_count"],
+            "correction_count": review["correction_count"],
+            "unresolved_count": review["unresolved_count"],
+            "ledger": str(finalization_review_ledger_path(tx_dir)),
         },
         args.json,
     )
@@ -3683,8 +3999,39 @@ def command_commit(args: argparse.Namespace) -> int:
                 for message in projection_evaluation["blocking_errors"]
             )
 
+    finalization_review_summary: dict[str, Any] = {}
+    finalization_review_gate_errors: list[str] = []
+    finalization_review_evaluation: dict[str, Any] | None = None
+    if stage == "finalization":
+        try:
+            finalization_review_evaluation = evaluate_reviews(
+                transaction_dir=tx_dir,
+                candidate=candidate,
+                transaction_id=args.transaction,
+                generation_id=str(transaction.get("generation_id") or ""),
+                repository=repo,
+                source_commit=commit,
+            )
+        except FinalizationReviewError as exc:
+            finalization_review_gate_errors.append(
+                f"Finalization Review Schema: {exc}"
+            )
+        else:
+            finalization_review_summary = receipt_review_summary(
+                finalization_review_evaluation
+            )
+            finalization_review_gate_errors.extend(
+                f"Finalization Review: {message}"
+                for message in finalization_review_evaluation["semantic_errors"]
+            )
+            finalization_review_gate_errors.extend(
+                f"Finalization Review: {message}"
+                for message in finalization_review_evaluation["blocking_errors"]
+            )
+
     errors, validators = stage_gates(stage, candidate, repo)
     errors.extend(projection_gate_errors)
+    errors.extend(finalization_review_gate_errors)
     candidate_state_check = run_validator(
         [
             sys.executable,
@@ -3756,6 +4103,7 @@ def command_commit(args: argparse.Namespace) -> int:
     journal_path = tx_dir / "promotion-journal.json"
     journal: dict[str, Any] | None = None
     receipt_path: Path | None = None
+    review_sidecar_path: Path | None = None
     commit_recorded = False
     try:
         journal = promote_candidate(
@@ -3795,6 +4143,36 @@ def command_commit(args: argparse.Namespace) -> int:
             )
 
         sequence = receipt_count(output)
+        if stage == "finalization":
+            if finalization_review_evaluation is None:
+                raise ExecutorError("Finalization Review evaluation is unavailable")
+            planned_review_sidecar = (
+                output
+                / ".work"
+                / "execution"
+                / "reviews"
+                / f"{sequence:03d}-{str(transaction.get('generation_id') or 'unknown')}.finalization-review.json"
+            )
+            journal["planned_review_sidecar"] = str(planned_review_sidecar)
+            journal["updated_at"] = now_utc()
+            atomic_write_json(journal_path, journal)
+            try:
+                review_sidecar_path, review_sidecar_sha256 = persist_review_sidecar(
+                    transaction_dir=tx_dir,
+                    output=output,
+                    sequence=sequence,
+                    generation_id=str(transaction.get("generation_id") or "unknown"),
+                )
+            except FinalizationReviewError as exc:
+                raise ExecutorError(str(exc)) from exc
+            finalization_review_summary.update(
+                {
+                    "finalization_review_record": review_sidecar_path.relative_to(
+                        output
+                    ).as_posix(),
+                    "finalization_review_record_sha256": review_sidecar_sha256,
+                }
+            )
         validation_summary = pack_validation_summary(validators + post_results)
         register_artifact_schema_version = scalar_value(
             (candidate / ".work" / "repository-register.md").read_text(encoding="utf-8"),
@@ -3806,6 +4184,7 @@ def command_commit(args: argparse.Namespace) -> int:
             "repository_register_artifact_schema_version": register_artifact_schema_version,
             **validation_summary,
             **projection_summary,
+            **finalization_review_summary,
             "transaction_id": args.transaction,
             "stage": stage,
             "stage_result": "skipped" if args.skip else "committed",
@@ -3953,6 +4332,11 @@ def command_commit(args: argparse.Namespace) -> int:
                 receipt_path.unlink()
             except FileNotFoundError:
                 pass
+        if review_sidecar_path is not None:
+            try:
+                review_sidecar_path.unlink()
+            except FileNotFoundError:
+                pass
         transaction["status"] = "failed"
         transaction["last_attempt_at"] = now_utc()
         transaction["errors"] = [str(exc)]
@@ -4014,6 +4398,7 @@ def command_abort(args: argparse.Namespace) -> int:
                 generation_dir(output, str(transaction["generation_id"])),
                 ignore_errors=True,
             )
+    cleanup_uncommitted_review_sidecar(output, journal)
     release_lock(output, args.transaction)
     shutil.rmtree(tx_dir)
     emit(
@@ -4444,6 +4829,68 @@ def collect_stage_validation_report(
                 for message in projection_evaluation["blocking_errors"]
             )
 
+        if stage == "finalization":
+            try:
+                review_evaluation = evaluate_reviews(
+                    transaction_dir=tx_dir,
+                    candidate=candidate,
+                    transaction_id=transaction_id,
+                    generation_id=str(transaction.get("generation_id") or ""),
+                    repository=repo,
+                    source_commit=commit,
+                )
+            except FinalizationReviewError as exc:
+                blocking.append(
+                    validation_item(
+                        "FINALIZATION-REVIEW-SCHEMA",
+                        str(exc),
+                        source="finalization-review",
+                    )
+                )
+            else:
+                review_statuses = review_evaluation["statuses"]
+                review_counts = review_evaluation["counts"]
+                report["mechanical_pass_status"] = (
+                    "passed"
+                    if review_statuses.get("mechanical") == "current"
+                    else review_statuses.get("mechanical")
+                )
+                report["semantic_fact_review_status"] = review_statuses.get(
+                    "semantic-fact"
+                )
+                report["reader_review_status"] = review_statuses.get("reader")
+                report["finalization_review_sample_count"] = review_counts.get(
+                    "samples", 0
+                )
+                report["finalization_review_finding_count"] = review_counts.get(
+                    "findings", 0
+                )
+                report["finalization_review_correction_count"] = review_counts.get(
+                    "corrections", 0
+                )
+                report["finalization_review_unresolved_count"] = review_counts.get(
+                    "unresolved", 0
+                )
+                report["finalization_review_stale_count"] = review_counts.get(
+                    "stale", 0
+                )
+                semantic.extend(
+                    validation_item(
+                        "FINALIZATION-REVIEW-INCOMPLETE",
+                        message,
+                        source="finalization-review",
+                    )
+                    for message in review_evaluation["semantic_errors"]
+                )
+                blocking.extend(
+                    validation_item(
+                        "FINALIZATION-REVIEW-STATE",
+                        message,
+                        source="finalization-review",
+                    )
+                    for message in review_evaluation["blocking_errors"]
+                )
+
         if stage in {"api-contract-publication", "ba-publication"}:
             try:
                 stage_skip_allowed(stage, candidate, "stage validation")
@@ -4527,6 +4974,21 @@ def status_payload(output: Path) -> dict[str, Any]:
         "reader_projection_stale_count": None,
         "reader_projection_receipt": None,
         "active_reader_projection_plan": None,
+        "finalization_review_validation_status": "unknown",
+        "finalization_review_validation_version": FINALIZATION_REVIEW_VALIDATION_VERSION,
+        "finalization_review_observed_version": None,
+        "mechanical_pass_status": None,
+        "semantic_fact_review_status": None,
+        "reader_review_status": None,
+        "finalization_review_sample_count": None,
+        "finalization_review_finding_count": None,
+        "finalization_review_correction_count": None,
+        "finalization_review_unresolved_count": None,
+        "finalization_review_stale_count": None,
+        "finalization_review_record": None,
+        "finalization_review_record_sha256": None,
+        "finalization_review_receipt": None,
+        "active_finalization_review": None,
         "migration_status": scalar_value(text, "migration_status") or "unknown",
         "migration_plan": None,
         "artifact_manifest_status": "unknown",
@@ -4681,6 +5143,31 @@ def status_payload(output: Path) -> dict[str, Any]:
             "resume and revalidate Finalization under the current Reader Projection policy"
         )
 
+    reviews = finalization_review_receipt_status(output, text)
+    payload["finalization_review_validation_status"] = reviews["status"]
+    payload["finalization_review_validation_version"] = reviews["expected_version"]
+    payload["finalization_review_observed_version"] = reviews["observed_version"]
+    payload["mechanical_pass_status"] = reviews["mechanical_pass_status"]
+    payload["semantic_fact_review_status"] = reviews[
+        "semantic_fact_review_status"
+    ]
+    payload["reader_review_status"] = reviews["reader_review_status"]
+    payload["finalization_review_sample_count"] = reviews["sample_count"]
+    payload["finalization_review_finding_count"] = reviews["finding_count"]
+    payload["finalization_review_correction_count"] = reviews["correction_count"]
+    payload["finalization_review_unresolved_count"] = reviews["unresolved_count"]
+    payload["finalization_review_stale_count"] = reviews["stale_count"]
+    payload["finalization_review_record"] = reviews["record"]
+    payload["finalization_review_record_sha256"] = reviews["record_sha256"]
+    payload["finalization_review_receipt"] = reviews["receipt"]
+    if reviews["status"] == "invalid":
+        payload["integrity_errors"].extend(reviews.get("errors", []))
+    if payload["current_stage"] == "completed" and reviews["status"] != "current":
+        payload["release_readiness"] = "not-ready"
+        payload["requirements"].append(
+            "resume and revalidate Finalization under the current three-pass review policy"
+        )
+
     active = payload["active_transaction"]
     if not active and isinstance(payload["lock"], dict) and payload["lock"].get("stage") == MIGRATION_STAGE:
         active = payload["lock"].get("transaction_id")
@@ -4708,6 +5195,33 @@ def status_payload(output: Path) -> dict[str, Any]:
                             for item in projection_payload.get("semantic_items", [])
                             if isinstance(item, dict)
                         ),
+                    }
+            review_plan = finalization_review_ledger_path(tx_dir)
+            if review_plan.is_file():
+                try:
+                    review_payload = read_finalization_review_json(review_plan)
+                except FinalizationReviewError as exc:
+                    payload["integrity_errors"].append(
+                        f"Finalization Review Ledger invalid: {exc}"
+                    )
+                else:
+                    reviews_by_type = review_payload.get("reviews", {})
+                    payload["active_finalization_review"] = {
+                        "path": str(review_plan),
+                        "candidate_knowledge_manifest_sha256": review_payload.get(
+                            "candidate_knowledge_manifest_sha256"
+                        ),
+                        "reviews": {
+                            review_type: {
+                                "status": item.get("status"),
+                                "sample_count": item.get("sample_count"),
+                                "finding_count": item.get("finding_count"),
+                                "correction_count": item.get("correction_count"),
+                                "unresolved_count": item.get("unresolved_count"),
+                            }
+                            for review_type, item in reviews_by_type.items()
+                            if isinstance(item, dict)
+                        },
                     }
             payload["candidate_manifest"] = manifest_summary(file_manifest(candidate))
             try:
@@ -4865,6 +5379,11 @@ def status_payload(output: Path) -> dict[str, Any]:
         and payload["reader_projection_validation_status"] != "current"
     ):
         payload["release_readiness"] = "not-ready"
+    if (
+        payload["current_stage"] == "completed"
+        and payload["finalization_review_validation_status"] != "current"
+    ):
+        payload["release_readiness"] = "not-ready"
     return payload
 
 
@@ -4936,6 +5455,12 @@ def command_resume(args: argparse.Namespace) -> int:
             revalidation_reasons.append("markdown-fragment-validation-outdated")
         if status["reader_projection_validation_status"] == "revalidation-required":
             revalidation_reasons.append("reader-projection-validation-outdated")
+        if status["finalization_review_validation_status"] == "revalidation-required":
+            revalidation_reasons.append("finalization-review-validation-outdated")
+        if status["finalization_review_validation_status"] == "invalid":
+            raise ExecutorError(
+                "completed Pack has an invalid Finalization Review record; inspect status integrity_errors before recovery"
+            )
         if status["current_stage"] == "completed" and revalidation_reasons:
             emit(
                 {
@@ -4967,6 +5492,12 @@ def command_resume(args: argparse.Namespace) -> int:
                     ],
                     "observed_reader_projection_validation_version": status[
                         "reader_projection_observed_version"
+                    ],
+                    "required_finalization_review_validation_version": status[
+                        "finalization_review_validation_version"
+                    ],
+                    "observed_finalization_review_validation_version": status[
+                        "finalization_review_observed_version"
                     ],
                     **status,
                 },
@@ -5150,6 +5681,22 @@ def repair_operational_manifest_after_receipt(
         )
 
 
+def cleanup_uncommitted_review_sidecar(output: Path, journal: dict[str, Any]) -> None:
+    value = journal.get("planned_review_sidecar")
+    if not isinstance(value, str) or not value:
+        return
+    path = Path(value).resolve()
+    review_root = (output / ".work" / "execution" / "reviews").resolve()
+    try:
+        path.relative_to(review_root)
+    except ValueError as exc:
+        raise ExecutorError("promotion journal contains an unsafe Finalization Review path") from exc
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def command_recover(args: argparse.Namespace) -> int:
     output = args.output.expanduser().resolve()
     text = state_text(output)
@@ -5218,6 +5765,7 @@ def command_recover(args: argparse.Namespace) -> int:
                         args.json,
                     )
                     return 0
+                cleanup_uncommitted_review_sidecar(output, journal)
                 archive_value = journal.get("archive")
                 archive = Path(archive_value) if archive_value else None
                 rollback_promotion(
@@ -5327,6 +5875,7 @@ def command_recover(args: argparse.Namespace) -> int:
         )
         return 0
     archive_value = journal.get("archive")
+    cleanup_uncommitted_review_sidecar(output, journal)
     archive = Path(archive_value) if archive_value else None
     rollback_promotion(output, archive, {"operations": journal.get("completed_operations", [])})
     restore_finalization_generation_root(journal)
@@ -5407,6 +5956,18 @@ def build_parser() -> argparse.ArgumentParser:
     mark_projection_parser.add_argument("--json", action="store_true")
     mark_projection_parser.set_defaults(handler=command_mark_projection)
 
+    record_review_parser = subparsers.add_parser("record-review")
+    record_review_parser.add_argument("--output", type=Path, required=True)
+    record_review_parser.add_argument("--transaction", required=True)
+    record_review_parser.add_argument(
+        "--review",
+        choices=("mechanical", "semantic-fact", "reader"),
+        required=True,
+    )
+    record_review_parser.add_argument("--input", type=Path, required=True)
+    record_review_parser.add_argument("--json", action="store_true")
+    record_review_parser.set_defaults(handler=command_record_review)
+
     begin = subparsers.add_parser("begin")
     begin.add_argument("--output", type=Path, required=True)
     begin.add_argument("--stage", choices=(MIGRATION_STAGE,) + STAGES[:-1], required=True)
@@ -5481,7 +6042,7 @@ def main() -> int:
             )
             emit(report, True)
             return 2
-        if args.command in {"scaffold", "refresh-projections", "mark-projection"} and getattr(args, "json", False):
+        if args.command in {"scaffold", "refresh-projections", "mark-projection", "record-review"} and getattr(args, "json", False):
             emit(
                 {
                     "result": "error",
@@ -5512,7 +6073,7 @@ def main() -> int:
             )
             emit(report, True)
             return 2
-        if args.command in {"scaffold", "refresh-projections", "mark-projection"} and getattr(args, "json", False):
+        if args.command in {"scaffold", "refresh-projections", "mark-projection", "record-review"} and getattr(args, "json", False):
             emit(
                 {
                     "result": "error",

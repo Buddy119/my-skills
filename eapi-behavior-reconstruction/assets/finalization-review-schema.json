@@ -1,0 +1,56 @@
+{
+  "finalization_review_schema_version": "1",
+  "validation_version": "1",
+  "outcomes": [
+    "passed",
+    "corrected",
+    "unresolved",
+    "not-applicable"
+  ],
+  "overall_conclusions": [
+    "passed",
+    "passed-with-corrections",
+    "blocked"
+  ],
+  "coverage_statuses": [
+    "reviewed",
+    "not-applicable"
+  ],
+  "reviews": {
+    "mechanical": {
+      "checkpoint": "mechanical-review",
+      "categories": [
+        "validator-coverage",
+        "warning-adjudication"
+      ]
+    },
+    "semantic-fact": {
+      "checkpoint": "fact-sampling",
+      "categories": [
+        "core-rule-and-failure",
+        "state-change",
+        "outbound-http-and-mapping",
+        "configuration-branch",
+        "retry-partial-or-dependency-failure",
+        "endpoint-exposure",
+        "dependency-identity-and-criticality",
+        "failure-pattern-and-retry-safety",
+        "java-call-and-di-binding",
+        "scenario-to-tech-traceability"
+      ]
+    },
+    "reader": {
+      "checkpoint": "readability-review",
+      "categories": [
+        "repository-overview",
+        "tech-behavior",
+        "api-contract",
+        "field-pack",
+        "dependency-and-failure",
+        "journey-and-scenario",
+        "catalog-navigation-and-projection",
+        "publication-language-and-diagrams"
+      ]
+    }
+  }
+}

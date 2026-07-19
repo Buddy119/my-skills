@@ -93,6 +93,8 @@ Before building the repository connection model, shared behavior model, or Repos
 
 Before publishing final documents, read [references/editorial-review-policy.md](references/editorial-review-policy.md) completely.
 
+Before beginning `finalization`, read [references/finalization-review-policy.md](references/finalization-review-policy.md) completely.
+
 Before materializing API Contracts or BA Journeys/Scenarios, read [references/reader-projection-policy.md](references/reader-projection-policy.md) completely.
 
 Load these only when applicable:
@@ -392,11 +394,13 @@ Complete the Journey, Scenario, BA Overview/Catalog, Reader Projection, backlink
 
 Begin `finalization` from the complete Working Generation and review its Candidate snapshot. This is the only normal stage authorized to replace formal knowledge Artifacts and Reader Packs.
 
-Apply the editorial policy in this order:
+Apply the Editorial and Finalization Review policies in this order:
 
 1. Mechanical review: generic Markdown structure first, then Artifact/frontmatter, specialized document structure, file and Fragment links, endpoint identity, commit, JSON examples, placeholders, and citation bounds.
 2. Fact review: sample important rules, state changes, mappings, configuration effects, and failure paths back to source.
 3. Reader review: confirm a developer can retell Tech behavior and a BA can retell independent Journeys, Scenarios, object changes, outcomes, and exceptions; verify that mapping count does not multiply Call, Target, or Behavior metadata in the Field Pack. Run the publication-maturity check across the complete Reader Pack. Rewrite every explicit execution-stage residue. Inspect warning-only words such as `planned` or `pending` in context and retain them only when they describe a real domain state.
+
+After corrections stabilize, create one schema-complete input for each pass and run `record-review` for `mechanical`, `semantic-fact`, and `reader`. Every applicable risk category needs a high-value sample; every `not-applicable` category needs a reason. Record all displayed Validator warning decisions. A corrected sample must name a file actually changed in Finalization, and a Semantic Fact sample must cite repository evidence. Re-record all three Reviews if Candidate knowledge changes.
 
 Before Release Readiness, confirm every applicable Reader Projection is `current`, its relationship graph matches the Candidate, and no semantic Projection item remains pending. A valid link alone does not prove that Overview, Catalog, Behavior, Field, or BA summaries are current.
 
@@ -406,7 +410,7 @@ For Repository Overview, verify that the context diagram and connection matrix m
 
 For the BA Pack, verify that Journey and Scenario counts arise from business goals, contexts, decisions, object lifecycles, and outcomes rather than Tech Behavior count. Sample one Scenario-to-Tech many-to-many mapping, one unmapped Tech Behavior disposition, one technical branch that was not promoted to a business decision, and one business-visible exception. Confirm that BA documents do not reproduce the Tech call chain with renamed nodes.
 
-Complete `mechanical-review`, `fact-sampling`, `readability-review`, and `release-readiness` in order. Generic Markdown validation covers every formal Tech and BA Markdown file. Fragment validation resolves same-document and cross-document links through explicit anchors first and GFM heading slugs second; a future API/BA target remains deferred only until it is materialized. Publication maturity covers Reader Markdown and Catalog YAML. A structurally invalid Fragment target produces one root-cause prerequisite failure instead of one error per incoming link. Explicit lifecycle residue is a document error; ambiguous lifecycle words are review warnings and do not become artificial business constraints.
+Complete `mechanical-review`, `fact-sampling`, and `readability-review` only after their current Review record exists. Complete `release-readiness` only when Mechanical is `passed`, Semantic Fact and Reader are `current`, all records bind the same Candidate Hash, no finding is unresolved, Reader Projections are current, and complete mechanical validation has zero Primary Errors and zero necessary Skipped Groups.
 
 The finalization commit validates the complete Generation, computes a release Manifest, archives the previously published knowledge Artifacts, promotes the complete Generation under a recovery Journal, validates the result again, and only then writes the final Receipt and completed State. A result with any Primary Error or skipped necessary validation group is incomplete and cannot be reported as全面验证通过. Treat warnings as review prompts, not prose-generation targets. Resolve mechanical errors in the Candidate without rewriting readable text into claim statements.
 
@@ -419,7 +423,7 @@ Commit `finalization`. Deliver only when `status --json` reports `current_stage:
 - Pack directories and generated documents.
 - Behavior, Journey, Scenario, and endpoint counts, separating application endpoints, meaningful external exposures, aggregated protocol-support declarations, published exceptions, and blocked coverage.
 - Important confirmed findings, unknowns, conflicts, and limitations.
-- Mechanical validation results and any intentional warnings.
+- Mechanical Pass, Semantic Fact Review, and Reader Review results, sampled coverage, corrections, unresolved findings, and intentional warnings. Never present Mechanical Pass alone as document quality completion.
 
 Do not modify application source code unless the user separately requests an implementation change.
 

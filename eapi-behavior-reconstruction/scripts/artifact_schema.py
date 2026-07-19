@@ -40,6 +40,7 @@ DISCOVERY_EXCLUDES = (
     ".work/execution/transactions/",
     ".work/execution/archive/",
     ".work/execution/generations/",
+    ".work/execution/reviews/",
     ".work/legacy-artifacts/",
     ".work/legacy-ba-pack/",
 )

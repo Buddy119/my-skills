@@ -28,6 +28,8 @@ Build the BA view from the independent Business Model, not from a Tech Behavior 
 
 ## Three review passes
 
+These passes produce three distinct trust conclusions. Mechanical success does not imply factual correctness or reader value. Record the sampled objects, questions, conclusions, findings, corrections, and evidence through the Finalization Review protocol; do not complete a pass using only a Checkpoint status or a zero-error Validator report.
+
 ### Mechanical review
 
 Run the generic Markdown structure Validator across every formal Tech and BA Markdown document before Artifact/frontmatter, specialized document, or cross-link validation. It checks Frontmatter boundaries, one H1, heading order, closed code fences, unique explicit and generated anchors, and structurally valid pipe tables while ignoring fenced content and honoring escaped or inline-code pipes.
