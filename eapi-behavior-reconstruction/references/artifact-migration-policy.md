@@ -86,6 +86,8 @@ Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, 
 
 Each mechanical step must visibly declare the Transform ID and its expected mechanical results. The plan is JSON-compatible YAML so the standard-library executor parses it deterministically. It must not contain repository knowledge conclusions.
 
+Compute `resume_stage_after_migration` from the finalized effective Steps, invalidated Artifact dependency graph, and current Evidence/Behavior prerequisites. Select the earliest Stage Index across those requirements. A top-level stage later than any effective `rebuilding_stage` is a Plan integrity error even when the Plan ID matches its canonical content. In particular, one or more `behavior-dossier` `archive-and-rebuild` Steps require `tracing`; missing Evidence takes precedence and requires `inventory`. Loader, Migration Begin, Candidate validation, and Commit must all reject a conflicting Plan rather than normalizing it silently.
+
 If the plan is blocked, stop. If the Pack changes after planning, rerun Resume Audit; the snapshot-bound plan is no longer executable.
 
 ## Migration transaction
@@ -146,6 +148,17 @@ A transform must not:
 If an explicit old ID has conflicting structural rows, or the source lacks safe split fields, fail the registered transform or use `archive-and-rebuild`. Never repair the ambiguity semantically inside Migration.
 
 Reader-first changes to Repository Synthesis, Tech Behaviors, or API Contracts do not by themselves mechanically invalidate a current Business Model or BA Pack. Preserve those business artifacts, then revalidate Scenario-to-Tech traceability and business-visible Variant differences against the rebuilt Tech Generation. Rebuild only the affected business artifacts when that semantic review finds a changed business fact or outcome.
+
+Behavior Dossier is a semantic working Artifact. Schema 1 cannot be mechanically upgraded to Schema 2 because Schema 2 requires renewed separation of object states, processing actions, data movement, Java semantic call traces when applicable, and evidence-backed lifecycle transitions. For a Version 1 or unversioned Dossier, Migration must:
+
+1. Archive the original bytes and SHA-256 without rewriting them.
+2. Remove the incompatible Dossier from the current working set without creating an empty Schema 2 stub.
+3. Reset the explicitly corresponding Behavior lifecycle entry to `discovered`, clear its current Dossier path, and record that Schema 2 retracing is required.
+4. Resume at `tracing`, where AI uses `scaffold` to create the Schema 2 Dossier and completes the Understanding Gate again.
+
+The Migration Transform Registry intentionally has no Behavior Dossier handler. Legacy Dossier text may be consulted as legacy evidence during retracing, but it cannot support an `understood` status or be adopted as a current semantic conclusion.
+
+If an older Executor already committed a Pack at `synthesis` or later while a required Dossier is missing or its Behavior remains `discovered|tracing`, Resume Audit must not return `resume-ready`. Create a new mechanical lifecycle-repair Migration, invalidate Synthesis and Reader Artifacts that depend on the unavailable Dossier, reset the affected Behavior lifecycle fields, and return to `tracing`. Do not restore semantic conclusions from the Legacy Archive automatically.
 
 ## Unknown legacy Packs
 

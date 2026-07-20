@@ -92,6 +92,130 @@ class ArtifactMigrationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def add_behavior_with_legacy_dossier(
+        self, version: str | None
+    ) -> tuple[str, Path, bytes]:
+        behavior_id = "repo.handle-request"
+        state = self.output / ".work" / "analysis-state.yaml"
+        state.write_text(
+            state.read_text(encoding="utf-8").replace(
+                "behaviors: []",
+                "behaviors:\n"
+                f'  - behavior_id: "{behavior_id}"\n'
+                '    status: "understood"\n'
+                f'    dossier: "behavior-dossiers/{behavior_id}.md"\n'
+                '    notes: "Legacy understanding result"',
+            ),
+            encoding="utf-8",
+        )
+        catalog = self.output / ".work" / "behavior-catalog.yaml"
+        catalog.write_text(
+            catalog.read_text(encoding="utf-8").replace(
+                "behaviors: []",
+                "behaviors:\n"
+                f'  - behavior_id: "{behavior_id}"\n'
+                '    title: "Handle request"\n'
+                '    category: "business"\n'
+                '    triggers: []\n'
+                '    entry_points: []\n'
+                '    status: "documented"\n'
+                '    duplicate_of: null\n'
+                f'    document: "behaviors/{behavior_id}.md"\n'
+                '    ba_scenarios: []\n'
+                '    api_contracts: []',
+            ),
+            encoding="utf-8",
+        )
+        dossier = self.output / ".work" / "behavior-dossiers" / f"{behavior_id}.md"
+        dossier.parent.mkdir(parents=True, exist_ok=True)
+        version_line = (
+            f'artifact_schema_version: "{version}"\n' if version is not None else ""
+        )
+        legacy_bytes = (
+            "---\n"
+            'artifact_type: "behavior-dossier"\n'
+            + version_line
+            + f'behavior_id: "{behavior_id}"\n'
+            + 'repository: "repo"\n'
+            + 'source_commit: "unknown"\n'
+            + "---\n\n"
+            + "# Legacy dossier\n\n"
+            + "This legacy semantic conclusion must not be mechanically adopted.\n"
+        ).encode("utf-8")
+        dossier.write_bytes(legacy_bytes)
+        return behavior_id, dossier, legacy_bytes
+
+    def add_legacy_dossiers(self, count: int) -> list[tuple[str, Path, bytes]]:
+        state_entries: list[str] = []
+        catalog_entries: list[str] = []
+        dossiers: list[tuple[str, Path, bytes]] = []
+        dossier_root = self.output / ".work" / "behavior-dossiers"
+        dossier_root.mkdir(parents=True, exist_ok=True)
+        for index in range(1, count + 1):
+            behavior_id = f"repo.behavior-{index}"
+            state_entries.extend(
+                [
+                    f'  - behavior_id: "{behavior_id}"',
+                    '    status: "understood"',
+                    f'    dossier: "behavior-dossiers/{behavior_id}.md"',
+                    '    notes: "Legacy understanding result"',
+                ]
+            )
+            catalog_entries.extend(
+                [
+                    f'  - behavior_id: "{behavior_id}"',
+                    f'    title: "Behavior {index}"',
+                    '    category: "business"',
+                    '    triggers: []',
+                    '    entry_points: []',
+                    '    status: "documented"',
+                    '    duplicate_of: null',
+                    f'    document: "behaviors/{behavior_id}.md"',
+                    '    ba_scenarios: []',
+                    '    api_contracts: []',
+                ]
+            )
+            dossier = dossier_root / f"{behavior_id}.md"
+            content = (
+                "---\n"
+                'artifact_type: "behavior-dossier"\n'
+                'artifact_schema_version: "1"\n'
+                f'behavior_id: "{behavior_id}"\n'
+                'repository: "repo"\n'
+                'source_commit: "unknown"\n'
+                "---\n\n"
+                f"# Legacy dossier {index}\n"
+            ).encode("utf-8")
+            dossier.write_bytes(content)
+            dossiers.append((behavior_id, dossier, content))
+        state = self.output / ".work" / "analysis-state.yaml"
+        state.write_text(
+            state.read_text(encoding="utf-8").replace(
+                "behaviors: []", "behaviors:\n" + "\n".join(state_entries)
+            ),
+            encoding="utf-8",
+        )
+        catalog = self.output / ".work" / "behavior-catalog.yaml"
+        catalog.write_text(
+            catalog.read_text(encoding="utf-8").replace(
+                "behaviors: []", "behaviors:\n" + "\n".join(catalog_entries)
+            ),
+            encoding="utf-8",
+        )
+        return dossiers
+
+    @staticmethod
+    def rewrite_plan_id(plan: dict) -> None:
+        identity = {
+            key: value
+            for key, value in plan.items()
+            if key not in {"plan_id", "status", "created_at"}
+        }
+        canonical = json.dumps(
+            identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        plan["plan_id"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
     def knowledge_hashes(self) -> dict[str, str]:
         values: dict[str, str] = {}
         for path in sorted(self.output.rglob("*")):
@@ -124,6 +248,35 @@ class ArtifactMigrationTests(unittest.TestCase):
         payload = self.resume()
         self.assertEqual(payload["result"], "resume-ready")
         self.assertFalse((self.output / ".work" / "migration-plan.yaml").exists())
+
+    def test_dossier_template_registry_and_transform_contract_are_consistent(self) -> None:
+        registry = json.loads(
+            (SKILL_ROOT / "assets" / "artifact-schema.json").read_text(encoding="utf-8")
+        )
+        definition = registry["artifact_types"]["behavior-dossier"]
+        self.assertEqual(definition["current_version"], "2")
+        self.assertEqual(
+            definition["migrations"],
+            {
+                "0": {"to": "2", "action": "archive-and-rebuild"},
+                "1": {"to": "2", "action": "archive-and-rebuild"},
+            },
+        )
+        template = (SKILL_ROOT / "assets" / "behavior-dossier-template.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('artifact_schema_version: "2"', template)
+        transforms = json.loads(
+            (SKILL_ROOT / "assets" / "migration-transform-registry.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertFalse(
+            any(
+                transform.get("artifact_type") == "behavior-dossier"
+                for transform in transforms["transforms"].values()
+            )
+        )
 
     def test_init_rejects_artifact_registry_template_drift(self) -> None:
         copied = self.root / "skill-copy"
@@ -183,6 +336,368 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("unregistered transform", result.stderr)
         self.assertFalse(output.exists())
+
+    def test_init_rejects_migration_that_does_not_target_current_version(self) -> None:
+        copied = self.root / "skill-copy-target-drift"
+        shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        registry_path = copied / "assets" / "artifact-schema.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["artifact_types"]["behavior-dossier"]["migrations"]["1"]["to"] = "3"
+        registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+        output = self.root / "target-drift-output"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(copied / "scripts" / "stage_executor.py"),
+                "init",
+                "--repo",
+                str(self.repo),
+                "--output",
+                str(output),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must target current version 2", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_init_rejects_migration_from_current_version(self) -> None:
+        copied = self.root / "skill-copy-current-source"
+        shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        registry_path = copied / "assets" / "artifact-schema.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["artifact_types"]["behavior-dossier"]["migrations"]["2"] = {
+            "to": "2",
+            "action": "archive-and-rebuild",
+        }
+        registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+        output = self.root / "current-source-output"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(copied / "scripts" / "stage_executor.py"),
+                "init",
+                "--repo",
+                str(self.repo),
+                "--output",
+                str(output),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cannot declare a migration from its current version 2", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_schema_one_dossier_is_archived_reset_and_retraced_as_schema_two(self) -> None:
+        self.add_evidence()
+        behavior_id, dossier, legacy_bytes = self.add_behavior_with_legacy_dossier("1")
+
+        resumed = self.resume()
+        self.assertEqual(resumed["result"], "migration-planned")
+        plan = self.plan()
+        dossier_step = next(
+            step for step in plan["steps"] if step["artifact_type"] == "behavior-dossier"
+        )
+        self.assertEqual(dossier_step["source_version"], "1")
+        self.assertEqual(dossier_step["target_version"], "2")
+        self.assertEqual(dossier_step["action"], "archive-and-rebuild")
+        self.assertNotIn("transform_id", dossier_step)
+        self.assertEqual(plan["resume_stage_after_migration"], "tracing")
+
+        begun = self.begin_migration()
+        candidate_dossier = Path(begun["candidate"]) / dossier.relative_to(self.output)
+        self.assertFalse(candidate_dossier.exists())
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+
+        legacy_root = Path(committed["legacy_artifacts_archive"])
+        archived = legacy_root / dossier.relative_to(self.output)
+        self.assertEqual(archived.read_bytes(), legacy_bytes)
+        self.assertEqual(hashlib.sha256(archived.read_bytes()).hexdigest(), hashlib.sha256(legacy_bytes).hexdigest())
+        self.assertFalse(dossier.exists())
+        migrated_state = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('current_stage: "tracing"', migrated_state)
+        self.assertIn(f'behavior_id: "{behavior_id}"', migrated_state)
+        self.assertIn('status: "discovered"', migrated_state)
+        self.assertIn("dossier: null", migrated_state)
+        self.assertIn("requires retracing under Schema 2", migrated_state)
+        receipt = json.loads(Path(committed["receipt"]).read_text(encoding="utf-8"))
+        self.assertFalse(
+            any(
+                report.get("artifact_type") == "behavior-dossier"
+                for report in receipt.get("transform_reports", [])
+            )
+        )
+
+        tracing = self.run_cmd(
+            "begin", "--output", str(self.output), "--stage", "tracing"
+        )
+        scaffolded = self.run_cmd(
+            "scaffold",
+            "--output",
+            str(self.output),
+            "--transaction",
+            tracing["transaction_id"],
+            "--artifact-type",
+            "behavior-dossier",
+            "--identity",
+            f"behavior_id={behavior_id}",
+        )
+        rebuilt = Path(scaffolded["path"])
+        self.assertIn(
+            'artifact_schema_version: "2"', rebuilt.read_text(encoding="utf-8")
+        )
+        self.run_cmd(
+            "mark-behavior",
+            "--output",
+            str(self.output),
+            "--transaction",
+            tracing["transaction_id"],
+            "--behavior-id",
+            behavior_id,
+            "--status",
+            "understood",
+            "--dossier",
+            f"behavior-dossiers/{behavior_id}.md",
+        )
+        self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            tracing["transaction_id"],
+        )
+        rebuilt_hash = hashlib.sha256(dossier.read_bytes()).hexdigest()
+        current_resume = self.resume()
+        self.assertEqual(current_resume["result"], "resume-ready")
+        self.assertEqual(hashlib.sha256(dossier.read_bytes()).hexdigest(), rebuilt_hash)
+        self.assertEqual(self.plan()["status"], "committed")
+
+    def test_unversioned_dossier_is_archived_and_returns_to_tracing(self) -> None:
+        self.add_evidence()
+        _behavior_id, _dossier, _legacy_bytes = self.add_behavior_with_legacy_dossier(None)
+        resumed = self.resume()
+        self.assertEqual(resumed["result"], "migration-planned")
+        plan = self.plan()
+        dossier_step = next(
+            step for step in plan["steps"] if step["artifact_type"] == "behavior-dossier"
+        )
+        self.assertEqual(dossier_step["source_version"], "unknown")
+        self.assertEqual(dossier_step["target_version"], "2")
+        self.assertEqual(dossier_step["action"], "archive-and-rebuild")
+        self.assertNotIn("transform_id", dossier_step)
+        self.assertEqual(plan["resume_stage_after_migration"], "tracing")
+
+    def test_six_archived_dossiers_set_the_plan_and_state_to_tracing(self) -> None:
+        self.add_evidence()
+        dossiers = self.add_legacy_dossiers(6)
+        resumed = self.resume()
+        self.assertEqual(resumed["resume_stage_after_migration"], "tracing")
+        plan = self.plan()
+        dossier_steps = [
+            step
+            for step in plan["steps"]
+            if step["artifact_type"] == "behavior-dossier"
+            and step["action"] == "archive-and-rebuild"
+        ]
+        self.assertEqual(len(dossier_steps), 1)
+        self.assertEqual(dossier_steps[0]["rebuilding_stage"], "tracing")
+        self.assertEqual(
+            set(dossier_steps[0]["paths"]),
+            {dossier.relative_to(self.output).as_posix() for _id, dossier, _data in dossiers},
+        )
+
+        begun = self.begin_migration()
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        self.assertEqual(committed["next_stage"], "tracing")
+        state = (self.output / ".work" / "analysis-state.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(state.count('status: "discovered"'), 6)
+        self.assertEqual(state.count("dossier: null"), 6)
+        for behavior_id, dossier, legacy_bytes in dossiers:
+            self.assertFalse(dossier.exists())
+            archived = (
+                Path(committed["legacy_artifacts_archive"])
+                / dossier.relative_to(self.output)
+            )
+            self.assertEqual(archived.read_bytes(), legacy_bytes, behavior_id)
+
+        direct_synthesis = self.run_cmd(
+            "begin",
+            "--output",
+            str(self.output),
+            "--stage",
+            "synthesis",
+            expected=2,
+        )
+        self.assertIn("expected stage tracing", direct_synthesis["stderr"])
+
+    def test_conflicting_plan_resume_stage_is_rejected_before_begin(self) -> None:
+        self.add_evidence()
+        self.add_legacy_dossiers(6)
+        self.resume()
+        plan_path = self.output / ".work" / "migration-plan.yaml"
+        plan = self.plan()
+        plan["resume_stage_after_migration"] = "synthesis"
+        self.rewrite_plan_id(plan)
+        plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+        try:
+            from artifact_schema import ArtifactSchemaError, load_migration_plan, load_registry
+
+            with self.assertRaisesRegex(
+                ArtifactSchemaError,
+                "resume stage synthesis is later than required tracing",
+            ):
+                load_migration_plan(plan_path, load_registry())
+        finally:
+            sys.path.pop(0)
+        transactions = self.output / ".work" / "execution" / "transactions"
+        before = set(transactions.iterdir()) if transactions.is_dir() else set()
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXECUTOR),
+                "begin",
+                "--output",
+                str(self.output),
+                "--stage",
+                "migration",
+                "--plan",
+                str(plan_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "resume stage synthesis is later than required tracing",
+            result.stderr,
+        )
+        after = set(transactions.iterdir()) if transactions.is_dir() else set()
+        self.assertEqual(before, after)
+        self.assertFalse(
+            (self.output / ".work" / "execution" / "active.lock").exists()
+        )
+
+    def test_dossier_api_and_ba_rebuilds_choose_tracing(self) -> None:
+        self.add_evidence()
+        self.add_behavior_with_legacy_dossier("1")
+        contract = self.output / "tech-pack" / "contracts" / "repo.get-x.api-contract.md"
+        contract.parent.mkdir(parents=True, exist_ok=True)
+        contract.write_text(
+            '---\nartifact_type: "api-contract"\nartifact_schema_version: "2"\n---\n',
+            encoding="utf-8",
+        )
+        overview = self.output / "ba-pack" / "business-overview.md"
+        overview.parent.mkdir(parents=True, exist_ok=True)
+        overview.write_text(
+            '---\nartifact_type: "ba-overview"\nartifact_schema_version: "1"\n---\n',
+            encoding="utf-8",
+        )
+        resumed = self.resume()
+        self.assertEqual(resumed["resume_stage_after_migration"], "tracing")
+        rebuilt_types = {
+            step["artifact_type"]
+            for step in self.plan()["steps"]
+            if step["action"] == "archive-and-rebuild"
+        }
+        self.assertTrue(
+            {"behavior-dossier", "api-contract", "ba-overview"}.issubset(rebuilt_types)
+        )
+
+    def test_missing_evidence_takes_precedence_over_dossier_tracing(self) -> None:
+        self.add_behavior_with_legacy_dossier("1")
+        resumed = self.resume()
+        self.assertEqual(resumed["resume_stage_after_migration"], "inventory")
+
+    def test_committed_inconsistent_pack_plans_lifecycle_repair_at_tracing(self) -> None:
+        self.add_evidence()
+        behavior_id, dossier, _legacy_bytes = self.add_behavior_with_legacy_dossier("2")
+        dossier.unlink()
+        state_path = self.output / ".work" / "analysis-state.yaml"
+        state = state_path.read_text(encoding="utf-8")
+        state = state.replace('current_stage: "inventory"', 'current_stage: "synthesis"')
+        state = state.replace('status: "understood"', 'status: "discovered"')
+        state = state.replace(
+            f'dossier: "behavior-dossiers/{behavior_id}.md"', "dossier: null"
+        )
+        state_path.write_text(state, encoding="utf-8")
+        synthesis = self.output / ".work" / "repository-synthesis.md"
+        synthesis.write_text(
+            '---\nartifact_type: "repository-synthesis"\nartifact_schema_version: "3"\n'
+            'repository: "repo"\nsource_commit: "unknown"\n---\n',
+            encoding="utf-8",
+        )
+        overview = self.output / "tech-pack" / "repository-overview.md"
+        overview.parent.mkdir(parents=True, exist_ok=True)
+        overview.write_text(
+            '---\nartifact_type: "repository-overview"\nartifact_schema_version: "3"\n'
+            'repository: "repo"\nsource_commit: "unknown"\n---\n',
+            encoding="utf-8",
+        )
+        sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+        try:
+            from artifact_schema import load_registry, write_artifact_manifest
+
+            write_artifact_manifest(
+                self.output,
+                load_registry(),
+                str(self.repo),
+                "unknown",
+                "migration",
+                "previous-bad-migration",
+                [],
+            )
+        finally:
+            sys.path.pop(0)
+
+        resumed = self.resume()
+        self.assertEqual(resumed["result"], "migration-planned")
+        self.assertEqual(resumed["resume_stage_after_migration"], "tracing")
+        plan = self.plan()
+        archived_types = {
+            step["artifact_type"]
+            for step in plan["steps"]
+            if step["action"] == "archive-and-rebuild"
+        }
+        self.assertIn("repository-synthesis", archived_types)
+        self.assertIn("repository-overview", archived_types)
+
+        begun = self.begin_migration()
+        committed = self.run_cmd(
+            "commit",
+            "--output",
+            str(self.output),
+            "--transaction",
+            begun["transaction_id"],
+        )
+        self.assertEqual(committed["next_stage"], "tracing")
+        self.assertFalse(synthesis.exists())
+        self.assertFalse(overview.exists())
+        repaired_state = state_path.read_text(encoding="utf-8")
+        self.assertIn('status: "discovered"', repaired_state)
+        self.assertIn("dossier: null", repaired_state)
 
     def test_begin_rejects_manifest_and_artifact_metadata_mismatch(self) -> None:
         register = self.output / ".work" / "repository-register.md"
@@ -429,6 +944,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertIn('publication_status: "pending"', state)
 
     def test_registered_transform_is_planned_executed_and_sealed(self) -> None:
+        self.add_evidence()
         fixture = (
             SKILL_ROOT
             / "tests"
@@ -439,6 +955,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         register = self.output / ".work" / "repository-register.md"
         shutil.copy2(fixture, register)
         self.resume()
+        self.assertEqual(self.plan()["resume_stage_after_migration"], "synthesis")
         step = next(
             item
             for item in self.plan()["steps"]

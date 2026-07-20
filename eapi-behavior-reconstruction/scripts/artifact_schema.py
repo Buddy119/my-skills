@@ -237,6 +237,16 @@ def load_registry(path: Path = DEFAULT_REGISTRY_PATH) -> ArtifactRegistry:
                 raise ArtifactSchemaError(
                     f"artifact type {artifact_type} has invalid migration from {source}"
                 )
+            if source == version:
+                raise ArtifactSchemaError(
+                    f"artifact type {artifact_type} cannot declare a migration from "
+                    f"its current version {version}"
+                )
+            if target != version:
+                raise ArtifactSchemaError(
+                    f"artifact type {artifact_type} migration from {source} must target "
+                    f"current version {version}, observed {target}"
+                )
             if action == "mechanical-migrate":
                 if artifact_type not in MECHANICAL_ARTIFACT_TYPES:
                     raise ArtifactSchemaError(
@@ -664,6 +674,133 @@ def _behavior_entries(text: str) -> list[dict[str, str | None]]:
     return entries
 
 
+def analysis_prerequisite_stage(root: Path) -> tuple[str | None, tuple[str, ...]]:
+    """Return the earliest stage required by current Evidence and Behavior state.
+
+    This is a mechanical completeness check.  It does not judge Dossier meaning; it
+    only checks whether the Evidence Index exists and whether every required Behavior
+    has a Dossier and a terminal understanding status.
+    """
+
+    if not (root / ".work" / "evidence-index.json").is_file():
+        return "inventory", ("Evidence Index is missing",)
+
+    state_path = root / ".work" / "analysis-state.yaml"
+    state_text = state_path.read_text(encoding="utf-8") if state_path.is_file() else ""
+    state_entries = _behavior_entries(state_text)
+    catalog_path = root / ".work" / "behavior-catalog.yaml"
+    catalog_entries = (
+        _behavior_entries(catalog_path.read_text(encoding="utf-8"))
+        if catalog_path.is_file()
+        else []
+    )
+    state_by_id = {
+        str(entry.get("behavior_id")): entry
+        for entry in state_entries
+        if entry.get("behavior_id")
+    }
+    required_ids = set(state_by_id)
+    required_ids.update(
+        str(entry.get("behavior_id"))
+        for entry in catalog_entries
+        if entry.get("behavior_id")
+        and entry.get("status") not in {"duplicate", "excluded"}
+    )
+    dossier_root = root / ".work" / "behavior-dossiers"
+
+    def dossier_exists(behavior_id: str) -> bool:
+        entry = state_by_id.get(behavior_id, {})
+        declared = entry.get("dossier")
+        candidates = [dossier_root / f"{behavior_id}.md"]
+        if declared:
+            declared_path = Path(str(declared))
+            candidates.extend(
+                [
+                    root / ".work" / declared_path,
+                    dossier_root / declared_path.name,
+                ]
+            )
+        return any(path.is_file() for path in candidates)
+
+    missing = sorted(
+        behavior_id for behavior_id in required_ids if not dossier_exists(behavior_id)
+    )
+    incomplete = sorted(
+        behavior_id
+        for behavior_id, entry in state_by_id.items()
+        if entry.get("status") not in {"understood", "blocked"}
+    )
+    reasons: list[str] = []
+    if missing:
+        reasons.append("required Behavior Dossier is missing: " + ", ".join(missing))
+    if incomplete:
+        reasons.append("Behavior understanding is incomplete: " + ", ".join(incomplete))
+    return ("tracing", tuple(reasons)) if reasons else (None, ())
+
+
+def recovery_stage_requirements(
+    steps: Iterable[dict[str, Any]],
+    invalidated_artifacts: Iterable[dict[str, Any]],
+    prerequisite_stage: str | None = None,
+    prerequisite_reasons: Iterable[str] = (),
+) -> list[tuple[str, str]]:
+    """Collect semantic recovery requirements from the finalized Migration Plan."""
+
+    requirements: list[tuple[str, str]] = []
+    if prerequisite_stage is not None:
+        prerequisite_reason_list = tuple(prerequisite_reasons)
+        requirements.extend(
+            (prerequisite_stage, reason)
+            for reason in prerequisite_reason_list
+        )
+        if not prerequisite_reason_list:
+            requirements.append((prerequisite_stage, "analysis prerequisite"))
+    for step in steps:
+        action = step.get("action")
+        artifact_type = str(step.get("artifact_type", "<unknown>"))
+        rebuilding_stage = step.get("rebuilding_stage")
+        if rebuilding_stage not in STAGE_INDEX:
+            continue
+        requires_rebuild = action == "archive-and-rebuild" or (
+            action == "mechanical-migrate"
+            and artifact_type not in {"analysis-state", "artifact-manifest"}
+        )
+        if requires_rebuild:
+            requirements.append(
+                (
+                    str(rebuilding_stage),
+                    f"{artifact_type} {action}",
+                )
+            )
+    for item in invalidated_artifacts:
+        rebuilding_stage = item.get("rebuilding_stage")
+        artifact_type = str(item.get("artifact_type", "<unknown>"))
+        if rebuilding_stage in STAGE_INDEX:
+            requirements.append(
+                (str(rebuilding_stage), f"invalidated {artifact_type}")
+            )
+    return requirements
+
+
+def earliest_required_recovery_stage(
+    steps: Iterable[dict[str, Any]],
+    invalidated_artifacts: Iterable[dict[str, Any]],
+    prerequisite_stage: str | None = None,
+    prerequisite_reasons: Iterable[str] = (),
+) -> tuple[str | None, tuple[str, ...]]:
+    requirements = recovery_stage_requirements(
+        steps,
+        invalidated_artifacts,
+        prerequisite_stage,
+        prerequisite_reasons,
+    )
+    if not requirements:
+        return None, ()
+    earliest = min((stage for stage, _reason in requirements), key=STAGE_INDEX.get)
+    reasons = tuple(reason for stage, reason in requirements if stage == earliest)
+    return earliest, reasons
+
+
 def _reverse_dependencies(registry: ArtifactRegistry) -> dict[str, set[str]]:
     reverse: dict[str, set[str]] = {name: set() for name in registry.definitions}
     for definition in registry.definitions.values():
@@ -694,7 +831,6 @@ def build_migration_plan(
     snapshot, snapshot_hash = source_snapshot(root)
     grouped: dict[tuple[str, str, str, str, str, str | None], list[str]] = {}
     changed_types: set[str] = set()
-    direct_rebuild_stages: list[str] = []
     blocked_reasons: list[str] = []
     expected_archives: list[str] = []
 
@@ -707,8 +843,6 @@ def build_migration_plan(
         definition = registry.match(relative)
         if definition is None:
             action, rebuilding_stage, reason = _unregistered_step(relative)
-            if action != "block" and rebuilding_stage in STAGE_INDEX:
-                direct_rebuild_stages.append(rebuilding_stage)
             key = ("unregistered", "unknown", "unknown", action, rebuilding_stage, None)
             grouped.setdefault(key, []).append(relative)
             if action == "block":
@@ -745,10 +879,21 @@ def build_migration_plan(
             changed_types.add(definition.artifact_type)
         if action == "archive-and-rebuild":
             expected_archives.append(relative)
-            if definition.rebuild_stage in STAGE_INDEX:
-                direct_rebuild_stages.append(definition.rebuild_stage)
         if action == "block":
             blocked_reasons.append(f"{relative}: {reason}")
+
+    state_path = root / ".work" / "analysis-state.yaml"
+    state_text = state_path.read_text(encoding="utf-8") if state_path.is_file() else ""
+    explicit_stage = scalar_value(state_text, "current_stage")
+    if explicit_stage not in set(NORMAL_STAGES) | {"completed"}:
+        blocked_reasons.append(
+            "analysis state has no valid explicit current_stage; coarse phase or document text cannot choose a recovery point"
+        )
+    prerequisite_stage, prerequisite_reasons = analysis_prerequisite_stage(root)
+    if prerequisite_stage == "inventory":
+        changed_types.add("evidence-index")
+    elif prerequisite_stage == "tracing":
+        changed_types.add("behavior-dossier")
 
     invalidated = _dependency_closure(registry, changed_types)
     invalidated -= {
@@ -761,70 +906,6 @@ def build_migration_plan(
         "migration-plan",
         "stage-receipt",
     }
-
-    state_path = root / ".work" / "analysis-state.yaml"
-    state_text = state_path.read_text(encoding="utf-8") if state_path.is_file() else ""
-    explicit_stage = scalar_value(state_text, "current_stage")
-    if explicit_stage not in set(NORMAL_STAGES) | {"completed"}:
-        blocked_reasons.append(
-            "analysis state has no valid explicit current_stage; coarse phase or document text cannot choose a recovery point"
-        )
-    if not (root / ".work" / "evidence-index.json").is_file():
-        resume_stage = "inventory"
-    else:
-        entries = _behavior_entries(state_text)
-        catalog_path = root / ".work" / "behavior-catalog.yaml"
-        catalog_entries = (
-            _behavior_entries(catalog_path.read_text(encoding="utf-8"))
-            if catalog_path.is_file()
-            else []
-        )
-        dossier_root = root / ".work" / "behavior-dossiers"
-        state_by_id = {
-            entry.get("behavior_id"): entry
-            for entry in entries
-            if entry.get("behavior_id")
-        }
-        required_ids = set(state_by_id)
-        required_ids.update(
-            str(entry.get("behavior_id"))
-            for entry in catalog_entries
-            if entry.get("behavior_id")
-            and entry.get("status") not in {"duplicate", "excluded"}
-        )
-
-        def dossier_exists(behavior_id: str) -> bool:
-            entry = state_by_id.get(behavior_id, {})
-            declared = entry.get("dossier")
-            candidates = [dossier_root / f"{behavior_id}.md"]
-            if declared:
-                declared_path = Path(str(declared))
-                candidates.extend(
-                    [
-                        root / ".work" / declared_path,
-                        dossier_root / declared_path.name,
-                    ]
-                )
-            return any(path.is_file() for path in candidates)
-
-        missing_dossier = any(not dossier_exists(behavior_id) for behavior_id in required_ids)
-        incomplete_behavior = any(
-            entry.get("status") not in {"understood", "blocked"} for entry in entries
-        )
-        if missing_dossier or incomplete_behavior:
-            resume_stage = "tracing"
-        else:
-            stages = direct_rebuild_stages + [
-                registry.definitions[item].rebuild_stage
-                for item in invalidated
-                if item in registry.definitions
-                and registry.definitions[item].rebuild_stage in STAGE_INDEX
-            ]
-            if not stages and explicit_stage in STAGE_INDEX:
-                stages.append(str(explicit_stage))
-            elif not stages and explicit_stage == "completed":
-                stages.append("finalization")
-            resume_stage = min(stages, key=STAGE_INDEX.get) if stages else "finalization"
 
     steps: list[dict[str, Any]] = []
     for index, key in enumerate(
@@ -923,6 +1004,20 @@ def build_migration_plan(
             key=lambda item: (STAGE_INDEX.get(registry.definitions[item].rebuild_stage, 99), item),
         )
     ]
+    required_stage, _required_reasons = earliest_required_recovery_stage(
+        steps,
+        invalidated_records,
+        prerequisite_stage,
+        prerequisite_reasons,
+    )
+    if required_stage is not None:
+        resume_stage = required_stage
+    elif explicit_stage in STAGE_INDEX:
+        resume_stage = str(explicit_stage)
+    elif explicit_stage == "completed":
+        resume_stage = "finalization"
+    else:
+        resume_stage = "finalization"
     status = "blocked" if blocked_reasons else "planned"
     plan: dict[str, Any] = {
         "artifact_type": "migration-plan",
@@ -983,6 +1078,8 @@ def load_migration_plan(path: Path, registry: ArtifactRegistry) -> dict[str, Any
     for step in steps:
         if not isinstance(step, dict) or step.get("action") not in MIGRATION_ACTIONS:
             raise ArtifactSchemaError("migration plan contains an invalid step")
+        if step.get("rebuilding_stage") not in NORMAL_STAGES:
+            raise ArtifactSchemaError("migration plan contains an invalid rebuilding_stage")
         if not all(isinstance(step.get(name), list) for name in ("paths", "input_paths", "output_paths")):
             raise ArtifactSchemaError("migration step paths must be explicit lists")
         if step.get("action") == "mechanical-migrate":
@@ -1013,6 +1110,27 @@ def load_migration_plan(path: Path, registry: ArtifactRegistry) -> dict[str, Any
                     raise ArtifactSchemaError(
                         f"mechanical migration step is missing {name}"
                     )
+    invalidated = plan.get("invalidated_artifacts")
+    if not isinstance(invalidated, list):
+        raise ArtifactSchemaError("migration plan invalidated_artifacts must be a list")
+    for item in invalidated:
+        if not isinstance(item, dict) or item.get("rebuilding_stage") not in NORMAL_STAGES:
+            raise ArtifactSchemaError(
+                "migration plan contains an invalid invalidated Artifact rebuilding_stage"
+            )
+    required_stage, required_reasons = earliest_required_recovery_stage(
+        steps, invalidated
+    )
+    resume_stage = str(plan["resume_stage_after_migration"])
+    if (
+        required_stage is not None
+        and STAGE_INDEX[resume_stage] > STAGE_INDEX[required_stage]
+    ):
+        reason = required_reasons[0] if required_reasons else "Migration rebuild requirement"
+        raise ArtifactSchemaError(
+            f"migration plan resume stage {resume_stage} is later than required "
+            f"{required_stage}: {reason}"
+        )
     return plan
 
 

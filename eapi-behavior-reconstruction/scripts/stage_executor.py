@@ -25,6 +25,7 @@ from typing import Any, Iterable
 from artifact_schema import (
     ArtifactSchemaError,
     add_artifact_metadata,
+    analysis_prerequisite_stage,
     assess_artifact_manifest,
     artifact_metadata,
     build_migration_plan,
@@ -369,6 +370,8 @@ def update_behavior(
     status: str,
     dossier: str | None,
     notes: str | None,
+    *,
+    clear_dossier: bool = False,
 ) -> str:
     lines = text.splitlines()
     start: int | None = None
@@ -397,7 +400,7 @@ def update_behavior(
         end += 1
 
     replace_field("status", status)
-    if dossier is not None:
+    if dossier is not None or clear_dossier:
         replace_field("dossier", dossier)
     if notes is not None:
         replace_field("notes", notes)
@@ -3462,6 +3465,56 @@ def archive_legacy_artifacts(
     return final
 
 
+DOSSIER_RETRACE_NOTE = (
+    "Behavior Dossier schema migration requires retracing under Schema 2."
+)
+
+
+def _invalidated_dossier_behavior_ids(plan: dict[str, Any]) -> list[str]:
+    """Return explicit Behavior IDs from Dossier paths invalidated by the plan.
+
+    This is a path-identity projection only.  It deliberately does not read legacy
+    Dossier prose or infer Behavior identity from document content.
+    """
+
+    behavior_ids: set[str] = set()
+    expected_parent = Path(".work/behavior-dossiers")
+    for step in plan.get("steps", []):
+        if (
+            step.get("artifact_type") != "behavior-dossier"
+            or step.get("action") != "archive-and-rebuild"
+        ):
+            continue
+        for relative in step.get("paths", []):
+            path = Path(str(relative))
+            if path.parent == expected_parent and path.suffix == ".md" and path.stem:
+                behavior_ids.add(path.stem)
+    return sorted(behavior_ids)
+
+
+def _missing_dossier_behavior_ids(candidate: Path, state_text_value: str) -> list[str]:
+    dossier_root = candidate / ".work" / "behavior-dossiers"
+    missing: list[str] = []
+    for entry in behavior_entries(state_text_value):
+        behavior_id = entry.get("behavior_id")
+        if not behavior_id:
+            continue
+        candidates = [dossier_root / f"{behavior_id}.md"]
+        declared = entry.get("dossier")
+        if declared:
+            declared_path = Path(str(declared))
+            if not declared_path.is_absolute():
+                candidates.extend(
+                    [
+                        candidate / ".work" / declared_path,
+                        dossier_root / declared_path.name,
+                    ]
+                )
+        if not any(path.is_file() for path in candidates):
+            missing.append(str(behavior_id))
+    return sorted(set(missing))
+
+
 def _finalize_migration_candidate_state(
     candidate: Path, plan: dict[str, Any], repo: Path
 ) -> str:
@@ -3490,6 +3543,24 @@ def _finalize_migration_candidate_state(
         text = set_scalar(text, "business_model_status", "pending")
     publication = "stale" if plan.get("invalidated_artifacts") else "pending"
     text = set_scalar(text, "publication_status", publication)
+    known_behaviors = {
+        str(entry.get("behavior_id"))
+        for entry in behavior_entries(text)
+        if entry.get("behavior_id")
+    }
+    retrace_ids = set(_invalidated_dossier_behavior_ids(plan))
+    retrace_ids.update(_missing_dossier_behavior_ids(candidate, text))
+    for behavior_id in sorted(retrace_ids):
+        if behavior_id not in known_behaviors:
+            continue
+        text = update_behavior(
+            text,
+            behavior_id,
+            "discovered",
+            None,
+            DOSSIER_RETRACE_NOTE,
+            clear_dossier=True,
+        )
     atomic_write_text(path, text)
     return text
 
@@ -3508,6 +3579,23 @@ def _validate_migration_candidate(
         validate_plan_snapshot(output, plan)
     except ArtifactSchemaError as exc:
         errors.append(str(exc))
+    prerequisite_stage, prerequisite_reasons = analysis_prerequisite_stage(candidate)
+    candidate_state_file = candidate / STATE_FILE
+    candidate_stage = (
+        scalar_value(candidate_state_file.read_text(encoding="utf-8"), "current_stage")
+        if candidate_state_file.is_file()
+        else None
+    )
+    if (
+        prerequisite_stage in STAGE_INDEX
+        and candidate_stage in STAGE_INDEX
+        and STAGE_INDEX[str(candidate_stage)] > STAGE_INDEX[str(prerequisite_stage)]
+    ):
+        reason = prerequisite_reasons[0] if prerequisite_reasons else "analysis prerequisite"
+        errors.append(
+            f"Migration Candidate stage {candidate_stage} is later than required "
+            f"{prerequisite_stage}: {reason}"
+        )
     allowed, must_remove, preserve = migration_allowed_paths(plan)
     current_manifest = file_manifest(output)
     candidate_manifest = file_manifest(candidate)
@@ -5530,7 +5618,15 @@ def command_resume(args: argparse.Namespace) -> int:
             "status, commit, abort, or recover instead"
         )
 
-    if current_pack_is_versioned(output, registry):
+    prerequisite_stage, _prerequisite_reasons = analysis_prerequisite_stage(output)
+    current_stage = scalar_value(text, "current_stage")
+    lifecycle_repair_required = (
+        prerequisite_stage in STAGE_INDEX
+        and current_stage in STAGE_INDEX
+        and STAGE_INDEX[str(current_stage)] > STAGE_INDEX[str(prerequisite_stage)]
+    )
+
+    if current_pack_is_versioned(output, registry) and not lifecycle_repair_required:
         verify_repo_and_commit(text, repo)
         status = status_payload(output)
         if (
