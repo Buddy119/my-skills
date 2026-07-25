@@ -61,6 +61,14 @@ Run the full structure, Artifact, Manifest, Markdown, domain, link, Fragment, ci
 
 Use the risk categories in the Review Schema. Sample the highest-impact available instance in each applicable category, not the easiest instance. For lifecycle, sample one Object State definition, one Transition and its change point, one action that correctly has no State effect, and a Derived State when present. For `evidence-qualification-projection`, sample working facts with non-Confirmed states and verify that the Reader neither drops nor upgrades their exceptional qualifiers. Confirm that cited code proves the documented meaning, state outcome, boundary relation, configuration effect, failure handling, binding, or business trace—not merely that a file or symbol exists.
 
+For the developer implementation categories, independently sample a Behavior
+Flow decision/result and an Implementation Sequence participant/order chain.
+Verify the two models are not sourced from one generic flow record. Trace one
+material exception from origin through handler/translation to visible and state
+results. For Java, verify exact symbols plus DI/runtime binding; for
+configuration, verify the read/wiring, executable effect, Behavior relation,
+Endpoint relation, and caller/state/failure impact.
+
 An unresolved semantic finding blocks publication. Preserve `Unknown` or `Conflicting` when the repository cannot support a stronger conclusion.
 
 ## Reader Review
@@ -70,6 +78,12 @@ Read without source code first. Sample the applicable overview, behavior, contra
 For `five-minute-repository-orientation`, `capability-main-path`, `variant-priority-and-differences`, and `high-risk-visibility`, review the Overview before opening Technical Reference. Confirm that a developer can state the repository responsibility, retell each principal Capability path, distinguish proven behavior-changing Variants without an invented default, and identify the highest-attention risks and their deep links.
 
 For `schema-progressive-disclosure`, sample a large API Schema when available and verify that caller-required, conditional, and behaviorally significant fields precede the remaining field reference, field identities are not repeated, Schema-only basis remains clear, and a simple Contract does not contain an unnecessary completeness appendix.
+
+Also confirm that the dual diagrams have distinct Reader value, the sequence is
+legible rather than a complete call graph, API Contracts link directly to the
+sequence without copying it, exception paths are discoverable, and Endpoint
+navigation reaches the Java implementation slice and Config reverse-impact
+index when applicable.
 
 An unresolved reader problem blocks publication even when every link and table is mechanically valid.
 

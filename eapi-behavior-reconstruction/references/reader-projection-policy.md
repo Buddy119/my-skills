@@ -39,8 +39,12 @@ The executor must not create explanatory prose, invent missing table rows, selec
 API materialization affects:
 
 - Tech Behavior `api_contracts` and its visible Contract links;
+- each API Contract's direct link to the related Behavior
+  `#implementation-sequence`;
 - Tech Behavior Catalog Contract lists;
 - Endpoint Matrix Contract relationships;
+- Java Implementation Map Endpoint/Behavior navigation when applicable;
+- Runtime Config Matrix Endpoint reverse-impact navigation when applicable;
 - Repository Overview Endpoint counts, Behavior Contract navigation, availability, and connection interpretation;
 - the Field Pack API Contract Index when the Field Pack exists;
 - caller-visible Failure summaries when an affected Behavior participates in a Failure Pattern.
@@ -55,6 +59,11 @@ BA materialization affects:
 - BA Catalog Journey, Scenario, and Tech Coverage indexes.
 
 Do not copy complete Contracts, Scenarios, or Journeys into an upstream summary. Refresh navigation and the smallest useful explanation, then link to the owning document.
+
+The executor may maintain stable IDs, paths, and backlinks for Java
+implementation and Config impact records. AI must review any statement about
+which implementation is selected, how configuration changes execution, or what
+the caller observes; those are semantic Projection items.
 
 ## Commands
 
@@ -95,6 +104,11 @@ python3 <skill-root>/scripts/stage_executor.py mark-projection \
 ## Conflict and staleness rules
 
 - API relationships require agreement between the Tech Behavior declaration, Contract identity, and Endpoint Matrix role.
+- A Contract-to-sequence relationship also requires the target Behavior to
+  expose the real `#implementation-sequence` anchor.
+- Java and Config Endpoint navigation must agree with `JIMPL-*` and
+  `CFG-*-I*` Register relationships; the executor cannot choose among
+  conflicting bindings.
 - Scenario-to-Tech and Scenario-to-Journey relationships must be authored before reverse links are generated.
 - An ID, path, or relationship conflict makes the Projection invalid; the executor leaves affected Reader artifacts unchanged.
 - A malformed Reader table produces one structural root cause. Do not let the executor guess a replacement table.

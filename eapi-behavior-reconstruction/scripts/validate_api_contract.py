@@ -291,7 +291,9 @@ def main() -> int:
             errors.append(f"linked behavior document does not exist: {behavior_document}")
         else:
             try:
-                behavior_frontmatter, _ = split_frontmatter(behavior_path.read_text(encoding="utf-8"))
+                behavior_frontmatter, behavior_body = split_frontmatter(
+                    behavior_path.read_text(encoding="utf-8")
+                )
             except ValueError as exc:
                 errors.append(f"linked behavior document is invalid: {exc}")
             else:
@@ -311,8 +313,22 @@ def main() -> int:
                     re.M,
                 ):
                     errors.append("linked behavior api_contracts must point to this contract document")
+                if not re.search(
+                    r"^##\s+Implementation sequence\s*$",
+                    behavior_body,
+                    re.M,
+                ):
+                    errors.append(
+                        "linked behavior does not define the Implementation sequence section"
+                    )
         if not re.search(rf"\]\({re.escape(behavior_document)}\)", body):
             errors.append("contract body must contain a Markdown link matching behavior_document")
+        sequence_document = f"{behavior_document}#implementation-sequence"
+        if not re.search(rf"\]\({re.escape(sequence_document)}\)", body):
+            errors.append(
+                "contract body must link directly to the related Behavior "
+                f"Implementation sequence: {sequence_document}"
+            )
 
     endpoint_matrix = scalar_value(frontmatter, "endpoint_matrix")
     if not endpoint_matrix or endpoint_matrix.lower() in {"null", "none"}:

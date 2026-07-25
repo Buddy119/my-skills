@@ -18,7 +18,7 @@ from markdown_structure import parse_markdown
 
 
 DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "assets" / "reader-priority-schema.json"
-READER_PRIORITY_VALIDATION_VERSION = "1"
+READER_PRIORITY_VALIDATION_VERSION = "2"
 
 
 class ReaderPriorityError(RuntimeError):
@@ -47,7 +47,7 @@ def load_reader_priority_schema(path: Path = DEFAULT_SCHEMA_PATH) -> dict[str, A
         raise ReaderPriorityError(f"cannot read Reader Priority Schema {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ReaderPriorityError("Reader Priority Schema must be a JSON object")
-    if payload.get("reader_priority_schema_version") != "1":
+    if payload.get("reader_priority_schema_version") != "2":
         raise ReaderPriorityError("unsupported Reader Priority Schema version")
     if payload.get("validation_version") != READER_PRIORITY_VALIDATION_VERSION:
         raise ReaderPriorityError("Reader Priority validation version is inconsistent")

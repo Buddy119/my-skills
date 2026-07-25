@@ -138,6 +138,7 @@ List only fields not already presented in Request or Responses. Group with the `
 ## Related documents
 
 - [Tech Behavior](../behaviors/repository.behavior-name.md)
+- [Implementation sequence](../behaviors/repository.behavior-name.md#implementation-sequence)
 - [Endpoint Matrix](../endpoint-matrix.md#repository-method-route)
 <!-- TEMPLATE: Add links to Field Validation and Mapping, External Dependency Contracts, Runtime Config Matrix, or Failure Taxonomy only when relevant. -->
 

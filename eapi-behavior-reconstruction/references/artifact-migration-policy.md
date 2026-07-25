@@ -82,7 +82,7 @@ python3 <skill-root>/scripts/stage_executor.py resume \
 
 For a current Workflow 4 Pack with a complete valid Artifact Manifest, resume its explicit `current_stage` and do not create a Migration Plan.
 
-Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `6`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, Repository Synthesis Artifact Schema `3`, Repository Overview Artifact Schema `3`, Tech Behavior Artifact Schema `4`, API Contract Artifact Schema `3`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
+Otherwise inspect `.work/migration-plan.yaml`. Confirm its Plan ID, repository, commit, source snapshot, target versions, steps, invalidated types, expected archives, blocked reasons, and recovery stage. The current release targets Workflow Schema `4`, Artifact Registry `7`, Migration Plan Schema `2`, Analysis State Artifact Schema `2`, Register Schema `3`, Behavior Dossier Artifact Schema `3`, Repository Synthesis Artifact Schema `4`, Repository Overview Artifact Schema `3`, Tech Behavior Artifact Schema `5`, Runtime Config Matrix Artifact Schema `3`, Java Implementation Map Artifact Schema `1`, API Contract Artifact Schema `3`, Artifact Manifest Schema `2`, and Stage Receipt Schema `2`.
 
 Each mechanical step must visibly declare the Transform ID and its expected mechanical results. The plan is JSON-compatible YAML so the standard-library executor parses it deterministically. It must not contain repository knowledge conclusions.
 
@@ -144,19 +144,28 @@ A transform must not:
 - Generate `OBJ-*`, `STATE-*`, `ACT-*`, or `TRANS-*`, or infer that an old lifecycle verb represented an object State or a Transition.
 - Decide Criticality, Risk, Caller Visibility, State Outcome, business meaning, or remote behavior.
 - Generate Repository Synthesis or Reader documents.
+- Generate `CFG-*`, Config impacts, `JTYPE-*`, `JEDGE-*`, or `JIMPL-*`
+  semantic conclusions.
 
 If an explicit old ID has conflicting structural rows, or the source lacks safe split fields, fail the registered transform or use `archive-and-rebuild`. Never repair the ambiguity semantically inside Migration.
 
 Reader-first changes to Repository Synthesis, Tech Behaviors, or API Contracts do not by themselves mechanically invalidate a current Business Model or BA Pack. Preserve those business artifacts, then revalidate Scenario-to-Tech traceability and business-visible Variant differences against the rebuilt Tech Generation. Rebuild only the affected business artifacts when that semantic review finds a changed business fact or outcome.
 
-Behavior Dossier is a semantic working Artifact. Schema 1 cannot be mechanically upgraded to Schema 2 because Schema 2 requires renewed separation of object states, processing actions, data movement, Java semantic call traces when applicable, and evidence-backed lifecycle transitions. For a Version 1 or unversioned Dossier, Migration must:
+Behavior Dossier is a semantic working Artifact. Schema 2 cannot be mechanically upgraded to Schema 3 because Schema 3 requires independently modeled Behavior Flow and Implementation Sequence, exception propagation, Java implementation bindings, and Config-to-Endpoint impacts in addition to the lifecycle separation already introduced by Schema 2. Versions 0, 1, 2, and unversioned Dossiers are archived and rebuilt. Migration must:
 
 1. Archive the original bytes and SHA-256 without rewriting them.
-2. Remove the incompatible Dossier from the current working set without creating an empty Schema 2 stub.
-3. Reset the explicitly corresponding Behavior lifecycle entry to `discovered`, clear its current Dossier path, and record that Schema 2 retracing is required.
-4. Resume at `tracing`, where AI uses `scaffold` to create the Schema 2 Dossier and completes the Understanding Gate again.
+2. Remove the incompatible Dossier from the current working set without creating an empty Schema 3 stub.
+3. Reset the explicitly corresponding Behavior lifecycle entry to `discovered`, clear its current Dossier path, and record that Schema 3 retracing is required.
+4. Resume at `tracing`, where AI uses `scaffold` to create the Schema 3 Dossier and completes the Understanding Gate again.
 
 The Migration Transform Registry intentionally has no Behavior Dossier handler. Legacy Dossier text may be consulted as legacy evidence during retracing, but it cannot support an `understood` status or be adopted as a current semantic conclusion.
+
+The registered Repository Register 2→3 transform is deliberately narrow. It
+turns old configuration rows into deterministic `CFG-OBS-*` rows marked
+`Unresolved`, preserves existing `FO-*` identities, and sets newly introduced
+failure-origin/handler fields to `Unknown`. It creates empty Java, Config
+identity, and Config impact tables. AI performs all later Config reconciliation,
+Java modeling, and failure-handler interpretation in Tracing and Synthesis.
 
 If an older Executor already committed a Pack at `synthesis` or later while a required Dossier is missing or its Behavior remains `discovered|tracing`, Resume Audit must not return `resume-ready`. Create a new mechanical lifecycle-repair Migration, invalidate Synthesis and Reader Artifacts that depend on the unavailable Dossier, reset the affected Behavior lifecycle fields, and return to `tracing`. Do not restore semantic conclusions from the Legacy Archive automatically.
 

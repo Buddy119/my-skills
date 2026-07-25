@@ -172,6 +172,56 @@ class MigrationTransformTests(unittest.TestCase):
             "passed",
         )
 
+    def config_java_transform(self, name: str) -> tuple[Path, dict]:
+        root = self.root / name
+        register = root / ".work" / "repository-register.md"
+        register.parent.mkdir(parents=True)
+        shutil.copy2(
+            SKILL_ROOT
+            / "tests"
+            / "fixtures"
+            / "migration"
+            / "repository-register-2.md",
+            register,
+        )
+        definition = load_transform_registry().definitions[
+            "repository-register-2-to-3"
+        ]
+        report = execute_transform(
+            definition,
+            root,
+            [".work/repository-register.md"],
+            [".work/repository-register.md"],
+            self.assets,
+        )
+        return register, report
+
+    def test_register_v2_config_java_migration_is_deterministic_and_observation_only(
+        self,
+    ) -> None:
+        first, first_report = self.config_java_transform("config-first")
+        second, second_report = self.config_java_transform("config-second")
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertEqual(first_report["id_map"], second_report["id_map"])
+        self.assertEqual(
+            first_report["output_records"]["runtime_config_observations"], 2
+        )
+        self.assertEqual(first_report["output_records"]["runtime_config_records"], 0)
+        self.assertEqual(first_report["output_records"]["runtime_config_impacts"], 0)
+        self.assertEqual(first_report["output_records"]["java_types"], 0)
+        self.assertEqual(first_report["output_records"]["java_edges"], 0)
+        self.assertEqual(first_report["output_records"]["java_bindings"], 0)
+        self.assertEqual(first_report["output_records"]["failure_observations"], 1)
+        text = first.read_text(encoding="utf-8")
+        self.assertIn('artifact_schema_version: "3"', text)
+        self.assertIn("FO-003", text)
+        self.assertIn("| Unknown | Unknown |", text)
+        self.assertNotRegex(text, r"\|\s*CFG-\d+\s*\|")
+        self.assertNotRegex(text, r"\|\s*JTYPE-\d+\s*\|")
+        self.assertNotRegex(text, r"\|\s*JEDGE-\d+\s*\|")
+        self.assertNotRegex(text, r"\|\s*JIMPL-\d+\s*\|")
+        self.assertTrue(validate_register_file(first, load_register_schema()).valid)
+
 
 if __name__ == "__main__":
     unittest.main()

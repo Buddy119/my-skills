@@ -10,6 +10,18 @@ The dossier is not a Claim Ledger. Write connected explanations, working tables,
 
 Follow the executable path from trigger to observable result. Combine route, handler, controller, service, repository, client, and transformer code when they implement one flow.
 
+Build two independent models before calling the Behavior understood:
+
+- Behavior Flow: decisions, result-changing branches, state effects, side
+  effects, and observable outcomes.
+- Implementation Sequence: runtime participants, exact entry dispatch, ordered
+  calls and returns, transaction and external boundaries, asynchronous handoff,
+  and exception propagation.
+
+Do not mechanically expand Behavior Flow nodes into a sequence. The flow must
+remain readable without class names; the sequence must use supported symbols or
+logical runtime participants and preserve Unknown dynamic boundaries.
+
 Answer these questions before declaring the behavior understood:
 
 1. What triggers the behavior, and how is the entry point wired at runtime?
@@ -55,8 +67,12 @@ Before leaving the behavior, add applicable observations to the repository regis
 - Input or output field rules.
 - Proven outbound HTTP operations, executable usages, and mappings.
 - Behavior-changing runtime configuration.
+- Reconciled or candidate `CFG-OBS-*`, `CFG-*`, and Endpoint impact identities.
+- For Java, executable `JTYPE-*`, `JEDGE-*`, and `JIMPL-*` candidates and their
+  binding limitations.
 - External dependencies.
-- Material failures.
+- Material failures, including origin, handler, propagation, visible result,
+  state/side effects, and recovery.
 - Relationships to other behaviors.
 
 Do not create empty entries for categories that are not observed.
@@ -67,6 +83,11 @@ Move a behavior from `tracing` to `understood` only when:
 
 - The dossier contains a natural-language end-to-end narrative.
 - The main path and material decisions are clear.
+- Behavior Flow and Implementation Sequence can each be retold independently.
+- Sequence participants and material call order have source or binding support;
+  unresolved dispatch is shown as a boundary rather than invented.
+- Behavior Flow is not a class/method call graph, and the Implementation
+  Sequence is not a mechanical rewrite of the Behavior Flow.
 - Object conditions, processing actions, data movement, boundaries, outputs, and failures were checked.
 - Read, Observe, Validate, Transform, Map, Invoke, and Emit were not promoted to States without separate object-condition evidence.
 - Every claimed Transition has supported same-Object From/To conditions and a real change point; incomplete relationships remain unresolved.
@@ -76,6 +97,10 @@ Move a behavior from `tracing` to `understood` only when:
 - Applicable repository-register sections were updated.
 - For an API behavior, endpoint layer observations were recorded separately and no unproven external entry was attached to the behavior.
 - For Java, semantic tracing was completed, or its degraded/unavailable status, fallback investigation, unresolved edges, and impact were recorded.
+- Material exception origins, handlers, propagation, visible outcomes, and
+  state/recovery effects were checked.
+- Each Config-to-Endpoint impact has an executable Behavior link rather than a
+  name or route similarity.
 
 This is a reasoning gate. Do not delegate it to a structural validator. If the gate cannot be met, keep tracing or mark the behavior `blocked` with the precise missing evidence and impact.
 

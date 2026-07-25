@@ -43,7 +43,7 @@ def behavior_document(*, include_ba: bool = False) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "4"\n'
+        'artifact_schema_version: "5"\n'
         'behavior_id: "repo.behavior"\n'
         'title: "Behavior"\n'
         'repository: "repo"\n'
@@ -54,11 +54,22 @@ def behavior_document(*, include_ba: bool = False) -> str:
         '    document: "../contracts/repo.get-items.api-contract.md"\n'
         + ba
         + "failure_patterns: []\n"
+        + "java_bindings: []\n"
+        + "runtime_config_impacts: []\n"
         "---\n\n"
         "# Behavior\n\n"
         "## Summary\n\nHandles an item request.\n\n"
         "## Main path\n\n1. Accept the request.\n2. Return the result.\n\n"
         "## Behavior flow\n\n```mermaid\nflowchart LR\n A --> B\n```\n\n"
+        "## Implementation sequence\n\n"
+        "```mermaid\nsequenceDiagram\n"
+        "    participant Caller\n"
+        "    participant Entry\n"
+        "    Caller->>Entry: Request item\n"
+        "    Entry-->>Caller: Item result\n"
+        "```\n\n"
+        "## Exception and failure handling\n\n"
+        "No distinct exception path was observed in this projection fixture.\n\n"
         "## Related documents\n\n"
         "### API contracts\n\n"
         "- [Old label](../contracts/repo.get-items.api-contract.md)\n\n"
@@ -152,7 +163,10 @@ class ReaderProjectionTests(unittest.TestCase):
             'method: "GET"\n'
             'route: "/items"\n'
             'contract_status: "Confirmed"\n'
-            "---\n\n# Get items\n",
+            "---\n\n# Get items\n\n"
+            "## Related documents\n\n"
+            "- [Implementation sequence]"
+            "(../behaviors/repo.behavior.md#implementation-sequence)\n",
             encoding="utf-8",
         )
         (self.root / "tech-pack" / "endpoint-matrix.md").write_text(
@@ -200,6 +214,19 @@ class ReaderProjectionTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('endpoint_id: "repo.get-items"', catalog)
+        behavior = (self.root / "tech-pack" / "behaviors" / "repo.behavior.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "[Implementation sequence]"
+            "(../behaviors/repo.behavior.md#implementation-sequence)",
+            (
+                self.root
+                / "tech-pack"
+                / "contracts"
+                / "repo.get-items.api-contract.md"
+            ).read_text(encoding="utf-8"),
+        )
         overview = (self.root / "tech-pack" / "repository-overview.md").read_text(
             encoding="utf-8"
         )
@@ -351,6 +378,70 @@ class ReaderProjectionTests(unittest.TestCase):
         self.assertTrue(
             any(item["path"] == "tech-pack/repository-overview.md" for item in plan["semantic_items"])
         )
+
+    def test_api_projection_refreshes_java_and_config_endpoint_navigation(self) -> None:
+        (self.root / ".work" / "repository-register.md").write_text(
+            "# Repository register\n\n"
+            "## Behavior and endpoint Java implementation bindings\n\n"
+            "| Binding ID | Behavior ID | Endpoint ID(s) or trigger | Exact entry symbol | Type IDs | Edge IDs | Runtime implementation selection | Status | Unknowns or evidence |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            "| JIMPL-001 | repo.behavior | repo.get-items | repo.Handler.getItems() | JTYPE-001 | JEDGE-001 | constructor injection | Confirmed | source |\n\n"
+            "## Runtime configuration impact records\n\n"
+            "| Impact ID | Config ID | Behavior ID | Endpoint ID(s) | Impact type | Condition/value | Execution difference | Caller/state/failure effect | Status | Evidence |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n"
+            "| CFG-001-I01 | CFG-001 | repo.behavior | repo.get-items | timeout/retry/recovery | configured | changes timeout | timeout result changes | Confirmed | source |\n",
+            encoding="utf-8",
+        )
+        (self.root / "tech-pack" / "java-implementation-map.md").write_text(
+            "# Java implementation map\n\n"
+            "## Behavior and API implementation index\n\n"
+            "| Implementation | Behavior | Endpoint or trigger | Entry symbol | Principal Java types | Details |\n"
+            "|---|---|---|---|---|---|\n"
+            "| old | old | old | old | old | old |\n\n"
+            '<a id="jimpl-001"></a>\n\n'
+            "## JIMPL-001 — Implementation slice\n",
+            encoding="utf-8",
+        )
+        (self.root / "tech-pack" / "runtime-config-matrix.md").write_text(
+            "# Runtime configuration matrix\n\n"
+            "## Endpoint reverse impact index\n\n"
+            "| Endpoint | Affected behavior | Config impacts | What changes | Deep dive |\n"
+            "|---|---|---|---|---|\n"
+            "| old | old | old | old | old |\n\n"
+            '<a id="cfg-001-i01"></a>\n',
+            encoding="utf-8",
+        )
+
+        plan = self.module.refresh_projections(
+            root=self.root,
+            transaction_dir=self.tx,
+            transaction_id="tx-1",
+            stage="api-contract-publication",
+            repository="repo",
+            source_commit="abc",
+        )
+        self.assertEqual(plan["status"], "in-progress")
+        surfaces = {item["surface"] for item in plan["mechanical_items"]}
+        self.assertIn(
+            "java-implementation-map.endpoint-behavior-bindings", surfaces
+        )
+        self.assertIn("runtime-config-matrix.endpoint-reverse-index", surfaces)
+
+        java_map = (
+            self.root / "tech-pack" / "java-implementation-map.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("[repo.behavior](behaviors/repo.behavior.md)", java_map)
+        self.assertIn(
+            "[repo.get-items](contracts/repo.get-items.api-contract.md)", java_map
+        )
+        config = (
+            self.root / "tech-pack" / "runtime-config-matrix.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("[repo.behavior](behaviors/repo.behavior.md)", config)
+        self.assertIn(
+            "[repo.get-items](contracts/repo.get-items.api-contract.md)", config
+        )
+        self.assertIn("[`CFG-001-I01`](#cfg-001-i01)", config)
 
 
 if __name__ == "__main__":

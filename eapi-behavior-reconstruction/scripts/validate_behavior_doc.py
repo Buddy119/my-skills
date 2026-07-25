@@ -32,6 +32,8 @@ REQUIRED_KEYS = {
     "external_http_calls",
     "field_mappings",
     "failure_patterns",
+    "java_bindings",
+    "runtime_config_impacts",
     "analysis_limitations",
 }
 
@@ -39,6 +41,8 @@ REQUIRED_HEADINGS = {
     "Summary",
     "Main path",
     "Behavior flow",
+    "Implementation sequence",
+    "Exception and failure handling",
     "Source notes",
 }
 
@@ -149,8 +153,8 @@ def main() -> int:
 
     if scalar_value(frontmatter, "artifact_type") != "tech-behavior":
         errors.append("artifact_type must be tech-behavior")
-    if scalar_value(frontmatter, "artifact_schema_version") != "4":
-        errors.append("tech-behavior artifact_schema_version must be 4")
+    if scalar_value(frontmatter, "artifact_schema_version") != "5":
+        errors.append("tech-behavior artifact_schema_version must be 5")
 
     status = scalar_value(frontmatter, "overall_status")
     if status not in ALLOWED_STATUSES:
@@ -165,8 +169,48 @@ def main() -> int:
     if missing_headings:
         errors.append("missing sections: " + ", ".join(missing_headings))
 
-    if not re.search(r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I):
-        errors.append("Behavior flow must contain a Mermaid flowchart or graph")
+    flow_diagrams = re.findall(
+        r"```mermaid\s*\n\s*(?:flowchart|graph)\b", body, re.I
+    )
+    sequence_diagrams = re.findall(
+        r"```mermaid\s*\n\s*sequenceDiagram\b", body, re.I
+    )
+    if len(flow_diagrams) != 1:
+        errors.append(
+            "Behavior flow must contain exactly one Mermaid flowchart or graph"
+        )
+    if len(sequence_diagrams) != 1:
+        errors.append(
+            "Implementation sequence must contain exactly one Mermaid sequenceDiagram"
+        )
+    flow_section = re.search(
+        r"^##\s+Behavior flow\s*$\n(?P<body>.*?)(?=^##\s+|\Z)",
+        body,
+        re.M | re.S,
+    )
+    sequence_section = re.search(
+        r"^##\s+Implementation sequence\s*$\n(?P<body>.*?)(?=^##\s+|\Z)",
+        body,
+        re.M | re.S,
+    )
+    if flow_section and len(
+        re.findall(
+            r"```mermaid\s*\n\s*(?:flowchart|graph)\b",
+            flow_section.group("body"),
+            re.I,
+        )
+    ) != 1:
+        errors.append("Behavior flow Mermaid must be inside the Behavior flow section")
+    if sequence_section and len(
+        re.findall(
+            r"```mermaid\s*\n\s*sequenceDiagram\b",
+            sequence_section.group("body"),
+            re.I,
+        )
+    ) != 1:
+        errors.append(
+            "Implementation sequence Mermaid must be inside the Implementation sequence section"
+        )
 
     entry_type = scalar_value(frontmatter, "entry_type")
     api_inline, api_block = yaml_block(frontmatter, "api_contracts")
@@ -371,10 +415,6 @@ def main() -> int:
             )
 
     if failure_pattern_ids:
-        if "Failures, retries, and partial success" not in headings:
-            errors.append(
-                "structured failure_patterns exist but the Failures, retries, and partial success section is missing"
-            )
         for pattern_id in failure_pattern_ids:
             expected_target = f"../failure-taxonomy.md#{pattern_id.lower()}"
             if not re.search(rf"\]\({re.escape(expected_target)}\)", body):
@@ -382,6 +422,52 @@ def main() -> int:
     elif failure_inline not in {"", "[]"} or failure_block.strip():
         errors.append(
             "failure_patterns entries must contain a Failure Pattern ID or use failure_patterns: []"
+        )
+
+    java_inline, java_block = yaml_block(frontmatter, "java_bindings")
+    java_bindings = linked_entries(frontmatter, "java_bindings", "binding_id")
+    java_id_count = len(re.findall(r"^\s*-\s+binding_id:", java_block, re.M))
+    java_document_count = len(re.findall(r"^\s+document:", java_block, re.M))
+    if java_id_count != java_document_count:
+        errors.append("every java_bindings entry must contain binding_id and document")
+    if len({item[0] for item in java_bindings}) != len(java_bindings):
+        errors.append("java_bindings contains duplicate Binding IDs")
+    for binding_id, document in java_bindings:
+        if not re.fullmatch(r"JIMPL-\d+", binding_id):
+            errors.append(f"invalid Java implementation Binding ID: {binding_id}")
+        expected = f"../java-implementation-map.md#{binding_id.lower()}"
+        if document != expected:
+            errors.append(f"java_bindings document must be {expected}: {binding_id}")
+        if not re.search(rf"\]\({re.escape(document)}\)", body):
+            errors.append(f"Tech behavior does not link Java implementation: {binding_id}")
+    if not java_bindings and java_inline != "[]":
+        errors.append("empty Java implementation mapping must use java_bindings: []")
+
+    config_inline, config_block = yaml_block(frontmatter, "runtime_config_impacts")
+    config_impacts = linked_entries(
+        frontmatter, "runtime_config_impacts", "impact_id"
+    )
+    config_id_count = len(re.findall(r"^\s*-\s+impact_id:", config_block, re.M))
+    config_document_count = len(re.findall(r"^\s+document:", config_block, re.M))
+    if config_id_count != config_document_count:
+        errors.append(
+            "every runtime_config_impacts entry must contain impact_id and document"
+        )
+    if len({item[0] for item in config_impacts}) != len(config_impacts):
+        errors.append("runtime_config_impacts contains duplicate Impact IDs")
+    for impact_id, document in config_impacts:
+        if not re.fullmatch(r"CFG-\d+-I\d+", impact_id):
+            errors.append(f"invalid Runtime Config Impact ID: {impact_id}")
+        expected = f"../runtime-config-matrix.md#{impact_id.lower()}"
+        if document != expected:
+            errors.append(
+                f"runtime_config_impacts document must be {expected}: {impact_id}"
+            )
+        if not re.search(rf"\]\({re.escape(document)}\)", body):
+            errors.append(f"Tech behavior does not link Runtime Config impact: {impact_id}")
+    if not config_impacts and config_inline != "[]":
+        errors.append(
+            "empty Runtime Config impact mapping must use runtime_config_impacts: []"
         )
 
     citations = list(EVIDENCE_RE.finditer(body))

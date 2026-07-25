@@ -1,6 +1,6 @@
 {
-  "finalization_review_schema_version": "4",
-  "validation_version": "4",
+  "finalization_review_schema_version": "5",
+  "validation_version": "5",
   "outcomes": [
     "passed",
     "corrected",
@@ -33,6 +33,12 @@
         "processing-action-separation",
         "outbound-http-and-mapping",
         "configuration-branch",
+        "behavior-flow-decisions-and-results",
+        "implementation-sequence-participants-and-order",
+        "dual-flow-independent-modeling",
+        "exception-handler-and-visible-result",
+        "java-symbol-and-di-binding",
+        "configuration-api-impact",
         "retry-partial-or-dependency-failure",
         "endpoint-exposure",
         "dependency-identity-and-criticality",
@@ -59,7 +65,13 @@
         "capability-main-path",
         "variant-priority-and-differences",
         "high-risk-visibility",
-        "schema-progressive-disclosure"
+        "schema-progressive-disclosure",
+        "dual-flow-distinct-reader-value",
+        "implementation-sequence-legibility",
+        "contract-to-sequence-navigation",
+        "exception-path-discoverability",
+        "java-implementation-navigation",
+        "configuration-api-impact-navigation"
       ]
     }
   }

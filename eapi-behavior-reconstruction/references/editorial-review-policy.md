@@ -48,8 +48,14 @@ Sample at least these high-risk facts back to source when present:
 - A Processing Action that correctly remains outside the Object State model.
 - An outbound HTTP operation, one executable usage, and one mapping that proves both field boundaries.
 - A configuration-dependent branch.
+- A Config-to-Endpoint impact, including the executable read/wiring, affected
+  Behavior, selection condition, and caller/state/failure difference.
 - A retry, partial-success, or dependency-failure path.
 - For Java, a critical caller/callee edge and any interface-to-implementation selection that affects behavior.
+- One Behavior Flow decision/result and the separately evidenced participant
+  order in its Implementation Sequence.
+- One exception origin, handler, propagation decision, visible result, and
+  state/recovery consequence.
 - For API evidence, one application route, its external-entry correlation if any, and the resulting reachability assessment.
 - For an aggregated protocol-support group, one representative declaration and its classification basis; prioritize any orphaned or conflicting exception.
 - One synthesized Dependency, an Operation beneath it, the evidence that proves their shared identity, and one Required/Degradable/Optional/Unknown availability consequence.
@@ -73,6 +79,12 @@ Read the document without using source code and ask:
 
 - Can a developer explain the repository responsibility, each principal Capability path, the behavior-changing Variants, and the highest-attention risks before entering Technical Reference?
 - Can a developer retell the complete success and material failure paths?
+- Can a developer explain the Behavior Flow and the Implementation Sequence as
+  two different useful views rather than duplicate diagrams?
+- Can a developer find an exception at its sequence position and then understand
+  handling, visible result, state effect, and recovery?
+- From an Endpoint, can a Java developer reach the implementation slice and can
+  any developer reach the Config reverse-impact explanation?
 - Can a BA identify the business trigger, decisions, affected object, outcome, and exceptions?
 - Can either reader find deeper contract, lifecycle, mapping, configuration, dependency, or failure detail with one link?
 - Does the document contain repetitive status phrases, empty tables, template instructions, or validator-oriented wording?
@@ -89,6 +101,9 @@ For each API Contract, perform a caller-first review before reading its Source n
 - When invocation details are known, does the request example show method, path, required observed headers, and body rather than presenting a body fragment alone?
 - For a small response, is each fact presented only where it adds value, rather than repeated across the outcome row, response-fields table, and example?
 - Does the Contract summarize and link to Endpoint Matrix, Tech Behavior, field mappings, dependencies, and Failure Taxonomy instead of copying their detailed content?
+- Does the Contract link directly to the Tech Behavior's Implementation
+  Sequence while keeping internal participants and exception propagation out
+  of the caller-facing body?
 - Do request and response rows avoid downstream target paths, field renames, propagation, encoding, client-library checks, and other boundary-mapping detail that belongs in Field Validation and Mapping or External Dependency Contracts?
 - Do evidence markers stay visually secondary while still allowing a reader to reach the supporting source note?
 - For a large Schema, are required, conditionally required, and behaviorally significant fields visible before the remaining field reference, with no duplicate `Location + Field path` identity?

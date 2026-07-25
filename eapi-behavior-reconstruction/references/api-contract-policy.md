@@ -41,7 +41,9 @@ Organize the body in this order:
 5. `Examples` when a reliable request or response example can be reconstructed.
 6. `Contract completeness and limitations` only when a material Unknown, Conflict, schema/runtime gap, opaque transformation, or missing example affects use.
 7. `Complete field reference` only when a large observed Schema has remaining fields that would obscure the caller-first request or response sections.
-8. `Related documents` linking to the Behavior, Matrix, and only the applicable field, dependency, configuration, or failure references.
+8. `Related documents` linking directly to the Behavior's
+   `#implementation-sequence`, the Matrix, and only the applicable field,
+   dependency, configuration, or failure references.
 9. `Source notes`, containing compact evidence definitions used by the body.
 
 Always include Quick reference, Request, Responses, Related documents, and Source notes. When no caller-supplied input exists, say so briefly under Request. Remove empty input-location subsections, empty tables, template instructions, and optional sections that add no reader value.
@@ -140,3 +142,10 @@ Prefer executable code plus assertion-level tests for statuses, validation failu
 - Field Validation and Mapping owns non-API field rules, shared technical transformations, and proven outbound HTTP mappings. It may index API contracts but must not copy their full request/response tables.
 - Failure Taxonomy owns internal and repository-wide failure classification. It may link to caller-visible outcomes without duplicating error payload tables.
 - External Dependency Contracts owns downstream boundary detail. The API Contract links to it only when relevant.
+
+Do not place Controller, Service, Repository, Java class, database, downstream
+client, or internal exception-propagation sequences in a Contract. A separate
+`Protocol sequence` is allowed only when the caller must follow a supported
+multi-step protocol such as polling after `202`, callback acknowledgement, or
+challenge/response. Protocol Sequence participants and messages are
+caller-visible; internal runtime participants remain in Tech Behavior.

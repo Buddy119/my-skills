@@ -19,7 +19,7 @@ from markdown_structure import MarkdownStructure, parse_markdown
 
 
 DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "assets" / "reader-presentation-schema.json"
-READER_PRESENTATION_VALIDATION_VERSION = "1"
+READER_PRESENTATION_VALIDATION_VERSION = "2"
 SOURCE_CITATION_RE = re.compile(
     r"`(?P<path>(?!https?://)[^`:\n]+\.[A-Za-z0-9_-]+):"
     r"(?P<start>\d+)(?:-(?P<end>\d+))?`"
@@ -59,7 +59,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def load_reader_presentation_schema(path: Path = DEFAULT_SCHEMA_PATH) -> dict[str, Any]:
     schema = _load_json(path)
-    if schema.get("reader_presentation_schema_version") != "1":
+    if schema.get("reader_presentation_schema_version") != "2":
         raise ReaderPresentationError("unsupported Reader presentation schema version")
     if schema.get("validation_version") != READER_PRESENTATION_VALIDATION_VERSION:
         raise ReaderPresentationError("unsupported Reader presentation validation version")

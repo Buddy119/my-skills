@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
-SUPPORTED_REGISTER_SCHEMA_VERSIONS = {"2"}
+SUPPORTED_REGISTER_SCHEMA_VERSIONS = {"3"}
 DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "assets" / "register-schema.json"
 
 

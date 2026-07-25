@@ -184,7 +184,12 @@ REGISTER_HEADINGS = {
     "Outbound HTTP operation records",
     "Outbound HTTP operation usages",
     "External HTTP field mapping records",
-    "Runtime configuration effects",
+    "Runtime configuration observations",
+    "Runtime configuration records",
+    "Runtime configuration impact records",
+    "Java type records",
+    "Java dependency edge records",
+    "Behavior and endpoint Java implementation bindings",
     "External dependency observations",
     "Dependency contract records",
     "Dependency operation records",
@@ -199,6 +204,9 @@ SYNTHESIS_HEADINGS = {
     "Capability path model",
     "Variant model",
     "Risk hotspot model",
+    "Behavior flow model",
+    "Implementation sequence model",
+    "Exception handling model",
     "Behavior relationships",
     "Object state model",
     "Processing model",
@@ -207,6 +215,8 @@ SYNTHESIS_HEADINGS = {
     "Endpoint and contract model",
     "Outbound HTTP operation and mapping model",
     "Runtime configuration effects",
+    "Java implementation model",
+    "Config-to-Endpoint impact model",
     "Dependency contract model",
     "Repository-wide failure pattern model",
     "Repository connection model",
@@ -3466,7 +3476,7 @@ def archive_legacy_artifacts(
 
 
 DOSSIER_RETRACE_NOTE = (
-    "Behavior Dossier schema migration requires retracing under Schema 2."
+    "Behavior Dossier schema migration requires retracing under Schema 3."
 )
 
 

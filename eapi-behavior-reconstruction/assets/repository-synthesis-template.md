@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-synthesis"
-artifact_schema_version: "3"
+artifact_schema_version: "4"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 synthesis_status: "complete|partial|blocked"
@@ -49,6 +49,18 @@ For each hotspot record the affected Capability, visible impact, state/retry/rec
 
 Explain trigger chains, shared orchestration, shared rules, common components, and independently exposed behaviors.
 
+## Behavior flow model
+
+For every Behavior, independently synthesize the trigger, result-changing decisions, successful and alternative paths, evidence-backed state changes, important side effects, and observable results. This model must use behavior semantics rather than Java classes or method names.
+
+## Implementation sequence model
+
+For every Behavior, independently synthesize runtime participants, entry dispatch, ordered calls and returns, synchronous/asynchronous handoffs, persistence and external boundaries, transaction position, and material exception propagation. Record the evidence supporting each critical interaction and preserve dynamic/generated boundaries as Unknown. Do not derive this model from the Behavior Flow model.
+
+## Exception handling model
+
+Reconcile behavior-local exception and failure traces without replacing the repository-wide Failure Pattern model. For each material path retain the origin, handler, handling action, caller-visible result, state/side-effect position, recovery, related `FO-*`/`FAIL-*`, and the Behavior or Endpoint it affects.
+
 ## Object state model
 
 Reconcile `OBJ-*`, `STATE-*`, and `TRANS-*` records. Define every State as an object condition, distinguish Explicit, Observable, and Derived bases, and explain the executable evidence for every Transition. Derived States remain Inferred. Keep unsupported ordering and conflicting transitions outside the established lifecycle.
@@ -77,7 +89,17 @@ Reconcile executable call sites into Remote Operations only when Method, Logical
 
 ## Runtime configuration effects
 
-Synthesize how configuration changes execution, outcomes, dependency selection, timing, or recovery.
+Reconcile `CFG-OBS-*` observations into `CFG-*` identities and `CFG-*-I*` execution impacts. Establish Endpoint impact only through a confirmed Config read/wiring → executable Behavior effect → Behavior/Endpoint relation. Separate application availability, authentication, validation, branch/Variant, implementation or Dependency selection, timing, retry/recovery, output/status, and state/side-effect impacts. Keep external-entry and deployment intent in the Endpoint evidence model.
+
+## Java implementation model
+
+For Java repositories, reconcile `JTYPE-*`, `JEDGE-*`, and `JIMPL-*` records into behavior-scoped implementation slices. Connect Endpoint → Behavior → exact entry symbol → relevant production types and dependency edges. Preserve Interface candidates, DI selection evidence, Profile/Qualifier conditions, and dynamic/generated boundaries. Do not build a repository-wide call graph or include test-only types as production participants.
+
+For non-Java repositories, record `Not applicable`.
+
+## Config-to-Endpoint impact model
+
+Create both a Config-centric impact projection and an Endpoint reverse index. For each impact retain the Config and Impact IDs, Behavior and Endpoint, condition/value source, concrete execution difference, caller/state/failure effect, and links to Contracts, Behaviors, Failure, Dependency, or Endpoint evidence. Never infer the relation from similar names.
 
 ## Dependency contract model
 

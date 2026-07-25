@@ -1,0 +1,34 @@
+{
+  "register_schema_version": "2",
+  "tables": {
+    "runtime_config_effects": {
+      "section": "Runtime configuration effects",
+      "headers": [
+        "Configuration key or selector",
+        "Behavior ID",
+        "Read or wiring location",
+        "Default or value source",
+        "Observed execution effect",
+        "Scope or condition",
+        "Status",
+        "Evidence"
+      ]
+    },
+    "failure_observations": {
+      "section": "Failure observations",
+      "headers": [
+        "Observation ID",
+        "Failure category",
+        "Behavior ID",
+        "Trigger or source",
+        "Handling and propagation",
+        "Caller-visible result",
+        "State outcome",
+        "Retry or recovery",
+        "Status",
+        "Evidence",
+        "Reconciliation"
+      ]
+    }
+  }
+}

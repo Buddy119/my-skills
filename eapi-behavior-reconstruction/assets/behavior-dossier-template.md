@@ -1,6 +1,6 @@
 ---
 artifact_type: "behavior-dossier"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 behavior_id: "repository.behavior-name"
 working_title: "Human-readable working title"
 repository: "repository-name"
@@ -22,6 +22,16 @@ Explain the observable purpose currently suggested by the executable path, what 
 ## End-to-end executable narrative
 
 Retell the flow from trigger to observable result in natural language. Include the major calls and decisions needed to understand the behavior without listing every method.
+
+## Behavior flow model
+
+Model the trigger, behavior-changing decisions, successful and alternative paths, evidence-backed state changes, important side effects, and observable results. Use business or behavior language rather than class and method names. This model is the source for the Reader-facing Behavior Flow and must not be reused as Sequence metadata.
+
+## Implementation sequence model
+
+Independently model runtime participants, entry dispatch, ordered calls and returns, synchronous and asynchronous handoffs, persistence, external boundaries, transaction boundaries, and material `alt`, `opt`, `loop`, or exception paths. For every participant and critical interaction, record the exact source or binding evidence. Do not derive this sequence by expanding Behavior Flow nodes.
+
+When a framework, proxy, generated component, or dynamic dispatch cannot be resolved, show the observed boundary and preserve the unknown rather than inventing an internal caller. If a minimal trigger-to-result sequence cannot be established, keep this dossier `blocked`.
 
 ## Semantic symbol and call trace
 
@@ -87,9 +97,13 @@ Record responses, events, messages, external calls, resources, and other effects
 
 Explain important failure conditions, propagation, visible results, state outcomes, retries, DLQs, compensation, idempotency, and partial completion where observed. Add each material path as an `FO-nnn` observation in the repository register. Do not assign repository-wide Failure Patterns until synthesis.
 
+## Exception handling trace
+
+For every material exception or non-exception failure on the executable path, record its origin, thrown type or triggering condition, propagation path, local catch or framework/global handler, translation/propagation/swallow/degradation/retry action, caller-visible result, state and side effects at the failure point, and observed rollback, compensation, retry, or recovery. Link the corresponding `FO-*` observation. Do not turn an exception class name into a repository-wide Failure Pattern.
+
 ## Runtime configuration and IaC
 
-Record only wiring or configuration that affects triggering, branching, dependencies, timeouts, retry, recovery, or outcomes.
+Record only wiring or configuration that affects triggering, availability, authentication, validation, branching, implementation or dependency selection, timeouts, retry, recovery, output, state, side effects, or outcomes. Record the exact read/wiring location and executable effect first. Treat affected Endpoint IDs as candidates until synthesis confirms the Config → Behavior → Endpoint chain. Keep deployment/exposure evidence separate from application-execution effects.
 
 ## Test observations
 
@@ -110,6 +124,11 @@ List the endpoint, Lifecycle Observation, Object, State, Action, Transition, fie
 ## Understanding gate
 
 - [ ] The complete flow can be retold coherently.
+- [ ] Behavior Flow and Implementation Sequence were modeled independently and can each be retold.
+- [ ] Behavior Flow expresses decisions and results rather than copying classes or methods.
+- [ ] Implementation Sequence participants, call order, returns, boundaries, and material exception paths have source or binding evidence.
+- [ ] Implementation Sequence was not mechanically expanded from Behavior Flow nodes.
+- [ ] Dynamic or generated dispatch remains an explicit boundary rather than an invented call edge.
 - [ ] Main success and material decision paths were checked.
 - [ ] Object conditions, processing actions, data movement, boundaries, outputs, and failures were checked.
 - [ ] Every claimed State describes an object condition and records its basis.
@@ -121,6 +140,8 @@ List the endpoint, Lifecycle Observation, Object, State, Action, Transition, fie
 - [ ] Key evidence and unresolved questions are recorded.
 - [ ] Applicable repository-register sections were updated.
 - [ ] For Java, semantic tracing was completed or the degraded/unavailable investigation and its impact were recorded.
+- [ ] Material exception handlers, translations, swallowed failures, and state-at-failure outcomes were checked.
+- [ ] Configuration-to-Behavior effects and candidate Endpoint impacts were checked without merging exposure intent with execution behavior.
 - [ ] For an API behavior, endpoint evidence layers were recorded separately and only explicitly bound external entries were attached.
 
 Set `understanding_status: understood` only after this reasoning review passes.

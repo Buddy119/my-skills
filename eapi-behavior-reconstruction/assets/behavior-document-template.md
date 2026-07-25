@@ -1,6 +1,6 @@
 ---
 artifact_type: "tech-behavior"
-artifact_schema_version: "4"
+artifact_schema_version: "5"
 behavior_id: "repository.behavior-name"
 title: "Human-readable behavior title"
 repository: "repository-name"
@@ -30,6 +30,8 @@ external_dependencies:
 external_http_calls: []
 field_mappings: []
 failure_patterns: []
+java_bindings: []
+runtime_config_impacts: []
 analysis_limitations:
   - "Describe an excluded or unavailable area"
 ---
@@ -60,7 +62,7 @@ Describe the normal successful path as a short ordered narrative. Put the princi
 
 ## Behavior flow
 
-Keep the diagram small enough to retell. Show only decisions that change the result, state, or important side effect.
+Model decisions, result-changing branches, evidence-backed state changes, important side effects, and observable results. Do not use classes and methods as the primary nodes. This is a first-class view and is not the source metadata for the Implementation Sequence.
 
 ```mermaid
 flowchart TD
@@ -69,6 +71,31 @@ flowchart TD
     C --> D[Observable result]
     B -->|Rejected or alternative| E[Visible alternative or failure]
 ```
+
+## Implementation sequence
+
+Independently show runtime participants, entry dispatch, ordered calls and returns, persistence and external boundaries, transaction position, and material exception propagation. Use exact confirmed Java symbols when available and logical runtime participants for other languages. Keep unresolved framework or dynamic dispatch as an explicit boundary.
+
+```mermaid
+sequenceDiagram
+    participant Trigger as Trigger participant
+    participant Entry as Repository entry
+    participant Work as Required processing or boundary
+    Trigger->>Entry: Supported invocation
+    Entry->>Work: Required operation
+    Work-->>Entry: Result or acknowledged handoff
+    Entry-->>Trigger: Observable result
+```
+
+Support this sequence with Source Notes separate from the Behavior Flow evidence. Do not mechanically translate the flowchart nodes into participants.
+
+## Exception and failure handling
+
+Explain the material exception and failure paths on this Behavior's executable sequence. Keep repository-wide grouping in Failure Taxonomy.
+
+| Failure or exception | Origin | Handler and action | Visible result | State and side effects | Retry/recovery | Deep dive |
+|---|---|---|---|---|---|---|
+| Failure condition or exception type | Exact call, boundary, or condition | Catch, advice, framework handler; translate/propagate/swallow/degrade/retry | API, event, async, degraded, false-success, or Unknown | Unchanged, rolled back, partial, committed, side effect, or Unknown | Observed mechanism or Unknown | Contract, `FAIL-*`, Dependency, Lifecycle, or [E6](#e6) |
 
 ## Material variants and risks
 
@@ -122,14 +149,6 @@ Include only when `external_dependencies` is non-empty. Keep shared role and ava
 |---|---|---|---|
 | [DEP-001](../external-dependency-contracts.md#dep-001) *(Unknown)* | Purpose | Required/Degradable/Optional/Unknown | Failure, fallback, partial result, or Unknown [E5](#e5) |
 
-### Failures, retries, and partial success
-
-Include material executable failure paths. Link reconciled `FAIL-*` identities without copying the repository taxonomy.
-
-| Failure or Pattern | Handling and visible result | State, retry, and recovery |
-|---|---|---|
-| [FAIL-001](../failure-taxonomy.md#fail-001) *(Conflicting)* | Observed handling/result | State outcome and mechanism or Unknown [E6](#e6) |
-
 ### Outputs and side effects
 
 Include only outputs or side effects that are not already clear from Main Path and related Contracts.
@@ -142,6 +161,18 @@ Include only outputs or side effects that are not already clear from Main Path a
 
 - [`METHOD /normalized/route`](../contracts/repository.method-route.api-contract.md)
 - [Endpoint exposure and reachability](../endpoint-matrix.md#repository-method-route)
+
+### Java implementation
+
+<!-- TEMPLATE: Keep only for Java Behaviors with reconciled JIMPL identities. Delete this comment. -->
+
+- [`JIMPL-001` implementation slice](../java-implementation-map.md#jimpl-001)
+
+### Runtime configuration impacts
+
+<!-- TEMPLATE: Keep only when runtime_config_impacts is non-empty. Delete this comment. -->
+
+- [`CFG-001-I01` API/Behavior impact](../runtime-config-matrix.md#cfg-001-i01)
 
 ### BA scenarios
 

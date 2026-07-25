@@ -15,7 +15,7 @@ from artifact_schema import ArtifactDefinition, ArtifactRegistry, artifact_metad
 DEFAULT_SCAFFOLD_SCHEMA_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "artifact-scaffold-schema.json"
 )
-SCAFFOLD_SCHEMA_VERSION = "1"
+SCAFFOLD_SCHEMA_VERSION = "2"
 PORTABLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 IDENTITY_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

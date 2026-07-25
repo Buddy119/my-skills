@@ -40,7 +40,7 @@ def api_behavior_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "4"\n'
+        'artifact_schema_version: "5"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -61,6 +61,8 @@ def api_behavior_fixture() -> str:
         "external_http_calls: []\n"
         "field_mappings: []\n"
         "failure_patterns: []\n"
+        "java_bindings: []\n"
+        "runtime_config_impacts: []\n"
         "analysis_limitations: []\n"
         "---\n\n"
         "# Get customer\n\n"
@@ -68,6 +70,15 @@ def api_behavior_fixture() -> str:
         "## Trigger, result, and scope\n\nThe application route invokes the handler and returns the customer result.\n\n"
         "## Main path\n\n1. Accept the request.\n2. Return the customer result.\n\n"
         "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
+        "## Implementation sequence\n\n"
+        "```mermaid\nsequenceDiagram\n"
+        "    participant Caller\n"
+        "    participant Entry\n"
+        "    Caller->>Entry: GET customer\n"
+        "    Entry-->>Caller: Customer result\n"
+        "```\n\n"
+        "## Exception and failure handling\n\n"
+        "No distinct exception path is observed in this fixture.\n\n"
         "## Implementation reference\n\n### Inputs\n\nThe caller input is defined in the API Contract.\n\n"
         "## Related documents\n\n### API contracts\n\n"
         "- [GET /customers/{id}](../contracts/sample-repo.get-customer.api-contract.md)\n\n"
@@ -140,6 +151,8 @@ def api_contract_fixture() -> str:
         "| 200 | The handler completes | Customer result [E1](#e1) | None observed |\n\n"
         "## Related documents\n\n"
         "- [Tech Behavior](../behaviors/sample-repo.get-customer.md)\n"
+        "- [Implementation sequence]"
+        "(../behaviors/sample-repo.get-customer.md#implementation-sequence)\n"
         "- [Endpoint Matrix](../endpoint-matrix.md#sample-repo-get-customer)\n\n"
         "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:1` establishes the route and observed response.\n'
@@ -181,7 +194,7 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "4"\n'
+        'artifact_schema_version: "5"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -200,6 +213,8 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "external_http_calls: []\n"
         "field_mappings: []\n"
         "failure_patterns: []\n"
+        "java_bindings: []\n"
+        "runtime_config_impacts: []\n"
         "analysis_limitations: []\n"
         "---\n\n"
         "# Manage customer profile\n\n"
@@ -209,6 +224,15 @@ def complete_api_behavior_fixture(*, include_ba: bool) -> str:
         "## Behavior flow\n\n"
         "```mermaid\nflowchart TD\n    A[Profile request] --> B{Read or update}\n"
         "    B --> C[Return profile result]\n```\n\n"
+        "## Implementation sequence\n\n"
+        "```mermaid\nsequenceDiagram\n"
+        "    participant Caller\n"
+        "    participant Entry\n"
+        "    Caller->>Entry: Read or update profile\n"
+        "    Entry-->>Caller: Profile result\n"
+        "```\n\n"
+        "## Exception and failure handling\n\n"
+        "No distinct exception path is observed in this fixture.\n\n"
         "## Implementation reference\n\n### Inputs\n\nCaller inputs are defined by the endpoint Contracts.\n\n"
         "### Rules\n\nThe route selects the requested profile operation.\n\n"
         "## Related documents\n\n### API contracts\n\n"
@@ -406,6 +430,8 @@ def complete_api_contract_fixture(
         "| 200 | The handler completes | Customer profile result [E1](#e1) | None observed |\n\n"
         "## Related documents\n\n"
         f"- [Tech Behavior](../behaviors/{COMPLETE_BEHAVIOR_ID}.md)\n"
+        f"- [Implementation sequence]"
+        f"(../behaviors/{COMPLETE_BEHAVIOR_ID}.md#implementation-sequence)\n"
         f"- [Endpoint Matrix](../endpoint-matrix.md#{anchor})\n\n"
         "## Source notes\n\n"
         f'<a id="e1"></a> **E1** — `src/Handler.java:{source_line}` establishes the route and response.\n'
@@ -529,7 +555,7 @@ def complete_dossier_fixture() -> str:
     return (
         "---\n"
         'artifact_type: "behavior-dossier"\n'
-        'artifact_schema_version: "2"\n'
+        'artifact_schema_version: "3"\n'
         f'behavior_id: "{COMPLETE_BEHAVIOR_ID}"\n'
         'working_title: "Manage customer profile"\n'
         'repository: "sample-repo"\n'
@@ -551,6 +577,10 @@ def complete_dossier_fixture() -> str:
         "Both application routes are confirmed; external deployment evidence was not supplied.\n\n"
         "## Input handling and validation\n\nThe path identifies the customer.\n\n"
         "## Decisions and rules\n\nThe HTTP method selects read or update intent.\n\n"
+        "## Behavior flow model\n\n"
+        "The visible decision distinguishes read from update and returns a profile result.\n\n"
+        "## Implementation sequence model\n\n"
+        "The framework dispatches to the entry method, which performs the selected operation and returns.\n\n"
         "## Main successful path\n\nThe handler accepts the request and returns a profile result.\n\n"
         "## Object and state observations\n\nNo durable object state is modeled in this fixture.\n\n"
         "## Processing actions and data movement\n\nNo processing action is modeled in this fixture.\n\n"
@@ -638,7 +668,7 @@ def complete_repository_synthesis_fixture(executor) -> str:
     return (
         "---\n"
         'artifact_type: "repository-synthesis"\n'
-        'artifact_schema_version: "3"\n'
+        'artifact_schema_version: "4"\n'
         'repository: "sample-repo"\n'
         'source_commit: "unknown"\n'
         "---\n\n"
@@ -1151,7 +1181,7 @@ class StageExecutorTests(unittest.TestCase):
         dossier = Path(result["path"])
         dossier_text = dossier.read_text(encoding="utf-8")
         self.assertIn('artifact_type: "behavior-dossier"', dossier_text)
-        self.assertIn('artifact_schema_version: "2"', dossier_text)
+        self.assertIn('artifact_schema_version: "3"', dossier_text)
         self.assertIn('behavior_id: "sample-repo.update-customer"', dossier_text)
         self.assertIn('repository: "sample-repo"', dossier_text)
         self.assertIn('source_commit: "unknown"', dossier_text)
@@ -1891,7 +1921,7 @@ class StageExecutorTests(unittest.TestCase):
         dossier.write_text(
             "---\n"
             'artifact_type: "behavior-dossier"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'behavior_id: "sample-repo.handle-request"\n'
             "---\n",
             encoding="utf-8",
@@ -2466,7 +2496,7 @@ class StageExecutorTests(unittest.TestCase):
             json.loads(presentation_validator["stdout"])[
                 "reader_presentation_validation_version"
             ],
-            "1",
+            "2",
         )
         self.assertEqual(
             pack_validator["command"][
@@ -2874,7 +2904,7 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_receipt["markdown_fragment_error_count"], 0)
         self.assertEqual(final_receipt["markdown_fragment_skipped_group_count"], 0)
         self.assertEqual(status["markdown_fragment_validation_status"], "current")
-        self.assertEqual(final_receipt["reader_projection_validation_version"], "2")
+        self.assertEqual(final_receipt["reader_projection_validation_version"], "3")
         self.assertEqual(final_receipt["reader_projection_api_status"], "current")
         self.assertEqual(final_receipt["reader_projection_ba_status"], "current")
         self.assertEqual(final_receipt["reader_projection_pending_count"], 0)
@@ -2885,8 +2915,8 @@ class StageExecutorTests(unittest.TestCase):
         self.assertEqual(final_validation["reader_review_status"], "current")
         self.assertEqual(final_validation["finalization_review_unresolved_count"], 0)
         self.assertEqual(final_validation["finalization_review_stale_count"], 0)
-        self.assertEqual(final_receipt["finalization_review_validation_version"], "4")
-        self.assertEqual(final_receipt["reader_presentation_validation_version"], "1")
+        self.assertEqual(final_receipt["finalization_review_validation_version"], "5")
+        self.assertEqual(final_receipt["reader_presentation_validation_version"], "2")
         self.assertEqual(final_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(final_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(final_receipt["reader_review_status"], "current")
@@ -3342,7 +3372,7 @@ class StageExecutorTests(unittest.TestCase):
         projection_receipt = json.loads(
             Path(projection_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(projection_receipt["reader_projection_validation_version"], "2")
+        self.assertEqual(projection_receipt["reader_projection_validation_version"], "3")
         self.assertEqual(projection_receipt["reader_projection_api_status"], "current")
         self.assertEqual(projection_receipt["reader_projection_ba_status"], "current")
         projection_status = json.loads(
@@ -3420,7 +3450,7 @@ class StageExecutorTests(unittest.TestCase):
         review_receipt = json.loads(
             Path(review_commit["receipt"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(review_receipt["finalization_review_validation_version"], "4")
+        self.assertEqual(review_receipt["finalization_review_validation_version"], "5")
         self.assertEqual(review_receipt["mechanical_pass_status"], "passed")
         self.assertEqual(review_receipt["semantic_fact_review_status"], "current")
         self.assertEqual(review_receipt["reader_review_status"], "current")
@@ -3474,7 +3504,7 @@ class StageExecutorTests(unittest.TestCase):
         synthesis_text = (
             "---\n"
             'artifact_type: "repository-synthesis"\n'
-            'artifact_schema_version: "3"\n'
+            'artifact_schema_version: "4"\n'
             'repository: "sample-repo"\n'
             'source_commit: "unknown"\n'
             "---\n\n"
@@ -3632,14 +3662,16 @@ class StageExecutorTests(unittest.TestCase):
         self.assertTrue(receipt_payload["formal_pack_published"])
         self.assertTrue((self.output / "tech-pack" / "repository-overview.md").is_file())
         self.assertEqual(
-            receipt_payload["repository_register_artifact_schema_version"], "2"
+            receipt_payload["repository_register_artifact_schema_version"], "3"
         )
         self.assertEqual(
             receipt_payload["validator_domain_statuses"],
             {
+                "config": "valid",
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "java": "valid",
                 "lifecycle": "valid",
                 "markdown": "valid",
                 "markdown-fragment": "valid",

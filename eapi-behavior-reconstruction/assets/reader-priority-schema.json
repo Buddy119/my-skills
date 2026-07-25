@@ -1,6 +1,6 @@
 {
-  "reader_priority_schema_version": "1",
-  "validation_version": "1",
+  "reader_priority_schema_version": "2",
+  "validation_version": "2",
   "artifacts": {
     "repository-overview": {
       "artifact_schema_version": "3",
@@ -27,12 +27,14 @@
       ]
     },
     "tech-behavior": {
-      "artifact_schema_version": "4",
+      "artifact_schema_version": "5",
       "template": "behavior-document-template.md",
       "required_h2": [
         "Summary",
         "Main path",
         "Behavior flow",
+        "Implementation sequence",
+        "Exception and failure handling",
         "Source notes"
       ],
       "ordered_h2": [
@@ -40,6 +42,8 @@
         "Trigger, result, and scope",
         "Main path",
         "Behavior flow",
+        "Implementation sequence",
+        "Exception and failure handling",
         "Material variants and risks",
         "Implementation reference",
         "Related documents",

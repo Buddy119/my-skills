@@ -20,7 +20,7 @@ from typing import Any
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "finalization-review-schema.json"
 )
-FINALIZATION_REVIEW_VALIDATION_VERSION = "4"
+FINALIZATION_REVIEW_VALIDATION_VERSION = "5"
 REVIEW_TYPES = ("mechanical", "semantic-fact", "reader")
 REVIEW_LEDGER_NAME = "finalization-review.json"
 REVIEW_BASELINE_NAME = "finalization-review-baseline.json"
@@ -85,7 +85,7 @@ def read_json(path: Path) -> dict[str, Any]:
 def load_review_schema(path: Path | None = None) -> dict[str, Any]:
     schema_path = path or DEFAULT_SCHEMA_PATH
     payload = read_json(schema_path)
-    if payload.get("finalization_review_schema_version") != "4":
+    if payload.get("finalization_review_schema_version") != "5":
         raise FinalizationReviewError("unsupported Finalization Review Schema version")
     if payload.get("validation_version") != FINALIZATION_REVIEW_VALIDATION_VERSION:
         raise FinalizationReviewError("Finalization Review validation version mismatch")
@@ -490,7 +490,7 @@ def record_review(
         ledger = read_json(path)
     else:
         ledger = {
-            "finalization_review_schema_version": "4",
+            "finalization_review_schema_version": "5",
             "validation_version": FINALIZATION_REVIEW_VALIDATION_VERSION,
             "transaction_id": transaction_id,
             "generation_id": generation_id,
@@ -500,7 +500,7 @@ def record_review(
             "created_at": now_utc(),
         }
     if (
-        ledger.get("finalization_review_schema_version") != "4"
+        ledger.get("finalization_review_schema_version") != "5"
         or ledger.get("validation_version") != FINALIZATION_REVIEW_VALIDATION_VERSION
         or ledger.get("transaction_id") != transaction_id
         or ledger.get("generation_id") != generation_id
@@ -557,7 +557,7 @@ def evaluate_reviews(
             "ledger": None,
             "ledger_path": str(path),
         }
-    if ledger.get("finalization_review_schema_version") != "4" or ledger.get(
+    if ledger.get("finalization_review_schema_version") != "5" or ledger.get(
         "validation_version"
     ) != FINALIZATION_REVIEW_VALIDATION_VERSION:
         blocking_errors.append("Finalization Review Ledger Schema is unsupported")

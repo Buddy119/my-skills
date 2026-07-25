@@ -254,18 +254,19 @@ class ArtifactMigrationTests(unittest.TestCase):
             (SKILL_ROOT / "assets" / "artifact-schema.json").read_text(encoding="utf-8")
         )
         definition = registry["artifact_types"]["behavior-dossier"]
-        self.assertEqual(definition["current_version"], "2")
+        self.assertEqual(definition["current_version"], "3")
         self.assertEqual(
             definition["migrations"],
             {
-                "0": {"to": "2", "action": "archive-and-rebuild"},
-                "1": {"to": "2", "action": "archive-and-rebuild"},
+                "0": {"to": "3", "action": "archive-and-rebuild"},
+                "1": {"to": "3", "action": "archive-and-rebuild"},
+                "2": {"to": "3", "action": "archive-and-rebuild"},
             },
         )
         template = (SKILL_ROOT / "assets" / "behavior-dossier-template.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn('artifact_schema_version: "2"', template)
+        self.assertIn('artifact_schema_version: "3"', template)
         transforms = json.loads(
             (SKILL_ROOT / "assets" / "migration-transform-registry.json").read_text(
                 encoding="utf-8"
@@ -342,7 +343,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         registry_path = copied / "assets" / "artifact-schema.json"
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
-        registry["artifact_types"]["behavior-dossier"]["migrations"]["1"]["to"] = "3"
+        registry["artifact_types"]["behavior-dossier"]["migrations"]["1"]["to"] = "2"
         registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
         output = self.root / "target-drift-output"
         result = subprocess.run(
@@ -360,7 +361,7 @@ class ArtifactMigrationTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("must target current version 2", result.stderr)
+        self.assertIn("must target current version 3", result.stderr)
         self.assertFalse(output.exists())
 
     def test_init_rejects_migration_from_current_version(self) -> None:
@@ -368,8 +369,8 @@ class ArtifactMigrationTests(unittest.TestCase):
         shutil.copytree(SKILL_ROOT, copied, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         registry_path = copied / "assets" / "artifact-schema.json"
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
-        registry["artifact_types"]["behavior-dossier"]["migrations"]["2"] = {
-            "to": "2",
+        registry["artifact_types"]["behavior-dossier"]["migrations"]["3"] = {
+            "to": "3",
             "action": "archive-and-rebuild",
         }
         registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
@@ -389,10 +390,10 @@ class ArtifactMigrationTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("cannot declare a migration from its current version 2", result.stderr)
+        self.assertIn("cannot declare a migration from its current version 3", result.stderr)
         self.assertFalse(output.exists())
 
-    def test_schema_one_dossier_is_archived_reset_and_retraced_as_schema_two(self) -> None:
+    def test_schema_one_dossier_is_archived_reset_and_retraced_as_schema_three(self) -> None:
         self.add_evidence()
         behavior_id, dossier, legacy_bytes = self.add_behavior_with_legacy_dossier("1")
 
@@ -403,7 +404,7 @@ class ArtifactMigrationTests(unittest.TestCase):
             step for step in plan["steps"] if step["artifact_type"] == "behavior-dossier"
         )
         self.assertEqual(dossier_step["source_version"], "1")
-        self.assertEqual(dossier_step["target_version"], "2")
+        self.assertEqual(dossier_step["target_version"], "3")
         self.assertEqual(dossier_step["action"], "archive-and-rebuild")
         self.assertNotIn("transform_id", dossier_step)
         self.assertEqual(plan["resume_stage_after_migration"], "tracing")
@@ -431,7 +432,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertIn(f'behavior_id: "{behavior_id}"', migrated_state)
         self.assertIn('status: "discovered"', migrated_state)
         self.assertIn("dossier: null", migrated_state)
-        self.assertIn("requires retracing under Schema 2", migrated_state)
+        self.assertIn("requires retracing under Schema 3", migrated_state)
         receipt = json.loads(Path(committed["receipt"]).read_text(encoding="utf-8"))
         self.assertFalse(
             any(
@@ -456,7 +457,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
         rebuilt = Path(scaffolded["path"])
         self.assertIn(
-            'artifact_schema_version: "2"', rebuilt.read_text(encoding="utf-8")
+            'artifact_schema_version: "3"', rebuilt.read_text(encoding="utf-8")
         )
         self.run_cmd(
             "mark-behavior",
@@ -494,7 +495,7 @@ class ArtifactMigrationTests(unittest.TestCase):
             step for step in plan["steps"] if step["artifact_type"] == "behavior-dossier"
         )
         self.assertEqual(dossier_step["source_version"], "unknown")
-        self.assertEqual(dossier_step["target_version"], "2")
+        self.assertEqual(dossier_step["target_version"], "3")
         self.assertEqual(dossier_step["action"], "archive-and-rebuild")
         self.assertNotIn("transform_id", dossier_step)
         self.assertEqual(plan["resume_stage_after_migration"], "tracing")
@@ -703,7 +704,7 @@ class ArtifactMigrationTests(unittest.TestCase):
         register = self.output / ".work" / "repository-register.md"
         register.write_text(
             register.read_text().replace(
-                'artifact_schema_version: "2"', 'artifact_schema_version: "99"', 1
+                'artifact_schema_version: "3"', 'artifact_schema_version: "99"', 1
             )
         )
         result = subprocess.run(
@@ -950,7 +951,7 @@ class ArtifactMigrationTests(unittest.TestCase):
             / "tests"
             / "fixtures"
             / "migration"
-            / "repository-register-flat-http-1.md"
+            / "repository-register-2.md"
         )
         register = self.output / ".work" / "repository-register.md"
         shutil.copy2(fixture, register)
@@ -963,10 +964,15 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
         self.assertEqual(step["action"], "mechanical-migrate")
         self.assertEqual(
-            step["transform_id"], "repository-register-flat-http-1-to-2"
+            step["transform_id"], "repository-register-2-to-3"
         )
-        self.assertEqual(step["source_artifact"]["artifact_schema_version"], "flat-http-1")
-        self.assertEqual(step["expected"]["source_record_counts"]["flat_http_mappings"], 2)
+        self.assertEqual(step["source_artifact"]["artifact_schema_version"], "2")
+        self.assertEqual(
+            step["expected"]["source_record_counts"]["runtime_config_effects"], 2
+        )
+        self.assertEqual(
+            step["expected"]["source_record_counts"]["failure_observations"], 1
+        )
 
         begun = self.begin_migration()
         scaffold = self.run_cmd(
@@ -996,8 +1002,9 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertEqual(len(mechanical_manifest["transform_reports"]), 2)
         candidate_register = Path(begun["candidate"]) / ".work" / "repository-register.md"
         candidate_text = candidate_register.read_text(encoding="utf-8")
-        self.assertIn('artifact_schema_version: "2"', candidate_text)
-        self.assertIn("HTTP-007-U01", candidate_text)
+        self.assertIn('artifact_schema_version: "3"', candidate_text)
+        self.assertIn("CFG-OBS-", candidate_text)
+        self.assertIn("FO-003", candidate_text)
         self.assertIn("Unresolved", candidate_text)
         status = self.run_cmd("status", "--output", str(self.output))
         self.assertTrue(status["mechanical_output_manifest"]["candidate_sealed"])
@@ -1026,14 +1033,19 @@ class ArtifactMigrationTests(unittest.TestCase):
         )
         receipt = json.loads(Path(committed["receipt"]).read_text(encoding="utf-8"))
         transform_ids = {item["transform_id"] for item in receipt["transform_reports"]}
-        self.assertIn("repository-register-flat-http-1-to-2", transform_ids)
+        self.assertIn("repository-register-2-to-3", transform_ids)
         register_report = next(
             item
             for item in receipt["transform_reports"]
-            if item["transform_id"] == "repository-register-flat-http-1-to-2"
+            if item["transform_id"] == "repository-register-2-to-3"
         )
         self.assertEqual(register_report["input_summary"]["file_count"], 1)
-        self.assertEqual(register_report["output_records"]["http_mappings"], 2)
+        self.assertEqual(
+            register_report["output_records"]["runtime_config_observations"], 2
+        )
+        self.assertEqual(register_report["output_records"]["runtime_config_impacts"], 0)
+        self.assertEqual(register_report["output_records"]["java_types"], 0)
+        self.assertEqual(register_report["output_records"]["failure_observations"], 1)
         self.assertTrue(register_report["id_map"])
         self.assertNotIn("dependency_contracts", receipt)
         self.assertNotIn("failure_patterns", receipt)

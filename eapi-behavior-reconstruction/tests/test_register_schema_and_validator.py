@@ -146,6 +146,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
             "data",
             "fixture.behavior",
             "write failure",
+            "source.java:2",
+            "global handler",
             "propagate",
             "Explicit error",
             "Unchanged",
@@ -300,9 +302,11 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertEqual(
             payload["domain_statuses"],
             {
+                "config": "valid",
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "java": "valid",
                 "lifecycle": "valid",
                 "markdown-fragment": "valid",
             },
@@ -522,9 +526,11 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertEqual(
             payload["domain_statuses"],
             {
+                "config": "valid",
                 "dependency": "valid",
                 "failure": "valid",
                 "http": "valid",
+                "java": "valid",
                 "lifecycle": "valid",
                 "markdown-fragment": "valid",
             },
@@ -721,6 +727,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
             "dependency",
             "fixture.behavior",
             "downstream rejection",
+            "source.java:1",
+            "global handler",
             "propagate",
             "Explicit error",
             "Unchanged",
@@ -800,6 +808,8 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
             "data",
             "fixture.behavior",
             "write failure",
+            "source.java:2",
+            "global handler",
             "propagate",
             "Explicit error",
             "Unchanged",
@@ -834,6 +844,163 @@ class RegisterSchemaAndValidatorTests(unittest.TestCase):
         self.assertNotIn("FAIL-DEP-XREF", payload["skipped"])
         self.assertIn("DEP-DOCUMENT", payload["errors"])
         self.assertIn("FAIL-DOCUMENT", payload["errors"])
+
+    def test_java_and_config_relationships_validate_against_behavior_and_endpoint_ids(
+        self,
+    ) -> None:
+        fixture = RegisterFixture(self.root)
+        fixture.add(
+            "runtime_config_observations",
+            "CFG-OBS-001",
+            "client.timeout",
+            "fixture.behavior",
+            "Config.java:10",
+            "30s",
+            "changes client timeout",
+            "all requests",
+            "Confirmed",
+            "Config.java:10",
+            "CFG-001",
+        )
+        fixture.add(
+            "runtime_config_records",
+            "CFG-001",
+            "client timeout",
+            "30s",
+            "application",
+            "fixture.behavior",
+            "CFG-OBS-001",
+            "Confirmed",
+            "None observed",
+        )
+        fixture.add(
+            "runtime_config_impacts",
+            "CFG-001-I01",
+            "CFG-001",
+            "fixture.behavior",
+            "fixture.get-customer",
+            "timeout/retry/recovery",
+            "configured timeout",
+            "changes outbound timeout",
+            "caller may receive an earlier timeout",
+            "Confirmed",
+            "Config.java:10",
+        )
+        fixture.add(
+            "java_types",
+            "JTYPE-001",
+            "fixture.CustomerHandler",
+            "entry",
+            "main",
+            "fixture.behavior",
+            "fixture.get-customer",
+            "Confirmed",
+            "Handler.java:1",
+        )
+        fixture.add(
+            "java_types",
+            "JTYPE-002",
+            "fixture.CustomerService",
+            "service",
+            "main",
+            "fixture.behavior",
+            "fixture.get-customer",
+            "Confirmed",
+            "Service.java:1",
+        )
+        fixture.add(
+            "java_edges",
+            "JEDGE-001",
+            "JTYPE-001",
+            "injects",
+            "JTYPE-002",
+            "fixture.behavior",
+            "constructor injection",
+            "Confirmed",
+            "Handler.java:1",
+        )
+        fixture.add(
+            "java_bindings",
+            "JIMPL-001",
+            "fixture.behavior",
+            "fixture.get-customer",
+            "fixture.CustomerHandler.getCustomer(String)",
+            "JTYPE-001, JTYPE-002",
+            "JEDGE-001",
+            "constructor injection",
+            "Confirmed",
+            "None observed",
+        )
+        fixture.write()
+        behavior = self.root / "tech-pack" / "behaviors" / "fixture.behavior.md"
+        behavior.parent.mkdir(parents=True)
+        behavior.write_text(
+            "---\n"
+            'behavior_id: "fixture.behavior"\n'
+            "api_contracts:\n"
+            '  - endpoint_id: "fixture.get-customer"\n'
+            '    document: "../contracts/fixture.get-customer.api-contract.md"\n'
+            "java_bindings:\n"
+            '  - binding_id: "JIMPL-001"\n'
+            '    document: "../java-implementation-map.md#jimpl-001"\n'
+            "runtime_config_impacts:\n"
+            '  - impact_id: "CFG-001-I01"\n'
+            '    document: "../runtime-config-matrix.md#cfg-001-i01"\n'
+            "external_http_calls: []\n"
+            "external_dependencies: []\n"
+            "failure_patterns: []\n"
+            "---\n\n"
+            "# Fixture behavior\n\n"
+            "[Contract](../contracts/fixture.get-customer.api-contract.md)\n\n"
+            "[Java implementation](../java-implementation-map.md#jimpl-001)\n\n"
+            "[Runtime configuration](../runtime-config-matrix.md#cfg-001-i01)\n",
+            encoding="utf-8",
+        )
+        (self.root / "tech-pack" / "java-implementation-map.md").write_text(
+            "---\n"
+            'artifact_type: "java-implementation-map"\n'
+            'artifact_schema_version: "1"\n'
+            "---\n\n"
+            "# Java implementation map\n\n"
+            '<a id="jtype-001"></a>\n\n'
+            "Entry type: JTYPE-001.\n\n"
+            '<a id="jtype-002"></a>\n\n'
+            "Service type: JTYPE-002.\n\n"
+            '<a id="jimpl-001"></a>\n\n'
+            "## `JIMPL-001` — Implementation slice\n\n"
+            "JEDGE-001 links JTYPE-001 to JTYPE-002.\n",
+            encoding="utf-8",
+        )
+        (self.root / "tech-pack" / "runtime-config-matrix.md").write_text(
+            "---\n"
+            'artifact_type: "runtime-config-matrix"\n'
+            'artifact_schema_version: "3"\n'
+            "---\n\n"
+            "# Runtime configuration matrix\n\n"
+            '<a id="cfg-001"></a>\n\n'
+            "Configuration identity: CFG-001.\n\n"
+            "## Application execution impacts\n\n"
+            '<a id="cfg-001-i01"></a>\n\n'
+            "CFG-001-I01 changes the timeout.\n\n"
+            "## Endpoint reverse impact index\n\n"
+            "fixture.get-customer is affected through fixture.behavior.\n",
+            encoding="utf-8",
+        )
+
+        result, payload = self.validate("tech-publication")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(payload["domain_statuses"]["config"], "valid")
+        self.assertEqual(payload["domain_statuses"]["java"], "valid")
+        self.assertNotIn("REG-CONFIG-XREF", payload["errors"])
+        self.assertNotIn("REG-JAVA-XREF", payload["errors"])
+
+        fixture.rows["runtime_config_impacts"][0][3] = "fixture.missing-endpoint"
+        fixture.rows["java_edges"][0][2] = "guesses"
+        fixture.write()
+        invalid, invalid_payload = self.validate("tech-publication")
+        self.assertEqual(invalid.returncode, 1)
+        self.assertIn("REG-CONFIG-XREF", invalid_payload["errors"])
+        self.assertIn("REG-JAVA-ROW", invalid_payload["errors"])
 
     def test_row_error_budget_shows_ten_and_suppresses_the_rest(self) -> None:
         fixture = RegisterFixture(self.root)

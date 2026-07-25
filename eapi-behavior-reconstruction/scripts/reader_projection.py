@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-READER_PROJECTION_VALIDATION_VERSION = "2"
+READER_PROJECTION_VALIDATION_VERSION = "3"
 PLAN_FILENAME = "reader-projection-plan.json"
 TERMINAL_REVIEW_STATUSES = {"refreshed", "reviewed-no-change"}
 ALLOWED_REVIEW_STATUSES = TERMINAL_REVIEW_STATUSES
@@ -42,6 +42,8 @@ class RelationshipGraph:
     scenarios: dict[str, dict[str, Any]] = field(default_factory=dict)
     journeys: dict[str, dict[str, Any]] = field(default_factory=dict)
     matrix_rows: dict[str, dict[str, Any]] = field(default_factory=dict)
+    java_bindings: dict[str, dict[str, Any]] = field(default_factory=dict)
+    config_impacts: dict[str, dict[str, Any]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     def api_intent(self) -> bool:
@@ -66,6 +68,8 @@ class RelationshipGraph:
             },
             "contracts": self.contracts,
             "matrix_rows": self.matrix_rows,
+            "java_bindings": self.java_bindings,
+            "config_impacts": self.config_impacts,
         }
 
     def ba_payload(self) -> dict[str, Any]:
@@ -107,7 +111,7 @@ def load_projection_schema(path: Path | None = None) -> dict[str, Any]:
         payload = json.loads(schema_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ReaderProjectionError(f"Reader Projection Schema cannot be loaded: {exc}") from exc
-    if payload.get("reader_projection_schema_version") != "2":
+    if payload.get("reader_projection_schema_version") != "3":
         raise ReaderProjectionError("unsupported Reader Projection Schema version")
     if payload.get("validation_version") != READER_PROJECTION_VALIDATION_VERSION:
         raise ReaderProjectionError("Reader Projection validation version is inconsistent")
@@ -220,6 +224,31 @@ def _replace_related_links(
     raise ReaderProjectionError(
         f"cannot insert {heading}: Related documents and Behavior flow are missing"
     )
+
+
+def _ensure_contract_sequence_link(
+    body: str,
+    behavior_id: str,
+) -> str:
+    target = f"../behaviors/{behavior_id}.md#implementation-sequence"
+    rendered = f"- [Implementation sequence]({target})"
+    existing = re.compile(
+        r"(?m)^-\s+\[Implementation sequence\]\([^)]+\)\s*$"
+    )
+    if existing.search(body):
+        return existing.sub(rendered, body, count=1)
+    related = _section(body, "Related documents")
+    if related is None:
+        source_notes = _section(body, "Source notes")
+        insertion = source_notes[0] if source_notes is not None else len(body)
+        section = (
+            "## Related documents\n\n"
+            f"{rendered}\n\n"
+        )
+        return body[:insertion] + section + body[insertion:]
+    start, end, content = related
+    replacement = content.rstrip() + "\n" + rendered + "\n"
+    return body[:start] + replacement + body[end:]
 
 
 def _catalog_behavior_blocks(text: str) -> dict[str, tuple[int, int, str]]:
@@ -348,6 +377,125 @@ def _replace_table_lines(section: str, updater: Any) -> str:
     return "\n".join(lines) + ("\n" if section.endswith("\n") else "")
 
 
+def _replace_table_data(
+    section: str,
+    expected_headers: list[str],
+    rows: list[list[str]],
+) -> str:
+    lines = section.splitlines()
+    header_index = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.strip().startswith("|")
+            and _table_cells(line) == expected_headers
+        ),
+        None,
+    )
+    if header_index is None or header_index + 1 >= len(lines):
+        raise ReaderProjectionError(
+            "Reader projection table is missing its registered header"
+        )
+    delimiter = _table_cells(lines[header_index + 1])
+    if len(delimiter) != len(expected_headers):
+        raise ReaderProjectionError("Reader projection table delimiter is malformed")
+    end = header_index + 2
+    while end < len(lines) and lines[end].strip().startswith("|"):
+        end += 1
+    rendered = [
+        "| " + " | ".join(row) + " |"
+        for row in rows
+    ]
+    return "\n".join(lines[: header_index + 2] + rendered + lines[end:]) + (
+        "\n" if section.endswith("\n") else ""
+    )
+
+
+def _update_java_api_index(
+    text: str,
+    graph: RelationshipGraph,
+) -> str:
+    section = _section(text, "Behavior and API implementation index")
+    if section is None:
+        raise ReaderProjectionError(
+            "Java Implementation Map is missing Behavior and API implementation index"
+        )
+    headers = [
+        "Implementation",
+        "Behavior",
+        "Endpoint or trigger",
+        "Entry symbol",
+        "Principal Java types",
+        "Details",
+    ]
+    rows: list[list[str]] = []
+    for binding_id, binding in sorted(graph.java_bindings.items()):
+        behavior_id = binding["behavior_id"]
+        behavior = (
+            f"[{behavior_id}](behaviors/{behavior_id}.md)"
+            if behavior_id in graph.behaviors
+            else behavior_id
+        )
+        endpoints = binding["endpoint_ids"]
+        endpoint_links = ", ".join(
+            f"[{endpoint_id}](contracts/{endpoint_id}.api-contract.md)"
+            for endpoint_id in endpoints
+        )
+        if not endpoint_links:
+            endpoint_links = "Non-API trigger"
+        rows.append(
+            [
+                f"`{binding_id}`",
+                behavior,
+                endpoint_links,
+                binding["entry_symbol"] or "Unknown",
+                ", ".join(f"`{type_id}`" for type_id in binding["type_ids"])
+                or "Unknown",
+                f"[Implementation slice](#{binding_id.lower()})",
+            ]
+        )
+    start, end, content = section
+    rendered = _replace_table_data(content, headers, rows)
+    return text[:start] + rendered + text[end:]
+
+
+def _update_config_endpoint_index(
+    text: str,
+    graph: RelationshipGraph,
+) -> str:
+    section = _section(text, "Endpoint reverse impact index")
+    if section is None:
+        raise ReaderProjectionError(
+            "Runtime Config Matrix is missing Endpoint reverse impact index"
+        )
+    headers = [
+        "Endpoint",
+        "Affected behavior",
+        "Config impacts",
+        "What changes",
+        "Deep dive",
+    ]
+    rows: list[list[str]] = []
+    for impact_id, impact in sorted(graph.config_impacts.items()):
+        behavior_id = impact["behavior_id"]
+        for endpoint_id in impact["endpoint_ids"]:
+            rows.append(
+                [
+                    f"[{endpoint_id}](contracts/{endpoint_id}.api-contract.md)",
+                    f"[{behavior_id}](behaviors/{behavior_id}.md)",
+                    f"[`{impact_id}`](#{impact_id.lower()})",
+                    impact["impact_type"] or "Unknown",
+                    (
+                        f"[Config detail](#{impact_id.lower()}); "
+                        f"[API Contract](contracts/{endpoint_id}.api-contract.md)"
+                    ),
+                ]
+            )
+    start, end, content = section
+    rendered = _replace_table_data(content, headers, rows)
+    return text[:start] + rendered + text[end:]
+
+
 def _link_list(entries: Iterable[dict[str, str]], id_key: str, labels: dict[str, str]) -> str:
     rendered = []
     for entry in entries:
@@ -448,6 +596,68 @@ def _parse_matrix(root: Path, graph: RelationshipGraph) -> None:
         }
 
 
+def _register_table(root: Path, heading: str) -> list[dict[str, str]]:
+    register = root / ".work" / "repository-register.md"
+    if not register.is_file():
+        return []
+    section = _section(register.read_text(encoding="utf-8"), heading)
+    if section is None:
+        return []
+    rows = [
+        line for line in section[2].splitlines() if line.strip().startswith("|")
+    ]
+    if len(rows) < 2:
+        return []
+    headers = _table_cells(rows[0])
+    result: list[dict[str, str]] = []
+    for line in rows[2:]:
+        cells = _table_cells(line)
+        if len(cells) == len(headers):
+            result.append(dict(zip(headers, cells)))
+    return result
+
+
+def _known_endpoint_ids(value: str, graph: RelationshipGraph) -> list[str]:
+    known = set(graph.contracts) | set(graph.matrix_rows)
+    for behavior in graph.behaviors.values():
+        known.update(
+            entry["endpoint_id"] for entry in behavior.get("api_contracts", [])
+        )
+    return sorted(
+        identifier
+        for identifier in known
+        if re.search(rf"(?<![A-Za-z0-9._-]){re.escape(identifier)}(?![A-Za-z0-9._-])", value)
+    )
+
+
+def _parse_implementation_relations(root: Path, graph: RelationshipGraph) -> None:
+    for row in _register_table(
+        root, "Behavior and endpoint Java implementation bindings"
+    ):
+        binding_id = row.get("Binding ID", "").strip("` ")
+        if not binding_id:
+            continue
+        graph.java_bindings[binding_id] = {
+            "behavior_id": row.get("Behavior ID", "").strip("` "),
+            "endpoint_ids": _known_endpoint_ids(
+                row.get("Endpoint ID(s) or trigger", ""), graph
+            ),
+            "entry_symbol": row.get("Exact entry symbol", ""),
+            "type_ids": re.findall(r"JTYPE-\d+", row.get("Type IDs", "")),
+            "edge_ids": re.findall(r"JEDGE-\d+", row.get("Edge IDs", "")),
+        }
+    for row in _register_table(root, "Runtime configuration impact records"):
+        impact_id = row.get("Impact ID", "").strip("` ")
+        if not impact_id:
+            continue
+        graph.config_impacts[impact_id] = {
+            "config_id": row.get("Config ID", "").strip("` "),
+            "behavior_id": row.get("Behavior ID", "").strip("` "),
+            "endpoint_ids": _known_endpoint_ids(row.get("Endpoint ID(s)", ""), graph),
+            "impact_type": row.get("Impact type", ""),
+        }
+
+
 def _load_behavior_graph(root: Path, graph: RelationshipGraph) -> None:
     for path in sorted((root / "tech-pack" / "behaviors").glob("*.md")):
         parsed = _frontmatter(path.read_text(encoding="utf-8"))
@@ -534,6 +744,7 @@ def build_relationship_graph(root: Path) -> RelationshipGraph:
     _load_behavior_graph(root, graph)
     _load_contract_graph(root, graph)
     _parse_matrix(root, graph)
+    _parse_implementation_relations(root, graph)
     _load_ba_graph(root, graph)
 
     declared: dict[str, str] = {}
@@ -727,6 +938,71 @@ def _mechanical_updates(
                 "after_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
             }
         )
+    if domain == "api":
+        for endpoint_id, contract in sorted(graph.contracts.items()):
+            path = root / contract["path"]
+            original = path.read_text(encoding="utf-8")
+            parsed = _frontmatter(original)
+            if parsed is None:
+                raise ReaderProjectionError(
+                    f"API Contract frontmatter is invalid: {contract['path']}"
+                )
+            frontmatter, body = parsed
+            body = _ensure_contract_sequence_link(body, contract["behavior_id"])
+            rendered = "---\n" + frontmatter + "\n---\n" + body
+            updates[path] = rendered
+            items.append(
+                {
+                    "projection_id": f"api:contract-sequence:{endpoint_id}",
+                    "surface": "api-contract.implementation-sequence-links",
+                    "path": contract["path"],
+                    "status": "refreshed" if rendered != original else "already-current",
+                    "before_sha256": _sha256(path),
+                    "after_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+                }
+            )
+        if graph.java_bindings:
+            path = root / "tech-pack" / "java-implementation-map.md"
+            if not path.is_file():
+                raise ReaderProjectionError(
+                    "Java implementation bindings exist but Java Implementation Map is missing"
+                )
+            original = path.read_text(encoding="utf-8")
+            rendered = _update_java_api_index(original, graph)
+            updates[path] = rendered
+            items.append(
+                {
+                    "projection_id": "api:java-implementation-index",
+                    "surface": "java-implementation-map.endpoint-behavior-bindings",
+                    "path": path.relative_to(root).as_posix(),
+                    "status": "refreshed" if rendered != original else "already-current",
+                    "before_sha256": _sha256(path),
+                    "after_sha256": hashlib.sha256(
+                        rendered.encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
+        if graph.config_impacts:
+            path = root / "tech-pack" / "runtime-config-matrix.md"
+            if not path.is_file():
+                raise ReaderProjectionError(
+                    "Config impacts exist but Runtime Config Matrix is missing"
+                )
+            original = path.read_text(encoding="utf-8")
+            rendered = _update_config_endpoint_index(original, graph)
+            updates[path] = rendered
+            items.append(
+                {
+                    "projection_id": "api:config-endpoint-reverse-index",
+                    "surface": "runtime-config-matrix.endpoint-reverse-index",
+                    "path": path.relative_to(root).as_posix(),
+                    "status": "refreshed" if rendered != original else "already-current",
+                    "before_sha256": _sha256(path),
+                    "after_sha256": hashlib.sha256(
+                        rendered.encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
     return updates, items, semantic_notes
 
 
@@ -748,6 +1024,12 @@ def _semantic_paths(root: Path, graph: RelationshipGraph, domain: str) -> list[t
             for behavior in graph.behaviors.values()
         ):
             paths.append((failure.relative_to(root).as_posix(), "caller-visible-failure-summary"))
+        for relative, purpose in (
+            ("tech-pack/java-implementation-map.md", "endpoint-implementation-navigation"),
+            ("tech-pack/runtime-config-matrix.md", "endpoint-config-impact-navigation"),
+        ):
+            if (root / relative).is_file():
+                paths.append((relative, purpose))
     else:
         for behavior in graph.behaviors.values():
             if behavior.get("ba_scenarios"):
@@ -799,6 +1081,16 @@ def validate_mechanical_projection(
                 errors.append(f"Tech Catalog has stale {key} for {behavior_id}")
 
     if domain == "api" and graph.contracts:
+        for endpoint_id, contract in sorted(graph.contracts.items()):
+            path = root / contract["path"]
+            target = (
+                f"../behaviors/{contract['behavior_id']}.md"
+                "#implementation-sequence"
+            )
+            if target not in path.read_text(encoding="utf-8"):
+                errors.append(
+                    f"API Contract {endpoint_id} omits its Implementation sequence link"
+                )
         field = root / "tech-pack" / "field-validation-and-mapping.md"
         if field.is_file():
             text = field.read_text(encoding="utf-8")
@@ -811,6 +1103,48 @@ def validate_mechanical_projection(
                 ],
             )
             errors.extend(f"Field Pack API Contract index omits {item}" for item in missing)
+        if graph.java_bindings:
+            java_map = root / "tech-pack" / "java-implementation-map.md"
+            if not java_map.is_file():
+                errors.append("Java Implementation Map is missing")
+            else:
+                text = java_map.read_text(encoding="utf-8")
+                for binding_id, binding in sorted(graph.java_bindings.items()):
+                    required = [
+                        f"behaviors/{binding['behavior_id']}.md",
+                        f"#{binding_id.lower()}",
+                        *[
+                            f"contracts/{endpoint_id}.api-contract.md"
+                            for endpoint_id in binding["endpoint_ids"]
+                        ],
+                    ]
+                    for target in required:
+                        if target not in text:
+                            errors.append(
+                                f"Java Implementation Map omits {binding_id} "
+                                f"navigation target {target}"
+                            )
+        if graph.config_impacts:
+            config_matrix = root / "tech-pack" / "runtime-config-matrix.md"
+            if not config_matrix.is_file():
+                errors.append("Runtime Config Matrix is missing")
+            else:
+                text = config_matrix.read_text(encoding="utf-8")
+                for impact_id, impact in sorted(graph.config_impacts.items()):
+                    required = [
+                        f"behaviors/{impact['behavior_id']}.md",
+                        f"#{impact_id.lower()}",
+                        *[
+                            f"contracts/{endpoint_id}.api-contract.md"
+                            for endpoint_id in impact["endpoint_ids"]
+                        ],
+                    ]
+                    for target in required:
+                        if target not in text:
+                            errors.append(
+                                f"Runtime Config Matrix omits {impact_id} "
+                                f"navigation target {target}"
+                            )
     if domain == "ba" and graph.ba_intent():
         catalog_path = root / "ba-pack" / "business-catalog.md"
         overview_path = root / "ba-pack" / "business-overview.md"

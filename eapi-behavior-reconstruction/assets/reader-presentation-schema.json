@@ -1,6 +1,6 @@
 {
-  "reader_presentation_schema_version": "1",
-  "validation_version": "1",
+  "reader_presentation_schema_version": "2",
+  "validation_version": "2",
   "exception_qualifiers": {
     "Inferred": "*(Inferred)*",
     "Unknown": "*(Unknown)*",
@@ -15,10 +15,11 @@
   ],
   "affected_artifacts": {
     "repository-overview": {"version": "3", "audience": "tech", "source_notes": true},
-    "tech-behavior": {"version": "4", "audience": "tech", "source_notes": true},
+    "tech-behavior": {"version": "5", "audience": "tech", "source_notes": true},
     "data-lifecycle": {"version": "3", "audience": "tech", "source_notes": true},
-    "field-validation-and-mapping": {"version": "2", "audience": "tech", "source_notes": true},
-    "runtime-config-matrix": {"version": "2", "audience": "tech", "source_notes": true},
+    "field-validation-and-mapping": {"version": "3", "audience": "tech", "source_notes": true},
+    "runtime-config-matrix": {"version": "3", "audience": "tech", "source_notes": true},
+    "java-implementation-map": {"version": "1", "audience": "tech", "source_notes": true},
     "external-dependency-contracts": {"version": "2", "audience": "tech", "source_notes": true},
     "ba-overview": {"version": "2", "audience": "ba", "source_notes": false},
     "ba-catalog": {"version": "2", "audience": "ba", "source_notes": false},

@@ -1,6 +1,6 @@
 {
-  "reader_projection_schema_version": "2",
-  "validation_version": "2",
+  "reader_projection_schema_version": "3",
+  "validation_version": "3",
   "stages": {
     "tech-publication": {
       "api": "deferred",
@@ -28,6 +28,9 @@
       "tech-behavior.api_contracts",
       "tech-behavior.api-contract-links",
       "tech-behavior-catalog.api_contracts",
+      "api-contract.implementation-sequence-links",
+      "java-implementation-map.endpoint-behavior-bindings",
+      "runtime-config-matrix.endpoint-reverse-index",
       "repository-overview.endpoint-counts",
       "repository-overview.endpoint-availability"
     ],
@@ -45,7 +48,9 @@
       "tech-pack/field-validation-and-mapping.md",
       "tech-pack/failure-taxonomy.md",
       "repository-overview.capability-contract-navigation",
-      "repository-overview.variant-and-risk-summary"
+      "repository-overview.variant-and-risk-summary",
+      "java-implementation-map.endpoint-navigation",
+      "runtime-config-matrix.api-impact-navigation"
     ],
     "ba": [
       "tech-pack/repository-overview.md",

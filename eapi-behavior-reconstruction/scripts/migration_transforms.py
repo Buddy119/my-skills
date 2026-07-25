@@ -73,6 +73,7 @@ def load_transform_registry(
         "analysis-state-envelope",
         "repository-register-flat-http-1",
         "repository-register-1-to-2",
+        "repository-register-2-to-3",
     }
     for transform_id, raw in raw_definitions.items():
         if not isinstance(transform_id, str) or not isinstance(raw, dict):
@@ -678,6 +679,172 @@ def _render_register_1_to_2(
     return rendered, report
 
 
+def _optional_source_rows(
+    source_text: str,
+    section: str,
+    headers: list[str],
+) -> list[dict[str, str]] | None:
+    """Return an exact known table or None when that section is absent.
+
+    A present section with a different header is not guessed. That is a schema
+    mismatch and must fail the registered deterministic transform.
+    """
+
+    if not re.search(rf"^##\s+{re.escape(section)}\s*$", source_text, re.M):
+        return None
+    return _source_rows(source_text, section, headers)
+
+
+def _render_register_2_to_3(
+    source_text: str,
+    definition: TransformDefinition,
+    assets_root: Path,
+) -> tuple[str, dict[str, Any]]:
+    """Migrate only structural Register v2 facts into the v3 envelope.
+
+    Runtime configuration rows become unresolved observations. Existing failure
+    observations preserve their FO identities while the newly introduced origin
+    and handler fields remain Unknown. No CFG, Java, Dependency, Failure Pattern,
+    or other semantic reconciliation is performed here.
+    """
+
+    source_schema = _json_object(assets_root / definition.source_schema)
+    target_schema = _json_object(assets_root / definition.target_schema)
+    repository = _scalar(source_text, "repository") or "unknown-repository"
+    source_commit = _scalar(source_text, "source_commit") or "unknown"
+    target = (assets_root / "repository-register-template.md").read_text(encoding="utf-8")
+    target = target.replace("repository-name", repository).replace(
+        "git-commit-or-unknown", source_commit
+    )
+
+    target_rows: dict[str, list[list[str]]] = {}
+    copied_row_count = 0
+    source_section_names = {
+        contract["section"]
+        for contract in source_schema.get("tables", {}).values()
+        if isinstance(contract, dict) and isinstance(contract.get("section"), str)
+    }
+
+    # Tables unchanged between the two explicitly registered schemas are copied
+    # only when both their section and exact v3 header are present.
+    for key, contract in target_schema["tables"].items():
+        if key in {
+            "runtime_config_observations",
+            "runtime_config_records",
+            "runtime_config_impacts",
+            "java_types",
+            "java_edges",
+            "java_bindings",
+            "failure_observations",
+        }:
+            continue
+        if contract["section"] in source_section_names:
+            continue
+        rows = _optional_source_rows(source_text, contract["section"], contract["headers"])
+        if rows is None:
+            target_rows[key] = []
+            continue
+        rendered_rows = [[row[header] for header in contract["headers"]] for row in rows]
+        target_rows[key] = rendered_rows
+        copied_row_count += len(rendered_rows)
+
+    config_contract = source_schema["tables"]["runtime_config_effects"]
+    config_rows = _source_rows(
+        source_text,
+        config_contract["section"],
+        config_contract["headers"],
+    )
+    occupied_config_observations: set[str] = set()
+    id_map: dict[str, str] = {}
+    config_observations: list[list[str]] = []
+    for index, row in enumerate(config_rows, 1):
+        identity = "\u241f".join(row[header] for header in config_contract["headers"])
+        observation_id = _stable_numeric_id(
+            "CFG-OBS-", identity, occupied_config_observations
+        )
+        id_map[f"runtime-config-row-{index}:observation"] = observation_id
+        config_observations.append(
+            [
+                observation_id,
+                row["Configuration key or selector"],
+                row["Behavior ID"],
+                row["Read or wiring location"],
+                row["Default or value source"],
+                row["Observed execution effect"],
+                row["Scope or condition"],
+                row["Status"],
+                row["Evidence"],
+                "Unresolved",
+            ]
+        )
+    target_rows["runtime_config_observations"] = config_observations
+    target_rows["runtime_config_records"] = []
+    target_rows["runtime_config_impacts"] = []
+    target_rows["java_types"] = []
+    target_rows["java_edges"] = []
+    target_rows["java_bindings"] = []
+
+    failure_contract = source_schema["tables"]["failure_observations"]
+    failure_rows = _source_rows(
+        source_text,
+        failure_contract["section"],
+        failure_contract["headers"],
+    )
+    migrated_failures = [
+        [
+            row["Observation ID"],
+            row["Failure category"],
+            row["Behavior ID"],
+            row["Trigger or source"],
+            "Unknown",
+            "Unknown",
+            row["Handling and propagation"],
+            row["Caller-visible result"],
+            row["State outcome"],
+            row["Retry or recovery"],
+            row["Status"],
+            row["Evidence"],
+            row["Reconciliation"],
+        ]
+        for row in failure_rows
+    ]
+    target_rows["failure_observations"] = migrated_failures
+
+    for key, contract in target_schema["tables"].items():
+        target = _replace_table_rows(
+            target,
+            contract["section"],
+            contract["headers"],
+            target_rows.get(key, []),
+        )
+
+    report = {
+        "source_records": {
+            "unchanged_rows": copied_row_count,
+            "runtime_config_effects": len(config_rows),
+            "failure_observations": len(failure_rows),
+        },
+        "output_records": {
+            "unchanged_rows": copied_row_count,
+            "runtime_config_observations": len(config_observations),
+            "runtime_config_records": 0,
+            "runtime_config_impacts": 0,
+            "java_types": 0,
+            "java_edges": 0,
+            "java_bindings": 0,
+            "failure_observations": len(migrated_failures),
+        },
+        "id_map": id_map,
+        "referential_check_results": {
+            "unaffected-register-rows-preserved": "passed",
+            "configuration-rows-remain-unresolved-observations": "passed",
+            "failure-observation-identities-preserved": "passed",
+            "no-java-or-config-impact-semantics-generated": "passed",
+        },
+    }
+    return target, report
+
+
 def preview_transform(
     definition: TransformDefinition,
     root: Path,
@@ -721,6 +888,16 @@ def preview_transform(
             "source_record_counts": report["source_records"],
             "output_record_counts": report["output_records"],
         }
+    if definition.handler == "repository-register-2-to-3":
+        _rendered, report = _render_register_2_to_3(
+            path.read_text(encoding="utf-8"), definition, assets_root
+        )
+        return {
+            "input_file_count": 1,
+            "output_file_count": 1,
+            "source_record_counts": report["source_records"],
+            "output_record_counts": report["output_records"],
+        }
     raise MigrationTransformError(f"unsupported transform handler: {definition.handler}")
 
 
@@ -746,6 +923,11 @@ def execute_transform(
         _atomic_text(path, rendered)
     elif definition.handler == "repository-register-1-to-2":
         rendered, report = _render_register_1_to_2(
+            path.read_text(encoding="utf-8"), definition, assets_root
+        )
+        _atomic_text(path, rendered)
+    elif definition.handler == "repository-register-2-to-3":
+        rendered, report = _render_register_2_to_3(
             path.read_text(encoding="utf-8"), definition, assets_root
         )
         _atomic_text(path, rendered)

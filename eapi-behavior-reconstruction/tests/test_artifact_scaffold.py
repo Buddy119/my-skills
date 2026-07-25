@@ -29,8 +29,8 @@ class ArtifactScaffoldTests(unittest.TestCase):
         cls.schema = cls.scaffold.load_scaffold_schema(cls.registry)
 
     def test_bundled_schema_matches_registry_templates_and_paths(self) -> None:
-        self.assertEqual(self.schema.version, "1")
-        self.assertEqual(len(self.schema.definitions), 17)
+        self.assertEqual(self.schema.version, "2")
+        self.assertEqual(len(self.schema.definitions), 18)
         self.assertNotIn("analysis-state", self.schema.definitions)
         self.assertNotIn("repository-register", self.schema.definitions)
         self.assertNotIn("artifact-manifest", self.schema.definitions)
@@ -96,6 +96,25 @@ class ArtifactScaffoldTests(unittest.TestCase):
         self.assertIn('route: "/normalized/route"', rendered.content)
         self.assertNotIn("repository.method-route", rendered.content)
         self.assertNotIn("repository.behavior-name", rendered.content)
+
+    def test_render_java_implementation_map_is_conditional_singleton_scaffold(self) -> None:
+        rendered = self.scaffold.render_artifact(
+            self.registry,
+            self.schema,
+            SKILL_ROOT / "assets",
+            "java-implementation-map",
+            "customer-eapi",
+            "abc123",
+            {},
+        )
+        self.assertEqual(
+            rendered.relative_path, "tech-pack/java-implementation-map.md"
+        )
+        self.assertIn('artifact_type: "java-implementation-map"', rendered.content)
+        self.assertIn('artifact_schema_version: "1"', rendered.content)
+        self.assertIn('repository: "customer-eapi"', rendered.content)
+        self.assertIn('source_commit: "abc123"', rendered.content)
+        self.assertIn("JIMPL-001", rendered.content)
 
     def test_identity_arguments_reject_duplicate_missing_and_nonportable_values(self) -> None:
         with self.assertRaisesRegex(self.scaffold.ArtifactScaffoldError, "key=value"):

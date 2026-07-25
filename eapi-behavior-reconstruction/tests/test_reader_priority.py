@@ -47,7 +47,7 @@ class ReaderPriorityTests(unittest.TestCase):
 
     def test_bundled_templates_registry_and_priority_contract_are_synchronized(self) -> None:
         registry = load_registry(SKILL_ROOT / "assets" / "artifact-schema.json")
-        self.assertEqual(registry.registry_version, "6")
+        self.assertEqual(registry.registry_version, "7")
         self.assertEqual(
             registry.definitions["business-model"].dependencies,
             ("behavior-dossier",),
@@ -70,11 +70,13 @@ class ReaderPriorityTests(unittest.TestCase):
     def test_simple_behavior_needs_no_empty_reference_sections(self) -> None:
         text = reader_document(
             "tech-behavior",
-            "4",
+            "5",
             "# Behavior\n\n"
             "## Summary\n\nExplains the outcome.\n\n"
             "## Main path\n\n1. Accept the trigger.\n2. Return the result.\n\n"
             "## Behavior flow\n\n```mermaid\nflowchart LR\n A --> B\n```\n\n"
+            "## Implementation sequence\n\n```mermaid\nsequenceDiagram\n A->>B: Call\n```\n\n"
+            "## Exception and failure handling\n\nNo material failure.\n\n"
             "## Source notes\n\nNo source note is needed by this structure fixture.\n",
         )
         self.assertEqual(self.validate(text), [])

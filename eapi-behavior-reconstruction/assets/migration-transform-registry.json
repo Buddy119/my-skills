@@ -62,6 +62,23 @@
         "legacy-lifecycle-rows-become-unresolved-observations",
         "no-object-state-action-or-transition-is-generated"
       ]
+    },
+    "repository-register-2-to-3": {
+      "artifact_type": "repository-register",
+      "source_version": "2",
+      "target_version": "3",
+      "source_schema": "migration-schemas/repository-register-2.json",
+      "target_schema": "register-schema.json",
+      "handler": "repository-register-2-to-3",
+      "fixture": "../tests/fixtures/migration/repository-register-2.md",
+      "id_generation_rule": "hash-exact-legacy-config-row-to-stable-observation-id-preserve-existing-failure-ids",
+      "link_rewrite_rule": "none-config-and-failure-reconciliation-remain-semantic-work",
+      "referential_checks": [
+        "unaffected-register-rows-preserved",
+        "configuration-rows-remain-unresolved-observations",
+        "failure-observation-identities-preserved",
+        "no-java-or-config-impact-semantics-generated"
+      ]
     }
   }
 }

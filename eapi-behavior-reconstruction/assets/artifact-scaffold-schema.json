@@ -1,5 +1,5 @@
 {
-  "artifact_scaffold_schema_version": "1",
+  "artifact_scaffold_schema_version": "2",
   "artifact_types": {
     "behavior-dossier": {
       "path_identity_field": "behavior_id",
@@ -54,6 +54,10 @@
       "identity_fields": {}
     },
     "runtime-config-matrix": {
+      "path_identity_field": null,
+      "identity_fields": {}
+    },
+    "java-implementation-map": {
       "path_identity_field": null,
       "identity_fields": {}
     },

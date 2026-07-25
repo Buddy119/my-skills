@@ -11,6 +11,7 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL_ROOT / "scripts"
 BEHAVIOR_VALIDATOR = SCRIPTS / "validate_behavior_doc.py"
+API_VALIDATOR = SCRIPTS / "validate_api_contract.py"
 EXECUTOR = SCRIPTS / "stage_executor.py"
 
 
@@ -52,7 +53,7 @@ def behavior_document(
     return (
         "---\n"
         'artifact_type: "tech-behavior"\n'
-        'artifact_schema_version: "4"\n'
+        'artifact_schema_version: "5"\n'
         'behavior_id: "sample-repo.get-customer"\n'
         'title: "Get customer"\n'
         'repository: "sample-repo"\n'
@@ -71,6 +72,8 @@ def behavior_document(
         "external_http_calls: []\n"
         "field_mappings: []\n"
         "failure_patterns: []\n"
+        "java_bindings: []\n"
+        "runtime_config_impacts: []\n"
         "analysis_limitations: []\n"
         "---\n\n"
         "# Get customer\n\n"
@@ -79,13 +82,16 @@ def behavior_document(
         + api_section
         + "## Main path\n\n1. Accept the request.\n2. Return the result.\n\n"
         + "## Behavior flow\n\n```mermaid\nflowchart TD\n    A[Request] --> B[Response]\n```\n\n"
+        "## Implementation sequence\n\n```mermaid\nsequenceDiagram\n"
+        "    participant Caller\n    participant Handler\n"
+        "    Caller->>Handler: Request\n    Handler-->>Caller: Response\n```\n\n"
+        "## Exception and failure handling\n\nNo material exception was observed.\n\n"
         "## Inputs\n\nThe caller input is defined in the API Contract.\n\n"
         "## Preconditions and business rules\n\nNo additional rule was observed.\n\n"
         "## Happy path\n\n1. Accept the request.\n2. Return the result.\n\n"
         "## Data access and processing\n\nNo processing action was observed.\n\n"
         "## Object state transitions\n\nNo object state transition was observed.\n\n"
         "## Outputs and side effects\n\nReturns the caller-visible response.\n\n"
-        "## Failures, retries, and partial success\n\nNo retry was observed.\n\n"
         "## Open questions and conflicts\n\nExternal deployment remains Unknown.\n\n"
         "## Source notes\n\n"
         '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the behavior summary.\n'
@@ -186,6 +192,124 @@ class ApiPublicationOrderTests(unittest.TestCase):
         self.document.write_text(behavior_document(contracts), encoding="utf-8")
         result = self.run_validator("--allow-missing-api-contracts")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_behavior_requires_independent_flowchart_and_sequence_diagram(self) -> None:
+        document = behavior_document([])
+        self.document.write_text(
+            document.replace("sequenceDiagram", "flowchart TD", 1),
+            encoding="utf-8",
+        )
+        result = self.run_validator("--allow-missing-api-contracts")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "Implementation sequence must contain exactly one Mermaid sequenceDiagram",
+            result.stdout,
+        )
+
+        self.document.write_text(
+            document.replace("flowchart TD", "sequenceDiagram", 1),
+            encoding="utf-8",
+        )
+        result = self.run_validator("--allow-missing-api-contracts")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "Behavior flow must contain exactly one Mermaid flowchart or graph",
+            result.stdout,
+        )
+
+    def test_contract_requires_direct_implementation_sequence_navigation(self) -> None:
+        endpoint_id = "sample-repo.get-customer"
+        relative_contract = f"../contracts/{endpoint_id}.api-contract.md"
+        self.document.write_text(
+            behavior_document([(endpoint_id, relative_contract)]),
+            encoding="utf-8",
+        )
+        contracts = self.root / "pack" / "tech-pack" / "contracts"
+        contracts.mkdir(parents=True)
+        matrix = self.root / "pack" / "tech-pack" / "endpoint-matrix.md"
+        matrix.write_text(
+            "# Endpoint matrix\n\n"
+            "## Endpoint summary\n\n"
+            "| Endpoint or Exposure ID | Operation Role | Application Route | External Entry Declaration | Environment Deployment Intent | Observed Runtime Deployment | External Reachability | Behavior | Contract |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            f"| `{endpoint_id}` | application-endpoint | Confirmed — `GET /customers/{{id}}` | Not observed | Not observed | Not observed | Not observed | [Behavior](behaviors/{endpoint_id}.md) | [Contract](contracts/{endpoint_id}.api-contract.md) |\n\n"
+            f'<a id="{endpoint_id.replace(".", "-")}"></a>\n\n'
+            f"## `{endpoint_id}`\n",
+            encoding="utf-8",
+        )
+        contract = contracts / f"{endpoint_id}.api-contract.md"
+        base = (
+            "---\n"
+            'artifact_type: "api-contract"\n'
+            'artifact_schema_version: "3"\n'
+            f'behavior_id: "{endpoint_id}"\n'
+            f'endpoint_id: "{endpoint_id}"\n'
+            'title: "Get customer"\n'
+            'repository: "sample-repo"\n'
+            'source_commit: "unknown"\n'
+            'entry_point: "GET /customers/{id}"\n'
+            'method: "GET"\n'
+            'route: "/customers/{id}"\n'
+            'contract_status: "Confirmed"\n'
+            'application_route_status: "Confirmed"\n'
+            'external_reachability_status: "Not observed"\n'
+            f'behavior_document: "../behaviors/{endpoint_id}.md"\n'
+            f'endpoint_matrix: "../endpoint-matrix.md#{endpoint_id.replace(".", "-")}"\n'
+            "---\n\n"
+            "# Get customer\n\nPurpose. [E1](#e1)\n\n"
+            "## Quick reference\n\n"
+            "| Property | Value |\n|---|---|\n"
+            "| Method and application route | `GET /customers/{id}` |\n"
+            "| Authentication | Unknown |\n"
+            "| Content type | Unknown |\n"
+            "| Contract confidence | Confirmed |\n"
+            f"| External reachability | [Not observed](../endpoint-matrix.md#{endpoint_id.replace('.', '-')}) |\n\n"
+            "## Request\n\nThe path identifies the customer.\n\n"
+            "## Responses\n\n"
+            "| HTTP status | When | Body/schema | Relevant headers |\n"
+            "|---|---|---|---|\n"
+            "| 200 | Request succeeds | Customer | None observed |\n\n"
+            "## Related documents\n\n"
+            f"- [Tech Behavior](../behaviors/{endpoint_id}.md)\n"
+            f"- [Endpoint Matrix](../endpoint-matrix.md#{endpoint_id.replace('.', '-')})\n"
+            "__SEQUENCE_LINK__"
+            "\n## Source notes\n\n"
+            '<a id="e1"></a> **E1** — `src/Handler.java:1` supports the route.\n'
+        )
+        contract.write_text(base.replace("__SEQUENCE_LINK__", ""), encoding="utf-8")
+        missing = subprocess.run(
+            [
+                sys.executable,
+                str(API_VALIDATOR),
+                str(contract),
+                "--repo",
+                str(self.repo),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("must link directly", missing.stdout)
+
+        sequence_link = (
+            f"- [Implementation sequence]"
+            f"(../behaviors/{endpoint_id}.md#implementation-sequence)\n"
+        )
+        contract.write_text(
+            base.replace("__SEQUENCE_LINK__", sequence_link), encoding="utf-8"
+        )
+        valid = subprocess.run(
+            [
+                sys.executable,
+                str(API_VALIDATOR),
+                str(contract),
+                "--repo",
+                str(self.repo),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
 
     def test_non_api_behavior_cannot_declare_contracts(self) -> None:
         contract = "../contracts/sample-repo.get-customer.api-contract.md"

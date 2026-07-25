@@ -82,3 +82,16 @@ Mark a behavior `blocked` only when the missing semantic relationship prevents a
 Record the environment once in the repository register and the behavior-specific trace in every Java dossier. Include status, exact entry signature, critical definitions and outgoing calls, callers or framework-entry evidence, implementation candidates, binding evidence, blind spots, and impact.
 
 Formal Tech documents should not reproduce the operation log. Carry forward only unresolved call, implementation, or coverage limits that affect what a developer may conclude. BA documents should contain no LSP terminology unless a technical uncertainty materially prevents a business conclusion; describe the business uncertainty instead.
+
+During synthesis, translate the reviewed trace into the Java implementation
+model rather than a raw LSP log:
+
+- one `JTYPE-*` per executable production type;
+- one `JEDGE-*` per supported `calls`, `injects`, `implements`, `extends`,
+  `creates`, `framework-dispatch`, or `generated-delegate` relationship;
+- one `JIMPL-*` slice connecting an Endpoint or non-API trigger to its Behavior,
+  exact entry symbol, relevant types, edges, and runtime selection.
+
+Define a shared type once even when several Behaviors use it. Do not include
+test classes as implementation nodes or unrelated production classes as an
+inventory. Link each Behavior's Implementation Sequence to its `JIMPL-*` slice.

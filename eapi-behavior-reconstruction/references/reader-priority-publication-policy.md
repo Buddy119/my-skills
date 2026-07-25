@@ -32,7 +32,14 @@ Reuse Failure risk attention, Dependency criticality, and Lifecycle consistency 
 
 ## Behavior publication
 
-Lead with Summary, Main Path, and a retellable Behavior Flow. Put material Variants and risks next. Keep input details, rules, Actions, Transitions, HTTP Calls, Dependencies, Failures, and outputs under Implementation Reference and omit inapplicable subsections.
+Lead with Summary and Main Path, then publish Behavior Flow and Implementation
+Sequence as equally important but independently modeled Reader views. Behavior
+Flow explains decisions, state effects, and outcomes; Implementation Sequence
+explains participants, call order, boundaries, and exception propagation. Put
+the local Exception Handling trace immediately after the diagrams. Then show
+material Variants and risks. Keep detailed inputs, rules, Actions, Transitions,
+HTTP Calls, Dependencies, Failures, and outputs under Implementation Reference
+and omit inapplicable subsections.
 
 API caller fields belong in the endpoint Contract. A Behavior may explain why a field changes an internal path, but it must not copy caller field tables.
 

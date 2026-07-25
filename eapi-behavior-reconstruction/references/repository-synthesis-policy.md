@@ -40,6 +40,14 @@ Use the dossiers and register to answer:
 20. Which Behaviors combine into each developer-meaningful Capability path, and what supported trigger, principal decisions, and observable result define its normal story?
 21. Which Market, Country, Tenant, Channel, Profile, Environment, Feature Flag, or other selectors create behavior-changing Variants, and does the repository actually prove a baseline?
 22. Which existing Failure, Dependency, and Lifecycle conclusions deserve early reader attention without inventing a second risk score?
+23. Does every Behavior have an independently supported decision/result Flow
+    and runtime Implementation Sequence?
+24. Which exception origins, handlers, translations, swallowed paths, and
+    recovery effects recur or differ?
+25. Which Java types and dependency edges form each Endpoint or trigger
+    implementation slice, and which DI or dynamic selections remain unknown?
+26. Which reconciled Config values affect which Behaviors and Endpoints, under
+    what condition, and with what caller, state, or failure effect?
 
 ## Reconcile rather than concatenate
 
@@ -73,6 +81,15 @@ Treat migrated Observation rows and mechanical IDs only as navigation inputs. `U
 - Use Explicit, Observable, and Derived State bases. Derived States stay `Inferred`. Create a Transition only from same-Object States with an evidenced change point and observable or persisted result.
 - Do not infer ordering or lifecycle edges merely because two objects have similar names, calls are adjacent, or data moves between locations.
 - Do not infer a remote system's internal behavior from a client method name.
+- Reconcile `CFG-OBS-*` into `CFG-*` and `CFG-*-I*` only through a real
+  read/wiring and executable effect. Route or name similarity is not an
+  Endpoint impact.
+- Reconcile Java implementation records only from confirmed symbols, call/type
+  relationships, framework bindings, and DI/configuration evidence. Static
+  implementation candidates do not prove runtime selection.
+- Preserve Behavior Flow, Implementation Sequence, and Exception Handling as
+  distinct synthesis models. Never use a single generic flow record to publish
+  both diagrams.
 
 Update the working catalog, analysis state, dossiers, and register together when behavior boundaries change.
 
@@ -89,11 +106,16 @@ Use the final pack's `coverage_status`:
 ## Source of final documents
 
 - Repository Overview comes from the Capability Path, Variant, Risk Hotspot, Repository Connection, and Shared Behavior models. The independent Business Model uses repository synthesis and the completed Tech facts to reconstruct business-visible Capabilities, Journeys, Scenarios, actors, objects, rules, outcomes, and limitations before any BA document is published.
-- Behavior documents come from their dossiers, informed by synthesis.
+- Behavior documents come from both independent flow models, exception trace,
+  and implementation relationships in their dossiers, informed by synthesis.
 - Endpoint Matrix comes from the register's reconciled publication projection: application endpoints, meaningful external exposures, exceptions, and a compact protocol-support summary. The outbound part of Field Validation and Mapping comes from reconciled Remote Operations, Executable Usages, and Field Mappings rather than the raw observation shape. Other field rules, configuration, and dependency references come from their reconciled register sections.
 - External Dependency Contracts come from reconciled `DEP-nnn` participants/resources and their `DEP-nnn-OPnn` Operations, not the Dependency Observation rows.
 - Failure Taxonomy comes from reconciled `FAIL-nnn` Patterns and cross-pattern risk analysis, not the Failure Observation rows.
 - Data lifecycle, Dependency Contracts, and Failure Taxonomy require cross-behavior synthesis even when a resulting Pattern or Dependency is observed in only one Behavior.
+- Runtime Config Matrix comes from reconciled Config identities and impact
+  records, including the reverse Endpoint index. Java Implementation Map comes
+  from reconciled executable Java types, edges, and implementation slices; it
+  is omitted for non-Java repositories.
 
 Never generate the formal pack directly from evidence-index JSON, file-role metadata, or a batch of unreviewed structured facts.
 

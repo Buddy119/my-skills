@@ -1,6 +1,6 @@
 ---
 artifact_type: "repository-register"
-artifact_schema_version: "2"
+artifact_schema_version: "3"
 repository: "repository-name"
 source_commit: "git-commit-or-unknown"
 register_status: "working|reconciled"
@@ -113,11 +113,49 @@ Use `all` only when a mapping applies identically to every registered usage of i
 |---|---|---|---|---|---|---|---|---|---|---|
 | FM-001 | HTTP-001 | all | eapi-to-external | `source.path` | `target.path` | Rename/conversion | Condition/default | No | Confirmed | `path/to/file.ext:line` |
 
-## Runtime configuration effects
+## Runtime configuration observations
 
-| Config | Behavior ID | Read/wiring location | Effective value or source | Behavioral effect | Scope/condition | Status | Evidence |
+Record executable reads and wiring before assigning one logical Config identity. Endpoint impact remains a candidate until synthesis confirms the Config → Behavior → Endpoint chain.
+
+| Observation ID | Candidate configuration | Behavior ID | Read/wiring location | Effective value or source | Observed execution effect | Scope/condition | Status | Evidence | Reconciliation |
+|---|---|---|---|---|---|---|---|---|---|
+| `CFG-OBS-001` | Configuration key or wiring identity | `repository.behavior` | Exact location | Default/environment/Unknown | Observed availability, validation, branch, dependency, timing, result, state, or side-effect change | Condition | Confirmed | `path/to/file.ext:line` | `CFG-001` or `Unresolved` |
+
+## Runtime configuration records
+
+Populate during synthesis. Merge observations only when code or wiring proves one logical configuration identity.
+
+| Config ID | Logical identity | Source/default | Scope/environment | Related behaviors | Observation IDs | Status | Unknowns or conflicts |
 |---|---|---|---|---|---|---|---|
-| Config name | `repository.behavior` | Location | Default/environment/unknown | How execution changes | Condition | Confirmed | `path/to/file.ext:line` |
+| `CFG-001` | Stable configuration identity | Repository default/environment/runtime/Unknown | Profile, environment, tenant, or other scope | Behavior IDs | `CFG-OBS-001` | Confirmed/Inferred/Conflicting/Unknown | Missing runtime value, precedence, or None observed |
+
+## Runtime configuration impact records
+
+Use Endpoint IDs only after synthesis confirms the affected Behavior implements the Endpoint. Keep exposure/deployment intent in Endpoint evidence rather than representing it as application execution.
+
+| Impact ID | Config ID | Behavior ID | Endpoint ID(s) | Impact type | Condition/value | Execution difference | Caller/state/failure effect | Status | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+| `CFG-001-I01` | `CFG-001` | `repository.behavior` | `repository.method-route` or None | application availability/authentication/authorization/validation/branch/variant/implementation selection/dependency target/timeout/retry/recovery/output/status/state/side effect/other | Condition and value source | Concrete executable difference | Caller-visible, state, recovery, or Unknown | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.ext:line` |
+
+## Java type records
+
+Use these Java-only tables after semantic tracing. Include only production types that participate in executable Behaviors.
+
+| Type ID | Fully qualified class | Role | Source set/module | Related behaviors | Related endpoints | Status | Evidence or limitation |
+|---|---|---|---|---|---|---|---|
+| `JTYPE-001` | `com.example.Type` | entry/service/repository/client/mapper/config/other | Production module/source set | Behavior IDs | Endpoint IDs or None | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.java:line` or limitation |
+
+## Java dependency edge records
+
+| Edge ID | Source Type ID | Relation | Target Type ID | Behavior ID(s) | Binding/condition | Status | Evidence or limitation |
+|---|---|---|---|---|---|---|---|
+| `JEDGE-001` | `JTYPE-001` | calls/injects/implements/extends/creates/framework-dispatch/generated-delegate | `JTYPE-002` | Behavior IDs | Qualifier/Profile/runtime condition or None | Confirmed/Inferred/Conflicting/Unknown | `path/to/file.java:line` or limitation |
+
+## Behavior and endpoint Java implementation bindings
+
+| Binding ID | Behavior ID | Endpoint ID(s) or trigger | Exact entry symbol | Type IDs | Edge IDs | Runtime implementation selection | Status | Unknowns or evidence |
+|---|---|---|---|---|---|---|---|---|
+| `JIMPL-001` | `repository.behavior` | Endpoint IDs or non-API trigger | `com.example.Entry#method(Type)` | `JTYPE-001`, `JTYPE-002` | `JEDGE-001` | Qualifier/Primary/Profile/framework binding or unresolved candidates | Confirmed/Inferred/Conflicting/Unknown | Evidence and dynamic/generated limits |
 
 ## External dependency observations
 
@@ -147,9 +185,9 @@ Keep operations beneath their parent Dependency. Link an existing `HTTP-nnn` Cal
 
 Record the observed failure path before assigning a repository-wide Pattern. Keep handling, visibility, state, retry, and recovery separate so failures with different outcomes are not merged from a shared exception name.
 
-| Observation ID | Failure category | Behavior ID | Trigger or source | Handling and propagation | Caller-visible result | State outcome | Retry or recovery | Status | Evidence | Reconciliation |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `FO-001` | Validation/business/dependency/data/configuration/runtime/other | `repository.behavior` | Condition or failure source | Catch/translate/propagate/swallow/degrade | Observed result or Unknown | Unchanged/Rolled back/Partial/Committed before failure/Unknown | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` | `FAIL-001` or `Unresolved` |
+| Observation ID | Failure category | Behavior ID | Failure/exception identity | Origin or throw/failure location | Handler | Handling and propagation | Caller-visible result | State outcome | Retry or recovery | Status | Evidence | Reconciliation |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `FO-001` | Validation/business/dependency/data/configuration/runtime/other | `repository.behavior` | Exception type or executable condition | Exact call, boundary, or condition | Local catch, global advice, framework handler, or None observed | Translate/propagate/swallow/degrade/retry | Observed result or Unknown | Unchanged/Rolled back/Partial/Committed before failure/Unknown | Mechanism or Unknown | Confirmed | `path/to/file.ext:line` | `FAIL-001` or `Unresolved` |
 
 ## Failure pattern reconciliation
 

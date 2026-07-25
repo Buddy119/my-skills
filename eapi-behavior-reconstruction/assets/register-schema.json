@@ -1,5 +1,5 @@
 {
-  "register_schema_version": "2",
+  "register_schema_version": "3",
   "tables": {
     "endpoint_evidence": {
       "domain": "endpoint",
@@ -168,18 +168,93 @@
         "Evidence"
       ]
     },
-    "runtime_config": {
+    "runtime_config_observations": {
       "domain": "config",
-      "section": "Runtime configuration effects",
+      "section": "Runtime configuration observations",
       "headers": [
-        "Config",
+        "Observation ID",
+        "Candidate configuration",
         "Behavior ID",
         "Read/wiring location",
         "Effective value or source",
-        "Behavioral effect",
+        "Observed execution effect",
         "Scope/condition",
         "Status",
+        "Evidence",
+        "Reconciliation"
+      ]
+    },
+    "runtime_config_records": {
+      "domain": "config",
+      "section": "Runtime configuration records",
+      "headers": [
+        "Config ID",
+        "Logical identity",
+        "Source/default",
+        "Scope/environment",
+        "Related behaviors",
+        "Observation IDs",
+        "Status",
+        "Unknowns or conflicts"
+      ]
+    },
+    "runtime_config_impacts": {
+      "domain": "config",
+      "section": "Runtime configuration impact records",
+      "headers": [
+        "Impact ID",
+        "Config ID",
+        "Behavior ID",
+        "Endpoint ID(s)",
+        "Impact type",
+        "Condition/value",
+        "Execution difference",
+        "Caller/state/failure effect",
+        "Status",
         "Evidence"
+      ]
+    },
+    "java_types": {
+      "domain": "java",
+      "section": "Java type records",
+      "headers": [
+        "Type ID",
+        "Fully qualified class",
+        "Role",
+        "Source set/module",
+        "Related behaviors",
+        "Related endpoints",
+        "Status",
+        "Evidence or limitation"
+      ]
+    },
+    "java_edges": {
+      "domain": "java",
+      "section": "Java dependency edge records",
+      "headers": [
+        "Edge ID",
+        "Source Type ID",
+        "Relation",
+        "Target Type ID",
+        "Behavior ID(s)",
+        "Binding/condition",
+        "Status",
+        "Evidence or limitation"
+      ]
+    },
+    "java_bindings": {
+      "domain": "java",
+      "section": "Behavior and endpoint Java implementation bindings",
+      "headers": [
+        "Binding ID",
+        "Behavior ID",
+        "Endpoint ID(s) or trigger",
+        "Exact entry symbol",
+        "Type IDs",
+        "Edge IDs",
+        "Runtime implementation selection",
+        "Status",
+        "Unknowns or evidence"
       ]
     },
     "dependency_observations": {
@@ -238,7 +313,9 @@
         "Observation ID",
         "Failure category",
         "Behavior ID",
-        "Trigger or source",
+        "Failure/exception identity",
+        "Origin or throw/failure location",
+        "Handler",
         "Handling and propagation",
         "Caller-visible result",
         "State outcome",
@@ -301,6 +378,10 @@
     "dependency_document": ["dependency"],
     "failure_document": ["failure"],
     "behavior_dependency_backlinks": ["dependency"],
-    "behavior_failure_backlinks": ["failure"]
+    "behavior_failure_backlinks": ["failure"],
+    "java_document": ["java"],
+    "behavior_java_backlinks": ["java"],
+    "config_document": ["config"],
+    "behavior_config_backlinks": ["config"]
   }
 }

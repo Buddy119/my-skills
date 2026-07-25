@@ -46,7 +46,7 @@ class ReaderPresentationTests(unittest.TestCase):
         return (
             "---\n"
             'artifact_type: "runtime-config-matrix"\n'
-            'artifact_schema_version: "2"\n'
+            'artifact_schema_version: "3"\n'
             'repository: "repository"\n'
             'source_commit: "unknown"\n'
             "---\n\n"
@@ -71,7 +71,7 @@ class ReaderPresentationTests(unittest.TestCase):
             load_registry(SKILL_ROOT / "assets" / "artifact-schema.json"),
             assets_root=SKILL_ROOT / "assets",
         )
-        self.assertEqual(schema["reader_presentation_schema_version"], "1")
+        self.assertEqual(schema["reader_presentation_schema_version"], "2")
         review_schema = json.loads(
             (SKILL_ROOT / "assets" / "finalization-review-schema.json").read_text(
                 encoding="utf-8"

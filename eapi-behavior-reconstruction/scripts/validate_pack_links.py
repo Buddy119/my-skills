@@ -81,6 +81,12 @@ DEPENDENCY_ID_RE = re.compile(r"DEP-\d+")
 DEPENDENCY_OPERATION_ID_RE = re.compile(r"DEP-\d+-OP\d+")
 FAILURE_OBSERVATION_ID_RE = re.compile(r"FO-\d+")
 FAILURE_PATTERN_ID_RE = re.compile(r"FAIL-\d+")
+CONFIG_OBSERVATION_ID_RE = re.compile(r"CFG-OBS-\d+")
+CONFIG_ID_RE = re.compile(r"CFG-\d+")
+CONFIG_IMPACT_ID_RE = re.compile(r"CFG-\d+-I\d+")
+JAVA_TYPE_ID_RE = re.compile(r"JTYPE-\d+")
+JAVA_EDGE_ID_RE = re.compile(r"JEDGE-\d+")
+JAVA_BINDING_ID_RE = re.compile(r"JIMPL-\d+")
 EVIDENCE_STATUSES = {"Confirmed", "Inferred", "Conflicting", "Unknown"}
 DEPENDENCY_CRITICALITIES = {"Required", "Degradable", "Optional", "Unknown"}
 CALLER_VISIBILITIES = {
@@ -108,6 +114,27 @@ RECOVERY_MODES = {
     "Unknown",
 }
 RISK_ATTENTIONS = {"High", "Medium", "Low", "Unknown"}
+CONFIG_IMPACT_TYPES = {
+    "application availability",
+    "authentication/authorization",
+    "validation",
+    "branch/variant",
+    "implementation selection",
+    "dependency target",
+    "timeout/retry/recovery",
+    "output/status",
+    "state/side effect",
+    "other",
+}
+JAVA_EDGE_RELATIONS = {
+    "calls",
+    "injects",
+    "implements",
+    "extends",
+    "creates",
+    "framework-dispatch",
+    "generated-delegate",
+}
 FIELD_OPERATION_HEADERS = [
     "Call ID",
     "Method and Logical Target",
@@ -354,6 +381,18 @@ REGISTER_FAILURE_OBSERVATION_HEADERS = register_headers(
     _REGISTER_SCHEMA, "failure_observations"
 )
 REGISTER_FAILURE_PATTERN_HEADERS = register_headers(_REGISTER_SCHEMA, "failure_patterns")
+REGISTER_CONFIG_OBSERVATION_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "runtime_config_observations"
+)
+REGISTER_CONFIG_RECORD_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "runtime_config_records"
+)
+REGISTER_CONFIG_IMPACT_HEADERS = register_headers(
+    _REGISTER_SCHEMA, "runtime_config_impacts"
+)
+REGISTER_JAVA_TYPE_HEADERS = register_headers(_REGISTER_SCHEMA, "java_types")
+REGISTER_JAVA_EDGE_HEADERS = register_headers(_REGISTER_SCHEMA, "java_edges")
+REGISTER_JAVA_BINDING_HEADERS = register_headers(_REGISTER_SCHEMA, "java_bindings")
 
 
 def local_target(raw: str) -> LocalLinkTarget | None:
@@ -563,6 +602,48 @@ def linked_document_entries(
         r"^\s+document:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", block, re.M
     )
     return list(zip((item.strip() for item in identifiers), (item.strip() for item in documents)))
+
+
+def pack_behavior_and_endpoint_ids(root: Path) -> tuple[set[str], set[str]]:
+    """Collect the stable Reader identities available at the current stage.
+
+    Endpoint IDs declared as Tech-stage Contract forward references are valid
+    identities even before the Contract and Endpoint Matrix are materialized.
+    """
+
+    behavior_ids: set[str] = set()
+    endpoint_ids: set[str] = set()
+    for document in sorted((root / "tech-pack" / "behaviors").glob("*.md")):
+        frontmatter = frontmatter_text(document)
+        if frontmatter is None:
+            continue
+        behavior_id = scalar_value(frontmatter, "behavior_id")
+        if behavior_id:
+            behavior_ids.add(behavior_id)
+        endpoint_ids.update(
+            identifier
+            for identifier, _document in linked_document_entries(
+                frontmatter, "api_contracts", "endpoint_id"
+            )
+        )
+    for contract in sorted((root / "tech-pack" / "contracts").glob("*.api-contract.md")):
+        frontmatter = frontmatter_text(contract)
+        if frontmatter is None:
+            continue
+        endpoint_id = scalar_value(frontmatter, "endpoint_id")
+        if endpoint_id:
+            endpoint_ids.add(endpoint_id)
+    return behavior_ids, endpoint_ids
+
+
+def stable_endpoint_references(value: str) -> set[str]:
+    """Extract endpoint-shaped stable IDs without interpreting trigger labels."""
+
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9._-]*", value)
+        if "." in token
+    }
 
 
 def validate_ba_traceability(root: Path, errors: list[str]) -> None:
@@ -1265,9 +1346,9 @@ def validate_failure_register(
             partial = True
             continue
         validate_exact_label(
-            row[8], EVIDENCE_STATUSES, f"Failure Observation {observation_id} Status", errors
+            row[10], EVIDENCE_STATUSES, f"Failure Observation {observation_id} Status", errors
         )
-        reconciliation = code_value(row[10])
+        reconciliation = code_value(row[12])
         if reconciliation != "Unresolved" and not FAILURE_PATTERN_ID_RE.fullmatch(reconciliation):
             errors.append(
                 f"Failure Observation {observation_id} has invalid reconciliation: "
@@ -1337,6 +1418,332 @@ def validate_failure_register(
         {"pattern_ids": pattern_ids},
         errors,
     )
+
+
+def validate_config_register(register: Path) -> DomainResult:
+    errors: list[str] = []
+    partial = False
+    if not register.is_file():
+        return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
+    text = register.read_text(encoding="utf-8")
+    _, observation_rows = table_in_section(text, "Runtime configuration observations")
+    _, config_rows = table_in_section(text, "Runtime configuration records")
+    _, impact_rows = table_in_section(text, "Runtime configuration impact records")
+
+    observations: dict[str, str] = {}
+    configs: dict[str, set[str]] = {}
+    config_statuses: dict[str, str] = {}
+    impacts: dict[str, dict[str, str]] = {}
+    impact_statuses: dict[str, str] = {}
+
+    for row in observation_rows:
+        if len(row) != len(REGISTER_CONFIG_OBSERVATION_HEADERS):
+            errors.append("repository register Config Observation row has the wrong column count")
+            partial = True
+            continue
+        observation_id = code_value(row[0])
+        if not CONFIG_OBSERVATION_ID_RE.fullmatch(observation_id):
+            errors.append(f"invalid Config Observation ID: {observation_id or '<empty>'}")
+            partial = True
+            continue
+        if observation_id in observations:
+            errors.append(f"duplicate Config Observation ID: {observation_id}")
+            partial = True
+            continue
+        validate_exact_label(
+            row[7], EVIDENCE_STATUSES, f"Config Observation {observation_id} Status", errors
+        )
+        reconciliation = code_value(row[9])
+        if reconciliation != "Unresolved" and not CONFIG_ID_RE.fullmatch(reconciliation):
+            errors.append(
+                f"Config Observation {observation_id} has invalid reconciliation: "
+                f"{reconciliation or '<empty>'}"
+            )
+        observations[observation_id] = reconciliation
+
+    for row in config_rows:
+        if len(row) != len(REGISTER_CONFIG_RECORD_HEADERS):
+            errors.append("repository register Config row has the wrong column count")
+            partial = True
+            continue
+        config_id = code_value(row[0])
+        if not CONFIG_ID_RE.fullmatch(config_id):
+            errors.append(f"invalid Config ID: {config_id or '<empty>'}")
+            partial = True
+            continue
+        if config_id in configs:
+            errors.append(f"duplicate Config ID: {config_id}")
+            partial = True
+            continue
+        refs = set(CONFIG_OBSERVATION_ID_RE.findall(row[5]))
+        if not refs:
+            errors.append(f"Config record has no Observation IDs: {config_id}")
+        configs[config_id] = refs
+        config_statuses[config_id] = code_value(row[6])
+        validate_exact_label(
+            row[6], EVIDENCE_STATUSES, f"Config {config_id} Status", errors
+        )
+
+    for row in impact_rows:
+        if len(row) != len(REGISTER_CONFIG_IMPACT_HEADERS):
+            errors.append("repository register Config Impact row has the wrong column count")
+            partial = True
+            continue
+        impact_id = code_value(row[0])
+        config_id = code_value(row[1])
+        if not CONFIG_IMPACT_ID_RE.fullmatch(impact_id):
+            errors.append(f"invalid Config Impact ID: {impact_id or '<empty>'}")
+            partial = True
+            continue
+        if impact_id in impacts:
+            errors.append(f"duplicate Config Impact ID: {impact_id}")
+            partial = True
+            continue
+        if not impact_id.startswith(f"{config_id}-I"):
+            errors.append(
+                f"Config Impact ID does not belong to its Config: {impact_id} -> {config_id}"
+            )
+        impact_type = normalized_label(row[4]).lower()
+        if impact_type not in CONFIG_IMPACT_TYPES:
+            errors.append(
+                f"Config Impact {impact_id} has invalid impact type: "
+                f"{impact_type or '<empty>'}"
+            )
+        impact_statuses[impact_id] = code_value(row[8])
+        validate_exact_label(
+            row[8], EVIDENCE_STATUSES, f"Config Impact {impact_id} Status", errors
+        )
+        impacts[impact_id] = {
+            "config_id": config_id,
+            "behavior_id": code_value(row[2]),
+            "endpoint_ids": code_value(row[3]),
+            "impact_type": impact_type,
+        }
+
+    if not partial:
+        for observation_id, reconciliation in sorted(observations.items()):
+            if CONFIG_ID_RE.fullmatch(reconciliation) and reconciliation not in configs:
+                errors.append(
+                    f"Config Observation {observation_id} references unknown Config: {reconciliation}"
+                )
+        for config_id, refs in sorted(configs.items()):
+            for observation_id in sorted(refs):
+                if observation_id not in observations:
+                    errors.append(
+                        f"Config {config_id} references unknown Observation: {observation_id}"
+                    )
+                elif observations[observation_id] != config_id:
+                    errors.append(
+                        f"Config {config_id} references Observation assigned to "
+                        f"{observations[observation_id]}: {observation_id}"
+                    )
+        for impact_id, impact in sorted(impacts.items()):
+            if impact["config_id"] not in configs:
+                errors.append(
+                    f"Config Impact {impact_id} references unknown Config: {impact['config_id']}"
+                )
+
+    return DomainResult(
+        "partial" if partial else "valid",
+        {
+            "config_ids": set(configs),
+            "config_statuses": config_statuses,
+            "impact_ids": set(impacts),
+            "impacts": impacts,
+            "impact_statuses": impact_statuses,
+        },
+        errors,
+    )
+
+
+def validate_java_register(register: Path) -> DomainResult:
+    errors: list[str] = []
+    partial = False
+    if not register.is_file():
+        return DomainResult("invalid", errors=[f"repository register is missing: {register}"])
+    text = register.read_text(encoding="utf-8")
+    _, type_rows = table_in_section(text, "Java type records")
+    _, edge_rows = table_in_section(text, "Java dependency edge records")
+    _, binding_rows = table_in_section(
+        text, "Behavior and endpoint Java implementation bindings"
+    )
+
+    type_ids: set[str] = set()
+    edge_ids: set[str] = set()
+    binding_ids: set[str] = set()
+    type_relationships: dict[str, tuple[str, str]] = {}
+    edges: dict[str, tuple[str, str]] = {}
+    edge_behaviors: dict[str, str] = {}
+    bindings: dict[str, dict[str, str]] = {}
+
+    for row in type_rows:
+        if len(row) != len(REGISTER_JAVA_TYPE_HEADERS):
+            errors.append("repository register Java Type row has the wrong column count")
+            partial = True
+            continue
+        type_id = code_value(row[0])
+        if not JAVA_TYPE_ID_RE.fullmatch(type_id):
+            errors.append(f"invalid Java Type ID: {type_id or '<empty>'}")
+            partial = True
+            continue
+        if type_id in type_ids:
+            errors.append(f"duplicate Java Type ID: {type_id}")
+            partial = True
+            continue
+        type_ids.add(type_id)
+        type_relationships[type_id] = (row[4], row[5])
+        validate_exact_label(
+            row[6], EVIDENCE_STATUSES, f"Java Type {type_id} Status", errors
+        )
+
+    for row in edge_rows:
+        if len(row) != len(REGISTER_JAVA_EDGE_HEADERS):
+            errors.append("repository register Java Edge row has the wrong column count")
+            partial = True
+            continue
+        edge_id = code_value(row[0])
+        if not JAVA_EDGE_ID_RE.fullmatch(edge_id):
+            errors.append(f"invalid Java Edge ID: {edge_id or '<empty>'}")
+            partial = True
+            continue
+        if edge_id in edge_ids:
+            errors.append(f"duplicate Java Edge ID: {edge_id}")
+            partial = True
+            continue
+        relation = normalized_label(row[2])
+        if relation not in JAVA_EDGE_RELATIONS:
+            errors.append(
+                f"Java Edge {edge_id} has invalid relation: {relation or '<empty>'}"
+            )
+        edge_ids.add(edge_id)
+        edges[edge_id] = (code_value(row[1]), code_value(row[3]))
+        edge_behaviors[edge_id] = row[4]
+        validate_exact_label(
+            row[6], EVIDENCE_STATUSES, f"Java Edge {edge_id} Status", errors
+        )
+
+    for row in binding_rows:
+        if len(row) != len(REGISTER_JAVA_BINDING_HEADERS):
+            errors.append("repository register Java Binding row has the wrong column count")
+            partial = True
+            continue
+        binding_id = code_value(row[0])
+        if not JAVA_BINDING_ID_RE.fullmatch(binding_id):
+            errors.append(f"invalid Java Binding ID: {binding_id or '<empty>'}")
+            partial = True
+            continue
+        if binding_id in binding_ids:
+            errors.append(f"duplicate Java Binding ID: {binding_id}")
+            partial = True
+            continue
+        binding_ids.add(binding_id)
+        bindings[binding_id] = {
+            "behavior_id": code_value(row[1]),
+            "endpoint_ids": code_value(row[2]),
+            "type_ids": row[4],
+            "edge_ids": row[5],
+        }
+        validate_exact_label(
+            row[7], EVIDENCE_STATUSES, f"Java Binding {binding_id} Status", errors
+        )
+
+    if not partial:
+        for edge_id, (source_id, target_id) in sorted(edges.items()):
+            if source_id not in type_ids:
+                errors.append(f"Java Edge {edge_id} references unknown source Type: {source_id}")
+            if target_id not in type_ids:
+                errors.append(f"Java Edge {edge_id} references unknown target Type: {target_id}")
+        for binding_id, binding in sorted(bindings.items()):
+            for type_id in sorted(set(JAVA_TYPE_ID_RE.findall(binding["type_ids"]))):
+                if type_id not in type_ids:
+                    errors.append(
+                        f"Java Binding {binding_id} references unknown Type: {type_id}"
+                    )
+            for edge_id in sorted(set(JAVA_EDGE_ID_RE.findall(binding["edge_ids"]))):
+                if edge_id not in edge_ids:
+                    errors.append(
+                        f"Java Binding {binding_id} references unknown Edge: {edge_id}"
+                    )
+
+    return DomainResult(
+        "partial" if partial else "valid",
+        {
+            "type_ids": type_ids,
+            "edge_ids": edge_ids,
+            "binding_ids": binding_ids,
+            "type_relationships": type_relationships,
+            "edge_behaviors": edge_behaviors,
+            "bindings": bindings,
+        },
+        errors,
+    )
+
+
+def validate_config_java_reader_identities(
+    root: Path,
+    config_result: DomainResult,
+    java_result: DomainResult,
+) -> tuple[list[str], list[str]]:
+    """Check Config/Java relationships against declared Behavior/Endpoint IDs."""
+
+    behavior_ids, endpoint_ids = pack_behavior_and_endpoint_ids(root)
+    config_errors: list[str] = []
+    java_errors: list[str] = []
+
+    if config_result.status == "valid":
+        for impact_id, impact in sorted(config_result.data["impacts"].items()):
+            behavior_id = impact["behavior_id"]
+            if behavior_id not in behavior_ids:
+                config_errors.append(
+                    f"Config Impact {impact_id} references unknown Behavior: {behavior_id}"
+                )
+            for endpoint_id in sorted(
+                stable_endpoint_references(impact["endpoint_ids"])
+            ):
+                if endpoint_id not in endpoint_ids:
+                    config_errors.append(
+                        f"Config Impact {impact_id} references unknown Endpoint: "
+                        f"{endpoint_id}"
+                    )
+
+    if java_result.status == "valid":
+        for type_id, (behavior_refs, endpoint_refs) in sorted(
+            java_result.data["type_relationships"].items()
+        ):
+            for behavior_id in sorted(stable_endpoint_references(behavior_refs)):
+                if behavior_id not in behavior_ids:
+                    java_errors.append(
+                        f"Java Type {type_id} references unknown Behavior: {behavior_id}"
+                    )
+            for endpoint_id in sorted(stable_endpoint_references(endpoint_refs)):
+                if endpoint_id not in endpoint_ids:
+                    java_errors.append(
+                        f"Java Type {type_id} references unknown Endpoint: {endpoint_id}"
+                    )
+        for edge_id, behavior_refs in sorted(
+            java_result.data["edge_behaviors"].items()
+        ):
+            for behavior_id in sorted(stable_endpoint_references(behavior_refs)):
+                if behavior_id not in behavior_ids:
+                    java_errors.append(
+                        f"Java Edge {edge_id} references unknown Behavior: {behavior_id}"
+                    )
+        for binding_id, binding in sorted(java_result.data["bindings"].items()):
+            behavior_id = binding["behavior_id"]
+            if behavior_id not in behavior_ids:
+                java_errors.append(
+                    f"Java Binding {binding_id} references unknown Behavior: "
+                    f"{behavior_id}"
+                )
+            for endpoint_id in sorted(
+                stable_endpoint_references(binding["endpoint_ids"])
+            ):
+                if endpoint_id not in endpoint_ids:
+                    java_errors.append(
+                        f"Java Binding {binding_id} references unknown Endpoint: "
+                        f"{endpoint_id}"
+                    )
+    return config_errors, java_errors
 
 
 def validate_field_mapping_document(
@@ -1784,11 +2191,102 @@ def validate_failure_taxonomy_document(
         errors.append(f"Failure detail section is missing from the register: {pattern_id}")
 
 
+def validate_java_implementation_document(
+    document: Path,
+    java_result: DomainResult,
+    repo: Path | None,
+    errors: list[str],
+) -> None:
+    type_ids: set[str] = java_result.data["type_ids"]
+    edge_ids: set[str] = java_result.data["edge_ids"]
+    binding_ids: set[str] = java_result.data["binding_ids"]
+    if not type_ids and not edge_ids and not binding_ids:
+        if document.is_file():
+            errors.append(
+                "Java Implementation Map exists but the Register contains no Java implementation records"
+            )
+        return
+    if not document.is_file():
+        errors.append("Java implementation records exist but java-implementation-map.md is missing")
+        return
+    text = document.read_text(encoding="utf-8")
+    for type_id in sorted(type_ids):
+        if type_id not in text:
+            errors.append(f"Java Implementation Map omits registered Type: {type_id}")
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(type_id.lower())}[\"']\s*></a>",
+            text,
+            re.I,
+        ):
+            errors.append(f"Java Implementation Map is missing stable Type anchor: {type_id}")
+    for edge_id in sorted(edge_ids):
+        if edge_id not in text:
+            errors.append(f"Java Implementation Map omits registered Edge: {edge_id}")
+    for binding_id in sorted(binding_ids):
+        if binding_id not in text:
+            errors.append(f"Java Implementation Map omits registered Binding: {binding_id}")
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(binding_id.lower())}[\"']\s*></a>\s*\n\s*"
+            rf"##\s+`?{re.escape(binding_id)}`?",
+            text,
+            re.I,
+        ):
+            errors.append(
+                f"Java Implementation Map is missing stable implementation slice: {binding_id}"
+            )
+    validate_source_citations(document, repo, errors)
+
+
+def validate_runtime_config_document(
+    document: Path,
+    config_result: DomainResult,
+    repo: Path | None,
+    errors: list[str],
+) -> None:
+    config_ids: set[str] = config_result.data["config_ids"]
+    impact_ids: set[str] = config_result.data["impact_ids"]
+    if not config_ids and not impact_ids:
+        if document.is_file():
+            errors.append(
+                "Runtime Config Matrix exists but the Register contains no reconciled Config records"
+            )
+        return
+    if not document.is_file():
+        errors.append("reconciled Config records exist but runtime-config-matrix.md is missing")
+        return
+    text = document.read_text(encoding="utf-8")
+    for config_id in sorted(config_ids):
+        if config_id not in text:
+            errors.append(f"Runtime Config Matrix omits registered Config: {config_id}")
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(config_id.lower())}[\"']\s*></a>",
+            text,
+            re.I,
+        ):
+            errors.append(f"Runtime Config Matrix is missing stable Config anchor: {config_id}")
+    for impact_id in sorted(impact_ids):
+        if impact_id not in text:
+            errors.append(f"Runtime Config Matrix omits registered Impact: {impact_id}")
+        if not re.search(
+            rf"<a\s+(?:id|name)=[\"']{re.escape(impact_id.lower())}[\"']\s*></a>",
+            text,
+            re.I,
+        ):
+            errors.append(
+                f"Runtime Config Matrix is missing stable Impact anchor: {impact_id}"
+            )
+    if impact_ids and "## Endpoint reverse impact index" not in text:
+        errors.append("Runtime Config Matrix is missing the Endpoint reverse impact index")
+    validate_source_citations(document, repo, errors)
+
+
 def validate_behavior_repository_links(
     root: Path,
     dependency_ids: set[str] | None,
     dependency_statuses: dict[str, str] | None,
     pattern_ids: set[str] | None,
+    java_binding_ids: set[str] | None,
+    config_impact_ids: set[str] | None,
     errors: list[str],
 ) -> None:
     behaviors_dir = root / "tech-pack" / "behaviors"
@@ -1871,6 +2369,46 @@ def validate_behavior_repository_links(
                     errors.append(
                         f"Tech Behavior links unknown Failure Pattern anchor: "
                         f"{behavior.relative_to(root)} -> {pattern_id}"
+                    )
+
+        if java_binding_ids is not None:
+            binding_entries = linked_document_entries(
+                frontmatter, "java_bindings", "binding_id"
+            )
+            for binding_id, document in binding_entries:
+                if binding_id not in java_binding_ids:
+                    errors.append(
+                        f"Tech Behavior references unknown Java Binding: "
+                        f"{behavior.relative_to(root)} -> {binding_id}"
+                    )
+                    continue
+                expected = f"../java-implementation-map.md#{binding_id.lower()}"
+                if document != expected or not re.search(
+                    rf"\]\({re.escape(expected)}\)", text
+                ):
+                    errors.append(
+                        f"Tech Behavior does not link its Java implementation slice: "
+                        f"{behavior.relative_to(root)} -> {binding_id}"
+                    )
+
+        if config_impact_ids is not None:
+            impact_entries = linked_document_entries(
+                frontmatter, "runtime_config_impacts", "impact_id"
+            )
+            for impact_id, document in impact_entries:
+                if impact_id not in config_impact_ids:
+                    errors.append(
+                        f"Tech Behavior references unknown Config Impact: "
+                        f"{behavior.relative_to(root)} -> {impact_id}"
+                    )
+                    continue
+                expected = f"../runtime-config-matrix.md#{impact_id.lower()}"
+                if document != expected or not re.search(
+                    rf"\]\({re.escape(expected)}\)", text
+                ):
+                    errors.append(
+                        f"Tech Behavior does not link its Runtime Config impact: "
+                        f"{behavior.relative_to(root)} -> {impact_id}"
                     )
 
 
@@ -2030,6 +2568,8 @@ def main() -> int:
     schema_codes = {
         "lifecycle": "REG-LIFECYCLE-SCHEMA",
         "http": "REG-HTTP-SCHEMA",
+        "config": "REG-CONFIG-SCHEMA",
+        "java": "REG-JAVA-SCHEMA",
         "dependency": "REG-DEP-SCHEMA",
         "failure": "REG-FAIL-SCHEMA",
     }
@@ -2161,6 +2701,26 @@ def main() -> int:
             "prerequisite Failure or Dependency Register index is unavailable",
         )
 
+    if domain_schema_valid("config"):
+        config_result = validate_config_register(register)
+        report.add_errors("REG-CONFIG-ROW", config_result.errors)
+    else:
+        config_result = DomainResult("invalid")
+    report.domain_statuses["config"] = config_result.status
+
+    if domain_schema_valid("java"):
+        java_result = validate_java_register(register)
+        report.add_errors("REG-JAVA-ROW", java_result.errors)
+    else:
+        java_result = DomainResult("invalid")
+    report.domain_statuses["java"] = java_result.status
+
+    config_identity_errors, java_identity_errors = validate_config_java_reader_identities(
+        root, config_result, java_result
+    )
+    report.add_errors("REG-CONFIG-XREF", config_identity_errors)
+    report.add_errors("REG-JAVA-XREF", java_identity_errors)
+
     dependency_ids: set[str] | None = None
     pattern_ids: set[str] | None = None
     if prerequisites_available("dependency_document"):
@@ -2207,6 +2767,48 @@ def main() -> int:
             f"prerequisite Failure Register is {failure_result.status}",
         )
 
+    config_impact_ids: set[str] | None = None
+    if prerequisites_available("config_document"):
+        config_impact_ids = config_result.data["impact_ids"]
+        config_document_errors: list[str] = []
+        validate_runtime_config_document(
+            root / "tech-pack" / "runtime-config-matrix.md",
+            config_result,
+            repo,
+            config_document_errors,
+        )
+        report.add_errors("CONFIG-DOCUMENT", config_document_errors)
+    else:
+        report.skip(
+            "CONFIG-DOCUMENT",
+            f"prerequisite Config Register is {config_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-CONFIG-BACKLINK",
+            f"prerequisite Config Register is {config_result.status}",
+        )
+
+    java_binding_ids: set[str] | None = None
+    if prerequisites_available("java_document"):
+        java_binding_ids = java_result.data["binding_ids"]
+        java_document_errors: list[str] = []
+        validate_java_implementation_document(
+            root / "tech-pack" / "java-implementation-map.md",
+            java_result,
+            repo,
+            java_document_errors,
+        )
+        report.add_errors("JAVA-DOCUMENT", java_document_errors)
+    else:
+        report.skip(
+            "JAVA-DOCUMENT",
+            f"prerequisite Java Register is {java_result.status}",
+        )
+        report.skip(
+            "BEHAVIOR-JAVA-BACKLINK",
+            f"prerequisite Java Register is {java_result.status}",
+        )
+
     behavior_repository_errors: list[str] = []
     validate_behavior_repository_links(
         root,
@@ -2215,6 +2817,8 @@ def main() -> int:
         if dependency_result.status == "valid"
         else None,
         pattern_ids,
+        java_binding_ids,
+        config_impact_ids,
         behavior_repository_errors,
     )
     report.add_errors("BEHAVIOR-REPOSITORY-BACKLINK", behavior_repository_errors)
